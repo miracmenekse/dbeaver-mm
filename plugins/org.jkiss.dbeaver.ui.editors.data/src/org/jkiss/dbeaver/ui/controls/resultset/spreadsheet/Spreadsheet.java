@@ -118,6 +118,7 @@ public class Spreadsheet extends LightGrid implements Listener {
         super.addListener(LightGrid.Event_ChangeSort, this);
         super.addListener(LightGrid.Event_NavigateLink, this);
         super.addListener(LightGrid.Event_FilterColumn, this);
+        super.addListener(LightGrid.Event_FkDictColumn, this);
 
         tableEditor = new SpreadsheetCellEditor(this);
         tableEditor.horizontalAlignment = SWT.LEFT;
@@ -367,6 +368,9 @@ public class Spreadsheet extends LightGrid implements Listener {
                     redraw();
                 }
                 presentation.handleColumnIconClick(event.data);
+                break;
+            case LightGrid.Event_FkDictColumn:
+                presentation.handleFkDictColumnClick(event.data);
                 break;
             case LightGrid.Event_NavigateLink:
                 // Perform navigation async because it may change grid content and

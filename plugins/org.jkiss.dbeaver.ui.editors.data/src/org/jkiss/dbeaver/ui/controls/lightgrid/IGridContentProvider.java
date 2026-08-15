@@ -87,6 +87,11 @@ public interface IGridContentProvider extends IContentProvider {
 
     boolean isElementSupportsSort(@Nullable IGridColumn element);
 
+    // PoC: kolon FK sozluk aciklama kolonu secici butonunu destekliyor mu
+    default boolean isElementSupportsFkDict(@Nullable IGridColumn element) {
+        return false;
+    }
+
     boolean isElementReadOnly(@NotNull IGridColumn element);
 
     boolean isElementExpandable(@NotNull IGridItem item);

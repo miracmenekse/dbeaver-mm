@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+    <extension point="org.eclipse.ui.views">
+        <view
+            id="org.jkiss.dbeaver.ui.recentscripts.view"
+            name="%view.recentScripts.name"
+            category="org.jkiss.dbeaver.core.category"
+            class="org.jkiss.dbeaver.ui.recentscripts.RecentScriptsView"
+            icon="icons/recent_scripts.svg"
+            allowMultiple="false"
+            restorable="true">
+            <description>%view.recentScripts.description</description>
+        </view>
+    </extension>
+
+    <!--
+        Dock the panel on the right of the DBeaver perspective without patching core.
+        org.eclipse.ui.views.ContentOutline is a placeholder in DBeaverPerspective's
+        right-hand folder, so stacking on it puts us on the right side.
+        Note: this only applies to perspectives that have not been persisted yet -
+        in an existing workspace "Window > Reset Perspective" is required.
+    -->
+    <extension point="org.eclipse.ui.perspectiveExtensions">
+        <perspectiveExtension targetID="org.jkiss.dbeaver.core.perspective">
+            <view
+                id="org.jkiss.dbeaver.ui.recentscripts.view"
+                relative="org.eclipse.ui.views.ContentOutline"
+                relationship="stack"
+                visible="false"
+                minimized="false"/>
+            <viewShortcut id="org.jkiss.dbeaver.ui.recentscripts.view"/>
+        </perspectiveExtension>
+    </extension>
+
+    <extension point="org.eclipse.ui.menus">
+        <!--
+            dbeaver-tools is the right-most group of the main toolbar (declared in
+            org.jkiss.dbeaver.ui.navigator). We reuse the generic view toggle command
+            org.jkiss.dbeaver.core.view.toggle, whose handler fills in label, icon and
+            tooltip from the view registry entry above and drives the checked state.
+        -->
+        <menuContribution allPopups="false" locationURI="toolbar:dbeaver-tools?after=additions">
+            <separator name="recentScripts" visible="true"/>
+            <command
+                commandId="org.jkiss.dbeaver.core.view.toggle"
+                id="org.jkiss.dbeaver.ui.recentscripts.toolbarItem"
+                style="toggle">
+                <parameter name="viewId" value="org.jkiss.dbeaver.ui.recentscripts.view"/>
+                <visibleWhen>
+                    <reference definitionId="DBeaverPerspectiveActive"/>
+                </visibleWhen>
+            </command>
+        </menuContribution>
+
+        <menuContribution allPopups="false" locationURI="menu:window?before=primary.views">
+            <command commandId="org.jkiss.dbeaver.core.view.toggle" style="toggle">
+                <parameter name="viewId" value="org.jkiss.dbeaver.ui.recentscripts.view"/>
+            </command>
+        </menuContribution>
+    </extension>
+
+</plugin>
