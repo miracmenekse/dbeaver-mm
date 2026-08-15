@@ -57,6 +57,7 @@ public abstract class LightGrid extends Canvas {
     protected static final int Event_ChangeSort = 1000;
     protected static final int Event_NavigateLink = 1001;
     protected static final int Event_FilterColumn = 1002;
+    protected static final int Event_FkDictColumn = 1003;
 
     /**
      * Horizontal scrolling increment, in pixels.
@@ -254,6 +255,7 @@ public abstract class LightGrid extends Canvas {
     private boolean hoveringOnColumnIcon = false;
     private boolean hoveringOnColumnSorter = false;
     private boolean hoveringOnColumnFilter = false;
+    private boolean hoveringOnColumnFkDict = false;
     private boolean hoveringOnLink = false;
     private boolean hoveringOnRowHeader = false;
     private boolean hoveringOnRowExpander = false;
@@ -261,6 +263,7 @@ public abstract class LightGrid extends Canvas {
 
     private GridColumn columnBeingSorted;
     private GridColumn columnBeingFiltered;
+    private GridColumn columnBeingFkDict;
     private boolean hoveringOnColumnResizer = false;
     private GridColumn columnBeingResized;
     private boolean resizingColumn = false;
@@ -2011,6 +2014,7 @@ public abstract class LightGrid extends Canvas {
         boolean overSorter = false, overResizer = false, overFilter = false;
         hoveringOnHeader = false;
         boolean overIcon = false;
+        boolean overFkDict = false;
 
         if (y <= headerHeight) {
             int x2 = 0;
@@ -2047,6 +2051,12 @@ public abstract class LightGrid extends Canvas {
                             	columnBeingFiltered = column;
                             	overFilter = true;
                             	break;
+                            }
+
+                            if (column.isOverFkDictButton(x - x2, y)) {
+                                columnBeingFkDict = column;
+                                overFkDict = true;
+                                break;
                             }
 
                             if (column.isOverIcon(x, y)) {
@@ -2100,10 +2110,22 @@ public abstract class LightGrid extends Canvas {
         		columnBeingFiltered = null;
         		setCursor(null);
         	}
-        		
+
         	hoveringOnColumnFilter = overFilter;
         }
-        
+
+        if (overFkDict) {
+            setCursor(sortCursor);
+        }
+
+        if (overFkDict != hoveringOnColumnFkDict) {
+            if (!overSorter && !overFilter) {
+                columnBeingFkDict = null;
+                setCursor(null);
+            }
+            hoveringOnColumnFkDict = overFkDict;
+        }
+
         if (overResizer != hoveringOnColumnResizer) {
             if (overResizer) {
                 setCursor(getDisplay().getSystemCursor(SWT.CURSOR_SIZEWE));
@@ -3429,6 +3451,21 @@ public abstract class LightGrid extends Canvas {
                     return;
                 }
 
+            }
+        }
+
+        if (hoveringOnColumnFkDict) {
+            handleHoverOnColumnHeader(e.x, e.y);
+            if (hoveringOnColumnFkDict) {
+                if (e.button == 1) {
+                    Event event = new Event();
+                    event.x = e.x;
+                    event.y = e.y;
+                    event.data = columnBeingFkDict == null ? null : columnBeingFkDict.getElement();
+                    event.stateMask = e.stateMask;
+                    notifyListeners(Event_FkDictColumn, event);
+                    return;
+                }
             }
         }
 

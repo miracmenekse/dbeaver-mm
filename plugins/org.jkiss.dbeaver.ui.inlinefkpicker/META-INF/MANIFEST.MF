@@ -1,0 +1,24 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Vendor: DBeaver Corp
+Bundle-Name: DBeaver Inline FK ID Picker
+Bundle-SymbolicName: org.jkiss.dbeaver.ui.inlinefkpicker;singleton:=true
+Bundle-Version: 1.0.0.qualifier
+Bundle-RequiredExecutionEnvironment: JavaSE-21
+Bundle-ActivationPolicy: lazy
+Bundle-Localization: OSGI-INF/l10n/bundle
+Require-Bundle: org.eclipse.core.runtime,
+ org.eclipse.core.commands,
+ org.eclipse.ui,
+ org.eclipse.ui.workbench,
+ org.eclipse.jface.text,
+ org.eclipse.text,
+ org.jkiss.dbeaver.model,
+ org.jkiss.dbeaver.ui,
+ org.jkiss.dbeaver.ui.editors.base,
+ org.jkiss.dbeaver.ui.editors.sql,
+ org.jkiss.utils
+Export-Package: org.jkiss.dbeaver.ui.inlinefkpicker,
+ org.jkiss.dbeaver.ui.inlinefkpicker.core,
+ org.jkiss.dbeaver.ui.inlinefkpicker.ui
+Automatic-Module-Name: org.jkiss.dbeaver.ui.inlinefkpicker
