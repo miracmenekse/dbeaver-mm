@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+    <!--
+        Auto-trigger installer. Attaches a lightweight StyledText listener to SQL editors so
+        that typing `xxx_id =` (or `xxx_id IN (`) opens the picker automatically. Manual trigger
+        below works without it; the startup only wires the automatic path.
+    -->
+    <extension point="org.eclipse.ui.startup">
+        <startup class="org.jkiss.dbeaver.ui.inlinefkpicker.trigger.InlineFkStartup"/>
+    </extension>
+
+    <extension point="org.eclipse.ui.commands">
+        <category
+            id="org.jkiss.dbeaver.ui.inlinefkpicker.category"
+            name="%category.inlineFkPicker.name"/>
+        <command
+            id="org.jkiss.dbeaver.ui.inlinefkpicker.open"
+            categoryId="org.jkiss.dbeaver.ui.inlinefkpicker.category"
+            name="%command.openFkPicker.name"
+            description="%command.openFkPicker.description"
+            defaultHandler="org.jkiss.dbeaver.ui.inlinefkpicker.trigger.OpenFkPickerHandler"/>
+        <command
+            id="org.jkiss.dbeaver.ui.inlinefkpicker.whereParams"
+            categoryId="org.jkiss.dbeaver.ui.inlinefkpicker.category"
+            name="%command.whereParams.name"
+            description="%command.whereParams.description"
+            defaultHandler="org.jkiss.dbeaver.ui.inlinefkpicker.trigger.OpenWhereParamsHandler"/>
+    </extension>
+
+    <!--
+        Manual invocation. Ctrl+Space is owned by content assist, so we bind to Ctrl+Alt+Space
+        (which core reserved but left disabled for assist.templates). Scoped to the SQL editor
+        text context so it never fires elsewhere.
+    -->
+    <extension point="org.eclipse.ui.bindings">
+        <key
+            commandId="org.jkiss.dbeaver.ui.inlinefkpicker.open"
+            contextId="org.jkiss.dbeaver.ui.editors.sql.script.focused"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+SPACE"/>
+        <key
+            commandId="org.jkiss.dbeaver.ui.inlinefkpicker.whereParams"
+            contextId="org.jkiss.dbeaver.ui.editors.sql.script.focused"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+P"/>
+    </extension>
+
+</plugin>

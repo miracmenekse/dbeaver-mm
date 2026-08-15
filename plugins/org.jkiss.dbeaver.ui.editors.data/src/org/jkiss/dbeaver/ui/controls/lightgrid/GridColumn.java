@@ -159,6 +159,29 @@ public class GridColumn implements IGridColumn {
         return filterBounds.contains(x, y);
     }
 
+    public boolean isOverFkDictButton(int x, int y) {
+        IGridContentProvider contentProvider = grid.getContentProvider();
+        if (!contentProvider.isElementSupportsFkDict(this)) {
+            return false;
+        }
+
+        Rectangle bounds = getBounds();
+
+        Rectangle fkBounds = GridColumnRenderer.getFkDictControlBounds();
+        fkBounds.x = bounds.width - fkBounds.width - GridColumnRenderer.RIGHT_MARGIN;
+        fkBounds.y = bounds.y + GridColumnRenderer.TOP_MARGIN;
+
+        // Filter ve sort ikonlari sagda; FK butonu onlarin soluna cizilir.
+        if (isFilterable()) {
+            fkBounds.x -= GridColumnRenderer.getFilterControlBounds().width + GridColumnRenderer.IMAGE_SPACING;
+        }
+        if (contentProvider.getSortOrder(this) > 0 || contentProvider.isElementSupportsSort(this)) {
+            fkBounds.x -= GridColumnRenderer.getSortControlBounds().width + GridColumnRenderer.IMAGE_SPACING;
+        }
+
+        return fkBounds.contains(x, y);
+    }
+
     public boolean isOverSortArrow(int x, int y) {
         IGridContentProvider contentProvider = grid.getContentProvider();
         if (contentProvider.getSortOrder(this) <= 0 && !contentProvider.isElementSupportsSort(this)) {

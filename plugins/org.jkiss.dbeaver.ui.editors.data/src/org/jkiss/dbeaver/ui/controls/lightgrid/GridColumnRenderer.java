@@ -44,6 +44,8 @@ class GridColumnRenderer extends AbstractRenderer {
     public static final Image IMAGE_DESC = DBeaverIcons.getImage(UIIcon.SORT_INCREASE);
     public static final Image IMAGE_ASC = DBeaverIcons.getImage(UIIcon.SORT_DECREASE);
     public static final Image IMAGE_FILTER = DBeaverIcons.getImage(UIIcon.DROP_DOWN);
+    // PoC: FK sozluk aciklama kolonu secici butonu
+    public static final Image IMAGE_FK_DICT = DBeaverIcons.getImage(UIIcon.DOTS_BUTTON);
 
     public static final int SORT_WIDTH = IMAGE_DESC.getBounds().width;
     public static final int SORT_HEIGHT = IMAGE_DESC.getBounds().height;
@@ -64,6 +66,10 @@ class GridColumnRenderer extends AbstractRenderer {
     
     public static Rectangle getFilterControlBounds() {
     	return IMAGE_FILTER.getBounds();
+    }
+
+    public static Rectangle getFkDictControlBounds() {
+        return IMAGE_FK_DICT.getBounds();
     }
 
     @Nullable
@@ -179,6 +185,14 @@ class GridColumnRenderer extends AbstractRenderer {
             if (showSortIconAlways || sortOrder > 0) {
                 bounds.width -= getSortControlBounds().width;
                 paintSort(gc, new Rectangle(bounds.x + bounds.width, bounds.y, 0, 0), sortOrder, showSortIconAlways);
+                bounds.width -= IMAGE_SPACING;
+            }
+        }
+
+        { // PoC: FK sozluk aciklama kolonu secici butonu
+            if (contentProvider.isElementSupportsFkDict(element)) {
+                bounds.width -= getFkDictControlBounds().width;
+                gc.drawImage(IMAGE_FK_DICT, bounds.x + bounds.width, bounds.y);
                 bounds.width -= IMAGE_SPACING;
             }
         }
