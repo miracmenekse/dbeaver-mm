@@ -367,6 +367,16 @@ Sekme başlığında (`<etiya> cmd_config`) bağlantının renk kodu ince bir ş
 ve [dbeaver#15808 "add color coding to tabs"](https://github.com/dbeaver/dbeaver/issues/15808).
 Yani fork'unuzda çözülmesi hem gerçek bir ihtiyaç hem de upstream'e katkı adayı.
 
+#### F4. SQL editörünün içinde bağlantı seçici combobox · **E2 · Ö1** · kullanıcı kararı (2026-09-19)
+
+Öneri 3/B'de ana araç çubuğu **tamamen kaldırıldı** (kullanıcı: "komple kaldır"). Aktif
+bağlantı/şema seçicisi o araç çubuğundaydı; şu an yalnızca **Ctrl+9** (bağlantı) / **Ctrl+0**
+(şema) ile seçiliyor. Kalıcı çözüm: seçici, **sorgunun yazıldığı editörün kendisine** (editör
+alanının üst kenarında ya da sol dikey araç şeridinin yanında, ince bir satırda) bir combobox
+olarak gelecek; bağlantı adı + ortam rengi (G1) + şema. Mevcut `DataSourceToolbarHandler` /
+`SelectDataSourceCombo` mantığı yeniden kullanılmalı, yeni bir seçim modeli yazılmamalı.
+Araç çubuğu geri getirilmez.
+
 ---
 
 ### G. Bağlantı yönetimi ve güvenlik hissi

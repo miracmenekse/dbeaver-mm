@@ -163,7 +163,6 @@ public class ResultSetViewer extends Viewer
 
     private static final DecimalFormat ROW_COUNT_FORMAT = new DecimalFormat("###,###,###,###,###,##0");
     private static final DateTimeFormatter EXECUTION_TIME_FORMATTER = DateTimeFormatter.ofPattern("MMM dd, HH:mm:ss");
-    private static final DateTimeFormatter STATUS_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss"); // dbeaver-mm E1
 
     private static final IResultSetListener[] EMPTY_LISTENERS = new IResultSetListener[0];
     private static final String CSS_CLASS_RESULT_SET_VIEWER = "ResultSetViewer";
@@ -194,6 +193,10 @@ public class ResultSetViewer extends Viewer
     private Composite statusBar;
     private StatusLabel statusLabel;
     private ActiveStatusMessage rowCountLabel;
+    // dbeaver-mm Öneri 3/B: row navigation + fetch buttons, shown only in record mode or when
+    // the fetch size cut the result
+    private ToolBar navToolBar;
+    private PendingTransactionBar pendingTransactionBar;
     private Text selectionStatLabel;
     private Text resultSetSize;
 
@@ -423,6 +426,12 @@ public class ResultSetViewer extends Viewer
             if (supportsStatusBar()) {
                 GridData gd = new GridData(GridData.FILL_HORIZONTAL);
                 gd.horizontalSpan = ((GridLayout) mainPanel.getLayout()).numColumns;
+
+                // dbeaver-mm Öneri 3/B: Commit / Rollback strip, visible only while a transaction
+                // is pending. It sits in the main panel, not in the status bar composite, because
+                // that one is hidden in the statistics view - exactly what an UPDATE shows.
+                pendingTransactionBar = new PendingTransactionBar(mainPanel, this);
+                ((GridData) pendingTransactionBar.getLayoutData()).horizontalSpan = gd.horizontalSpan;
 
                 Composite composite = createStatusBar();
                 composite.setLayoutData(gd);
@@ -1948,7 +1957,8 @@ public class ResultSetViewer extends Viewer
                 for (ToolBarManager toolbarManager : toolbarList) {
                     ToolBar toolbar = toolbarManager.getControl();
                     boolean wasCollapsed = toolbar.getLayoutData() != null;
-                    toolbar.setLayoutData(toolbar.getItemCount() > 0 ? null : new RowData(0, 0));
+                    boolean collapse = toolbar.getItemCount() == 0 || (toolbar == navToolBar && !isNavigationBarNeeded());
+                    toolbar.setLayoutData(collapse ? new RowData(0, 0) : null);
                     boolean nowCollapsed = toolbar.getLayoutData() != null;
                     changed |= (wasCollapsed != nowCollapsed);
                 }
@@ -2044,6 +2054,7 @@ public class ResultSetViewer extends Viewer
     private void createStatusBar0(@NotNull Composite parent) {
         ActionUtils.addPropertyEvaluationRequestListener(propertyEvaluationRequestListener);
 
+
         statusBar = new ConComposite(parent, SWT.NONE);
         statusBar.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
         RowLayout toolbarsLayout = new RowLayout(SWT.HORIZONTAL);
@@ -2085,7 +2096,7 @@ public class ResultSetViewer extends Viewer
         {
             ToolBarManager navToolBarManager = new ToolBarManager(SWT.FLAT | SWT.HORIZONTAL | SWT.RIGHT);
             menuService.populateContributionManager(navToolBarManager, TOOLBAR_NAVIGATION_CONTRIBUTION_ID);
-            ToolBar navToolBar = navToolBarManager.createControl(statusBar);
+            navToolBar = navToolBarManager.createControl(statusBar);
             CSSUtils.markConnectionTypeColor(navToolBar);
             toolbarList.add(navToolBarManager);
         }
@@ -2111,16 +2122,8 @@ public class ResultSetViewer extends Viewer
             toolbarList.add(addToolBarManager);
         }
 
-        {
-            // Config toolbar
-            ToolBarManager configToolBarManager = new ToolBarManager(SWT.FLAT | SWT.HORIZONTAL | SWT.RIGHT);
-            configToolBarManager.add(new ToolbarSeparatorContribution(true));
-            configToolBarManager.add(new ConfigAction());
-            configToolBarManager.update(true);
-            ToolBar configToolBar = configToolBarManager.createControl(statusBar);
-            CSSUtils.markConnectionTypeColor(configToolBar);
-            toolbarList.add(configToolBarManager);
-        }
+        // dbeaver-mm Öneri 3/B: the result settings gear (ConfigAction) is no longer on the bar;
+        // the same settings are under Window > Preferences > Editors > Data Editor.
         {
             final int fontHeight = UIUtils.getFontHeight(statusBar);
 
@@ -2171,6 +2174,9 @@ public class ResultSetViewer extends Viewer
                         public String evaluate(@NotNull DBRProgressMonitor monitor) throws InvocationTargetException {
                             try {
                                 long rowCount = readRowCount(monitor);
+                                // dbeaver-mm: the count label is hidden; the total is shown by the
+                                // "200 of N rows" marker, which reads it from the model
+                                UIUtils.asyncExec(ResultSetViewer.this::updateStatusMessage);
                                 return ROW_COUNT_FORMAT.format(rowCount);
                             } catch (DBException e) {
                                 throw new InvocationTargetException(e);
@@ -2179,6 +2185,13 @@ public class ResultSetViewer extends Viewer
                     };
                 }
             };
+
+            // dbeaver-mm Öneri 3/B: keep the count label (it runs the "Calculate total row count"
+            // command and the automatic count) but do not show it on the bar
+            RowData rowCountData = new RowData();
+            rowCountData.exclude = true;
+            rowCountLabel.setLayoutData(rowCountData);
+            rowCountLabel.setVisible(false);
 
             selectionStatLabel = new Text(statusBar, SWT.READ_ONLY);
             selectionStatLabel.setToolTipText(ResultSetMessages.result_set_viewer_selection_stat_tooltip);
@@ -2483,6 +2496,7 @@ public class ResultSetViewer extends Viewer
 
     public void setStatus(String status, DBPMessageType messageType)
     {
+        setStatusLabelVisible(true);
         if (statusLabel != null && !statusLabel.isDisposed() &&
             (statusLabel.getMessageType() != messageType || !CommonUtils.equalObjects(statusLabel.getMessage(), status))
         ) {
@@ -2512,6 +2526,10 @@ public class ResultSetViewer extends Viewer
     public void updateStatusMessage() {
         updateStatusInfo(false);
         updateStatusInfo(true);
+        updateNavigationBar();
+        if (pendingTransactionBar != null && !pendingTransactionBar.isDisposed()) {
+            pendingTransactionBar.scheduleRefresh();
+        }
         if (rowCountLabel != null && !rowCountLabel.isDisposed()) {
             // Update row count label
             String rcMessage;
@@ -2605,45 +2623,62 @@ public class ResultSetViewer extends Viewer
     }
 
     /**
-     * dbeaver-mm E1 (UI_UX_MODERNIZASYON.md): a successful fetch is shown as separate row count,
-     * duration and end time items with falling contrast instead of one line of text. "200+" is
-     * drawn in a warning color so a result cut by the fetch size is not mistaken for all the data.
+     * dbeaver-mm Öneri 3/B (user decision, 2026-09-18): a plain successful fetch shows nothing in
+     * the status area - the grid itself shows the rows - so the data gets the room. Only when the
+     * fetch size cut the result does a marker appear ("200+ rows · more available", or
+     * "200 of 12,345 rows" once the total was counted), in amber, so a partial result is never
+     * mistaken for all the data. Errors, warnings and other messages still use the status label.
      */
     private void setFetchSummary(@NotNull String plainMessage, long rowsFetched) {
         setStatus(plainMessage, DBPMessageType.INFORMATION);
-
-        boolean limited = isHasMoreData() && model.getTotalRowCount() == null;
-        String rows = NLS.bind(
-            ResultSetMessages.controls_resultset_viewer_status_rows_count,
-            ResultSetUtils.formatRowCount(rowsFetched) + (limited ? "+" : ""));
-        String duration = "";
-        String time = "";
-        DBCStatistics statistics = model.getStatistics();
-        if (statistics != null && !statistics.isEmpty()) {
-            duration = RuntimeUtils.formatExecutionTime(statistics.getTotalTime());
-            time = LocalDateTime
-                .ofInstant(Instant.ofEpochMilli(statistics.getEndTime()), TimeZone.getDefault().toZoneId())
-                .format(STATUS_TIME_FORMATTER);
+        if (!isHasMoreData()) {
+            setStatusLabelVisible(false);
+            return;
         }
-        if (getPreferenceStore().getBoolean(ResultSetPreferences.RESULT_SET_SHOW_CONNECTION_NAME)) {
-            DBSDataContainer dataContainer = getDataContainer();
-            DBPDataSource dataSource = dataContainer == null ? null : dataContainer.getDataSource();
-            if (dataSource != null) {
-                time += " [" + dataSource.getContainer().getName() + "]";
-            }
-        }
-        statusLabel.setFetchSummary(plainMessage, rows, limited, duration, time);
-        // changed=true: the summary labels are measured for the first time here
+        Long totalRows = model.getTotalRowCount();
+        String rows = totalRows == null
+            ? NLS.bind(ResultSetMessages.controls_resultset_viewer_status_rows_more, ResultSetUtils.formatRowCount(rowsFetched))
+            : NLS.bind(ResultSetMessages.controls_resultset_viewer_status_rows_of_total,
+                ResultSetUtils.formatRowCount(rowsFetched), ROW_COUNT_FORMAT.format(totalRows));
+        statusLabel.setFetchSummary(plainMessage, rows, true, "", "");
         RowData rowData = (RowData) statusLabel.getLayoutData();
-        int newWidth = statusLabel.computeSize(SWT.DEFAULT, SWT.DEFAULT, true).x;
-        if (rowData.width != newWidth) {
-            rowData.width = newWidth;
-            // The status bar wraps (RowLayout); a narrower label can move to another row, which
-            // changes the status bar height, so the whole viewer has to be laid out, not only the
-            // status bar. Without this the summary stayed invisible after the first fetch.
-            if (!getControl().isDisposed()) {
-                getControl().layout(true, true);
-            }
+        rowData.width = statusLabel.computeSize(SWT.DEFAULT, SWT.DEFAULT, true).x;
+        setStatusLabelVisible(true);
+        getControl().layout(true, true);
+    }
+
+    private void setStatusLabelVisible(boolean visible) {
+        if (statusLabel == null || statusLabel.isDisposed()) {
+            return;
+        }
+        RowData rowData = (RowData) statusLabel.getLayoutData();
+        if (rowData.exclude != visible) {
+            return;
+        }
+        rowData.exclude = !visible;
+        statusLabel.setVisible(visible);
+        // The wrapping status bar can change its height, so lay out the whole viewer
+        getControl().layout(true, true);
+    }
+
+    /**
+     * dbeaver-mm Öneri 3/B: row navigation and fetch buttons only where they are needed - in
+     * record mode (moving between records) and when there are more rows to fetch.
+     * Keyboard: Ctrl+Alt+Left/Right, with Shift for the first / last row.
+     */
+    private boolean isNavigationBarNeeded() {
+        return recordMode || (model.hasData() && isHasMoreData());
+    }
+
+    private void updateNavigationBar() {
+        if (navToolBar == null || navToolBar.isDisposed()) {
+            return;
+        }
+        boolean collapsed = navToolBar.getItemCount() == 0 || !isNavigationBarNeeded();
+        boolean wasCollapsed = navToolBar.getLayoutData() != null;
+        if (collapsed != wasCollapsed) {
+            navToolBar.setLayoutData(collapsed ? new RowData(0, 0) : null);
+            getControl().layout(true, true);
         }
     }
 

@@ -21,6 +21,11 @@ import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.Platform;
+import org.eclipse.e4.ui.model.application.ui.SideValue;
+import org.eclipse.e4.ui.model.application.ui.basic.MTrimBar;
+import org.eclipse.e4.ui.model.application.ui.basic.MTrimmedWindow;
+import org.eclipse.e4.ui.model.application.ui.basic.MWindow;
+import org.eclipse.e4.ui.workbench.modeling.EModelService;
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.util.IPropertyChangeListener;
@@ -35,6 +40,7 @@ import org.eclipse.ui.application.ActionBarAdvisor;
 import org.eclipse.ui.application.IActionBarConfigurer;
 import org.eclipse.ui.application.IWorkbenchWindowConfigurer;
 import org.eclipse.ui.internal.WorkbenchPlugin;
+import org.eclipse.ui.internal.WorkbenchWindow;
 import org.eclipse.ui.internal.ide.IDEInternalPreferences;
 import org.eclipse.ui.internal.ide.IDEWorkbenchPlugin;
 import org.eclipse.ui.internal.ide.application.IDEWorkbenchWindowAdvisor;
@@ -161,10 +167,15 @@ public class ApplicationWorkbenchWindowAdvisor extends IDEWorkbenchWindowAdvisor
         Rectangle displaySize = Display.getCurrent().getPrimaryMonitor().getBounds();
         IWorkbenchWindowConfigurer configurer = getWindowConfigurer();
         configurer.setInitialSize(new Point(displaySize.width * 3 / 4, displaySize.height * 3 / 4));
-        configurer.setShowCoolBar(true);
-        configurer.setShowStatusLine(true);
-        configurer.setShowPerspectiveBar(true);
-        configurer.setShowProgressIndicator(true);
+        // dbeaver-mm Öneri 3/B (user decision, 2026-09-18/19): no main toolbar and no bottom status
+        // bar, the room goes to the data. Their content is reachable elsewhere: New connection via
+        // Database menu / Ctrl+Shift+N / Connections "+", active connection via Ctrl+9, Commit /
+        // Rollback via Database menu and the pending-transaction strip, background jobs in
+        // Window > Show View > Progress.
+        configurer.setShowCoolBar(false);
+        configurer.setShowStatusLine(false);
+        configurer.setShowPerspectiveBar(false);
+        configurer.setShowProgressIndicator(false);
         configurer.configureEditorAreaDropListener(new EditorAreaDropAdapter());
 
         configurer.addEditorAreaTransfer(EditorInputTransfer.getInstance());
@@ -348,6 +359,7 @@ public class ApplicationWorkbenchWindowAdvisor extends IDEWorkbenchWindowAdvisor
         super.postWindowOpen();
 
         closeEmptyEditors();
+        hideTrimBars();
 
         try {
             ApplicationCSSManager.updateApplicationCSS(Display.getCurrent());
@@ -363,6 +375,36 @@ public class ApplicationWorkbenchWindowAdvisor extends IDEWorkbenchWindowAdvisor
         }
 
         initWorkbenchWindows();
+    }
+
+    /**
+     * dbeaver-mm Öneri 3/B (user decision, 2026-09-18/19): no main toolbar (top trim) and no bottom
+     * bar (status line, progress, project selector) - the room goes to the data. setShowCoolBar /
+     * setShowStatusLine alone only affect a window without saved state; a restored workbench brings
+     * its trim back, so both trim bars are hidden in the model on every start.
+     */
+    private void hideTrimBars() {
+        try {
+            IWorkbenchWindow window = getWindowConfigurer().getWindow();
+            EModelService modelService = window.getService(EModelService.class);
+            MWindow model = window instanceof WorkbenchWindow workbenchWindow
+                ? workbenchWindow.getModel()
+                : window.getService(MWindow.class);
+            if (modelService != null && model instanceof MTrimmedWindow trimmedWindow) {
+                for (SideValue side : new SideValue[] {SideValue.TOP, SideValue.BOTTOM}) {
+                    MTrimBar trim = modelService.getTrim(trimmedWindow, side);
+                    // toBeRendered, not visible: the renderer ignores visible=false on a trim bar that
+                    // is already rendered (the left/right trims of this workbench use the same flag)
+                    if (trim != null && trim.isToBeRendered()) {
+                        trim.setToBeRendered(false);
+                    }
+                }
+            } else {
+                log.debug("Trim bars not hidden: no trimmed window model");
+            }
+        } catch (Throwable e) {
+            log.debug("Error hiding the trim bars", e);
+        }
     }
 
     @Override

@@ -68,6 +68,14 @@
     -->
     <extension point="org.eclipse.ui.perspectiveExtensions">
         <perspectiveExtension targetID="org.jkiss.dbeaver.core.perspective">
+            <!-- Öneri 3 / B (user-marked, 2026-09-18): SQL, Commit, Rollback and the transaction
+                 mode pulldown also go. SQL editor: SQL Editor menu, Ctrl+], F3. Commit / Rollback:
+                 Database menu, plus a strip under the result grid while a transaction is pending. -->
+            <hiddenToolBarItem id="org.jkiss.dbeaver.menu.sql.open"/>
+            <hiddenToolBarItem id="org.jkiss.dbeaver.core.commit.menu"/>
+            <hiddenToolBarItem id="org.jkiss.dbeaver.core.rollback.menu"/>
+            <hiddenToolBarItem id="org.jkiss.dbeaver.core.menu.txn"/>
+
             <!-- dbeaver-general: connect / reconnect / disconnect / synchronize, AI -->
             <hiddenToolBarItem id="org.jkiss.dbeaver.core.connect"/>
             <hiddenToolBarItem id="org.jkiss.dbeaver.core.invalidate"/>

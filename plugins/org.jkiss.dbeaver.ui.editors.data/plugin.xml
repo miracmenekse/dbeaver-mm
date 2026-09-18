@@ -1394,7 +1394,8 @@
             <item commandId="org.jkiss.dbeaver.core.resultset.row.last" defaultVisibility="true"/>
             <item commandId="org.jkiss.dbeaver.core.resultset.fetch.page" defaultVisibility="false"/>
             <item commandId="org.jkiss.dbeaver.core.resultset.fetch.all" defaultVisibility="true"/>
-            <item commandId="org.jkiss.dbeaver.core.resultset.export" defaultVisibility="true"/>
+            <!-- dbeaver-mm Öneri 3/B: off by default; export stays in the grid's context menu -->
+            <item commandId="org.jkiss.dbeaver.core.resultset.export" defaultVisibility="false"/>
         </toolBar>
     </extension>
     

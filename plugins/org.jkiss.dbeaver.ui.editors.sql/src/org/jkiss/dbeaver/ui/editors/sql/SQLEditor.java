@@ -1383,6 +1383,13 @@ public class SQLEditor extends SQLEditorBase implements
 
         bottomBar.pack();
         bottomBarMan.update(true);
+
+        // dbeaver-mm Öneri 3/B (user decision, 2026-09-19): the bottom group of the side bar
+        // (preferences, output, log, variables, outline) is not shown - everything in it is in the
+        // SQL Editor menu (Extra panels, Ctrl+Shift+O for output) and Window > Preferences.
+        // The manager stays: panel toggles and showPresentationPanel() still go through it.
+        ((GridData) bottomBar.getLayoutData()).exclude = true;
+        bottomBar.setVisible(false);
     }
 
     private void createPresentationSwitchBar(Composite sqlEditorPanel) {
