@@ -1,0 +1,48 @@
+/*
+ * dbeaver-mm A1 (UI_UX_MODERNIZASYON.md): an overlay on the stock dark theme
+ * (org.eclipse.e4.ui.css.theme.e4_dark), not a separate theme. All the dark
+ * stylesheets DBeaver and Eclipse contribute to e4_dark keep applying; this file only
+ * adjusts hierarchy and contrast. Base values it builds on (Linux, 2026-09):
+ *   editor background  #2F2F2F    active part stack  #262626
+ *   active tab line    #316c9b at the bottom, inactive stacks none
+ *   grid header        57,66,72 (already distinct from the body - left as is)
+ *
+ * Rules (CLAUDE.md, I1/J1): no animation; dimmed text stays at or above 3:1,
+ * regular text at or above 4.5:1 against its background.
+ */
+
+/* 1. Side panels one step darker than the editor area, so the eye lands on the editor.
+      Targets the DBeaver side views by part id; editors live in the MArea and keep #2F2F2F. */
+#org-jkiss-dbeaver-core-databaseNavigator Tree,
+#org-jkiss-dbeaver-core-databaseNavigator Composite,
+#org-jkiss-dbeaver-core-projectNavigator Tree,
+#org-jkiss-dbeaver-core-projectNavigator Composite,
+#org-jkiss-dbeaver-core-projectExplorer Tree,
+#org-jkiss-dbeaver-core-projectExplorer Composite {
+    background-color: #282828;
+}
+
+/* 2. Selected tab: a thin accent strip on top instead of an outline.
+      Active stack gets the accent color, other stacks a quiet grey. */
+CTabFolder {
+    swt-tab-outline: #282828;
+    swt-selected-tab-highlight: #4a4a4a;
+    swt-selected-highlight-top: true;
+}
+
+CTabFolder.active {
+    swt-selected-tab-highlight: #3d8fd1;
+    swt-selected-highlight-top: true;
+}
+
+/* 3. Panel borders and the sash between panels: low contrast, so data is more visible than
+      chrome. Stock values were keyline 81,86,88 and a 4px sash of 72,72,76 - both brighter
+      than the panels they separate. */
+CTabFolder,
+CTabFolder.active {
+    swt-outer-keyline-color: #3a3a3a;
+}
+
+.MPartSashContainer {
+    background-color: #2b2b2b;
+}

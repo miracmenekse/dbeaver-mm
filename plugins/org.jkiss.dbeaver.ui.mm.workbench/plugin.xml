@@ -43,6 +43,19 @@
     </extension>
 
     <!--
+        A1 (UI_UX_MODERNIZASYON.md): visual hierarchy for the dark theme, as an extra
+        stylesheet on the stock e4_dark theme rather than a separate theme. Eight bundles
+        (DBeaver core, data/SQL/ERD editors, AI, Eclipse compare, GEF, text editors)
+        contribute their dark styling by e4_dark's id; a new theme id would lose all of it
+        and silently miss anything upstream adds later.
+    -->
+    <extension point="org.eclipse.e4.ui.css.swt.theme">
+        <stylesheet uri="css/mm-dark.css">
+            <themeid refid="org.eclipse.e4.ui.css.theme.e4_dark"/>
+        </stylesheet>
+    </extension>
+
+    <!--
         C2 (UI_UX_MODERNIZASYON.md): reduce the main toolbar to three groups -
         context (connection + schema selector), transactions (commit / rollback / mode)
         and the two entry points New Connection and SQL. Everything else is hidden
