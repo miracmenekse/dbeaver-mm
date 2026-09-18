@@ -52,19 +52,13 @@ public class DBeaverPerspective implements IPerspectiveFactory
             IPageLayout.LEFT,
             0.25f,
             editorArea);
+        // dbeaver-mm B1: Connections, Projects and Files share one tab stack so only
+        // one tree is visible at a time. Connections is added first, so it is selected.
         treeFolder.addView(DatabaseNavigatorView.VIEW_ID);
         treeFolder.addView(ProjectNavigatorView.VIEW_ID);
+        treeFolder.addView(ProjectExplorerView.VIEW_ID);
+        treeFolder.addPlaceholder(DatabaseBrowserView.VIEW_ID);
         treeFolder.addPlaceholder(TemplatesView.ID);
-
-        // Bottom left.
-        //IPlaceholderFolderLayout bottomLeft = layout.createPlaceholderFolder(
-        IFolderLayout bottomLeft = layout.createFolder(
-            BOTTOM_BOTTOM_LEFT,
-            IPageLayout.BOTTOM,
-            0.7f,
-            FOLDER_NAVIGATION);
-        bottomLeft.addView(ProjectExplorerView.VIEW_ID);
-        bottomLeft.addPlaceholder(DatabaseBrowserView.VIEW_ID);
 
         // Bottom right.
         IPlaceholderFolderLayout bottomRight = layout.createPlaceholderFolder(
