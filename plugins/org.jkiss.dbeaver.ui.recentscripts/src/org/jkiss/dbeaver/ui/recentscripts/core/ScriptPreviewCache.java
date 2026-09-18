@@ -39,20 +39,20 @@ final class ScriptPreviewCache {
 
     private static final int MAX_ENTRIES = 300;
 
-    private record Entry(long lastModified, long size, ScriptPreviewParser.ParsedPreview preview) {
+    private record CachedPreview(long lastModified, long size, ScriptPreviewParser.ParsedPreview preview) {
     }
 
-    private final Map<String, Entry> cache = Collections.synchronizedMap(
+    private final Map<String, CachedPreview> cache = Collections.synchronizedMap(
         new LinkedHashMap<>(64, 0.75f, true) {
             @Override
-            protected boolean removeEldestEntry(Map.Entry<String, Entry> eldest) {
+            protected boolean removeEldestEntry(Map.Entry<String, CachedPreview> eldest) {
                 return size() > MAX_ENTRIES;
             }
         });
 
     @Nullable
     ScriptPreviewParser.ParsedPreview get(@NotNull IFile file, long lastModified, long size) {
-        Entry entry = cache.get(key(file));
+        CachedPreview entry = cache.get(key(file));
         if (entry != null && entry.lastModified() == lastModified && entry.size() == size) {
             return entry.preview();
         }
@@ -60,7 +60,7 @@ final class ScriptPreviewCache {
     }
 
     void put(@NotNull IFile file, long lastModified, long size, @NotNull ScriptPreviewParser.ParsedPreview preview) {
-        cache.put(key(file), new Entry(lastModified, size, preview));
+        cache.put(key(file), new CachedPreview(lastModified, size, preview));
     }
 
     void invalidate(@NotNull IPath path) {
