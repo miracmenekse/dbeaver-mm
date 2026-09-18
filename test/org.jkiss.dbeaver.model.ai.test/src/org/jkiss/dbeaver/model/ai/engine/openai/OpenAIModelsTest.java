@@ -21,6 +21,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Locale;
+
 import static org.jkiss.dbeaver.model.ai.engine.openai.OpenAIModels.KNOWN_MODELS;
 import static org.jkiss.dbeaver.model.ai.engine.openai.OpenAIModels.getEffectiveModelName;
 
@@ -38,7 +40,7 @@ public class OpenAIModelsTest extends DBeaverUnitTest {
     public void effectiveModelNameKnownUppercaseShouldReturnKnownModelLowercase() {
         //given
         var expectedModelName = KNOWN_MODELS.keySet().stream().findFirst().orElseThrow();
-        var inputModelName = expectedModelName.toUpperCase();
+        var inputModelName = expectedModelName.toUpperCase(Locale.ROOT);
         //when
         var result = getEffectiveModelName(inputModelName);
         //then
@@ -49,7 +51,7 @@ public class OpenAIModelsTest extends DBeaverUnitTest {
     public void effectiveModelNameUnknownUppercaseShouldReturnKnownModelUppercase() {
         //given
         var inputModelName = "some-UNKNOWN-MODEL";
-        Assumptions.assumeFalse(KNOWN_MODELS.containsKey(inputModelName.toLowerCase()));
+        Assumptions.assumeFalse(KNOWN_MODELS.containsKey(inputModelName.toLowerCase(Locale.ROOT)));
         //when
         var result = getEffectiveModelName(inputModelName);
         //then
