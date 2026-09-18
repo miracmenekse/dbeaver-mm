@@ -296,16 +296,21 @@ class ConnectionPageSettings extends ActiveWizardPage<ConnectionWizard> implemen
                 }
                 allPages.sort(PAGE_COMPARATOR);
 
-                tabFolder = new CTabFolder(parent, SWT.TOP);
+                // dbeaver-mm G1: an environment (connection type) row above the tabs. It gets its
+                // own row because the tab strip's top-right slot is already used by the
+                // network handler / profile toolbar.
+                Composite pageRoot = new Composite(parent, SWT.NONE);
+                pageRoot.setLayout(GridLayoutFactory.fillDefaults().spacing(0, 3).create());
+                pageRoot.setLayoutData(new GridData(GridData.FILL_BOTH));
+                ConnectionEnvironmentSelector.create(pageRoot, wizard);
+
+                tabFolder = new CTabFolder(pageRoot, SWT.TOP);
                 tabFolder.setLayoutData(new GridData(GridData.FILL_BOTH));
                 tabFolder.setUnselectedCloseVisible(false);
 
                 // Create and populate top-right toolbar
                 var toolBarComposite = new Composite(tabFolder, SWT.NONE);
-                toolBarComposite.setLayout(GridLayoutFactory.fillDefaults().numColumns(2).extendedMargins(0, 0, 0, 0).create());
-
-                // dbeaver-mm G1: choose the environment (connection type) on the main page
-                ConnectionEnvironmentSelector.create(toolBarComposite, wizard);
+                toolBarComposite.setLayout(GridLayoutFactory.fillDefaults().extendedMargins(0, 0, 0, 0).create());
 
                 handlersToolbar = new ToolBar(toolBarComposite, SWT.FLAT | SWT.RIGHT);
                 handlerItem = createHandlerItem(handlersToolbar, allPages);
@@ -349,7 +354,7 @@ class ConnectionPageSettings extends ActiveWizardPage<ConnectionWizard> implemen
                     }
                 }));
 
-                setControl(tabFolder);
+                setControl(pageRoot);
 
                 for (IDialogPage page : allPages) {
                     if (ArrayUtils.contains(extraPages, page) || canAddHandler(page)) {
