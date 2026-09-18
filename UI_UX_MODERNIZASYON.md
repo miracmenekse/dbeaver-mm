@@ -498,6 +498,17 @@ ya da hiç yapılmamalı.
 B1 (perspektif) → C2 (toolbar) → G1 (ortam rengi) → B2 (focus mode) → I1 + J3 (kurallar).
 Bu beş madde §1.1, §1.2, §1.3'ün büyük kısmını çözer ve merge riski taşımaz.
 
+> **Durum (2026-09-18, dal `dbeaver-mm-v0.1-on-devel`): Faz 1 tamamlandı.**
+> - **B1** — `DBeaverPerspective`: Connections / Projects / Files tek sekme grubunda. *(upstream dosyası)*
+> - **C2** — yeni `org.jkiss.dbeaver.ui.mm.workbench` bundle'ı, `hiddenToolBarItem` ile. Kalan:
+>   Yeni bağlantı, SQL, Commit/Rollback/mod, bağlantı + şema seçici. "Çalıştır" grubu **eklenmedi**
+>   (SQL editörün kenar çubuğunda zaten var — kullanıcı kararı).
+> - **B2** — Focus Mode, **`Ctrl+Alt+F`** (+ Window menüsü). `Ctrl+Shift+F` zaten "Format SQL".
+> - **G1** — kapsam: yalnız madde 1 (sihirbazın ana sayfasında ortam seçimi). Madde 3 (üretimde onay)
+>   CE'de zaten var: PROD tipi `confirmExecute` + `confirmDataChange` açık, auto-commit kapalı.
+>   Madde 2 (renk her yerde, #5705/#19859) ve DEV tipinin beyaz olması **açık**.
+> - **I1 + J3** — `CLAUDE.md` → Kalıcı proje kuralları.
+
 **Faz 2 — "Görsel kimlik" (yaklaşık 1 hafta)**
 A1 (tema) → A2 (tipografi) → E1 + E2 (sonuç şeridi) → F3 (sekme rengi) → J1 (kontrast denetimi).
 

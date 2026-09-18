@@ -193,6 +193,40 @@ bağlantı filtresi olmadan kullanıyor (`SQLEditorUtils.getScriptsFromProject` 
 - `Bundle-Version` (`x.y.z.qualifier`) ile pom `<version>` (`x.y.z-SNAPSHOT`) birebir eşleşmeli.
 - Bağımlılıklar `pom.xml`e değil **`MANIFEST.MF` `Require-Bundle`**'a yazılır. Kaynak kökü `src/`
   (`src/main/java` değil).
+- **Türkçe locale kuralı (J3) — TÜM kod için, sadece SQL değil.** No-arg `toLowerCase()` /
+  `toUpperCase()` YASAK. Karşılaştırma için `toLowerCase(Locale.ROOT)` ya da `equalsIgnoreCase`;
+  **arayüzde gösterilen metin** için de aynı (`"ID"` → `"ıd"`, `"INSERT"` → `"ınsert"` olur).
+  Kolon başlığı büyütme gibi fikirler ya `Locale.ROOT` kullanır ya hiç yapılmaz. Testler de dahil:
+  upstream'in `OpenAIModelsTest`'i bu makinede tam bu yüzden kırılıyordu (`o4-mini` → `O4-MİNİ`).
+- **Çizim bütçesi (I1) — tüm eklentiler için:**
+  1. `PaintListener` içinde asla `new Color` / `new Font` yok → `UIUtils.getSharedColor(RGB)`.
+     (`UIStyles.mix/lighten/darken` da her çağrıda `new Color` üretir, paint içinde kullanılmaz.)
+  2. Hover efektleri yalnızca değişen bölgeyi `redraw(x, y, w, h, false)` ile yeniler; tam `redraw()` yok.
+  3. `BaseThemeSettings` fontları alanda cache'lenmez (tema değişiminde dispose edilir).
+  4. Animasyon yok. Modern görünüm hizalama, boşluk ve kontrastla elde edilir.
+- **Kod `javac` ile de derlenmeli.** Eclipse'in derleyicisi (ecj) bazı hataları kabul ediyor, CLI
+  derlemesi (Tycho) ise `javac` kullanıyor. Örnek: anonim `LinkedHashMap` alt sınıfı içinde `Entry`
+  adı dıştaki `record Entry`'yi değil `Map.Entry`'yi gösterir (ScriptPreviewCache, düzeltildi).
+  Eclipse'te derlendi diye bitmiş sayma; commit öncesi CLI build'i çalıştır.
+- **`.product` dosyasını Eclipse'in Product editöründe açıp kaydetme.** Editör dosyayı yeniden yazıyor
+  (`includeLaunchers="false"` → CLI build `dbeaver` çalıştırılabilirini üretmez) ve
+  `ui.app.standalone/plugin.xml`'den `windowImages`, `preferenceCustomization`, `aboutText`
+  özelliklerini siliyor. v0.1'de bu oldu, güncel upstream'e taşırken geri alındı.
+- **Upstream dosyasına dokunulan her yeri `dbeaver-mm` etiketli bir yorumla işaretle**
+  (ör. `// dbeaver-mm G1: ...`), upstream güncellemelerinde çakışmayı bulmak kolaylaşır.
+
+## Linux'ta CLI derleme / çalıştırma (2026-09)
+- Depolar: `~/projects/{dbeaver,dbeaver-common,datadam-api}`. Aktif dal: `dbeaver-mm-v0.1-on-devel`
+  (güncel upstream `devel` + dbeaver-mm commit'leri), `mm` remote'u = `miracmenekse/dbeaver-mm`.
+- Tam derleme (`~/projects` içinden):
+  `JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64 ./dbeaver-common/mvnw install -Pproduct-dbeaver-ce,product-dbeaver-eclipse-ce,appstore -T 1C -f dbeaver/product/aggregate`
+  (`-DskipTests` ile ~40 sn, testlerle ~5 dk). İlk kez `tools/build.sh` kullanılacaksa
+  `DATADAM_API_REF=devel` ver: script `main` dalını arıyor ama depoda `main` yok.
+- Çıktı: `product/community/target/products/org.jkiss.dbeaver.core.product/linux/gtk/x86_64/dbeaver/dbeaver`.
+  Derlemeden önce çalışan DBeaver'ı kapat (derleme aynı klasörün üzerine yazar).
+- Perspektif değişikliklerini (B1, C2) görmek için: mevcut workspace'te `Window → Reset Perspective`,
+  ya da `./dbeaver -data <boş klasör>` ile temiz bir workspace.
+- SQLite bağlantısında yol tam yazılmalı (`/home/mirac/projects/mm_test_db`); `~` açılmaz → `SQLITE_CANTOPEN`.
 
 ---
 
