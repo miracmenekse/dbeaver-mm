@@ -163,6 +163,7 @@ public class ResultSetViewer extends Viewer
 
     private static final DecimalFormat ROW_COUNT_FORMAT = new DecimalFormat("###,###,###,###,###,##0");
     private static final DateTimeFormatter EXECUTION_TIME_FORMATTER = DateTimeFormatter.ofPattern("MMM dd, HH:mm:ss");
+    private static final DateTimeFormatter STATUS_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss"); // dbeaver-mm E1
 
     private static final IResultSetListener[] EMPTY_LISTENERS = new IResultSetListener[0];
     private static final String CSS_CLASS_RESULT_SET_VIEWER = "ResultSetViewer";
@@ -2536,6 +2537,7 @@ public class ResultSetViewer extends Viewer
 
     private void updateStatusInfo(boolean isTooltip) {
         String statusMessage;
+        long fetchedRows = -1; // dbeaver-mm E1: set when this is a plain "rows fetched" status
         if (model.getRowCount() == 0) {
             if (model.getVisibleAttributeCount() == 0) {
                 statusMessage =
@@ -2571,6 +2573,7 @@ public class ResultSetViewer extends Viewer
                         ResultSetUtils.formatRowCount(rowsFetched),
                         getExecutionTimeMessage(isTooltip)
                     );
+                    fetchedRows = rowsFetched;
                 }
             }
         }
@@ -2594,8 +2597,53 @@ public class ResultSetViewer extends Viewer
         }
         if (isTooltip) {
             setStatusTooltip(statusMessage);
+        } else if (fetchedRows >= 0 && !hasWarnings && statusLabel != null) {
+            setFetchSummary(statusMessage, fetchedRows);
         } else {
             setStatus(statusMessage, hasWarnings ? DBPMessageType.WARNING :DBPMessageType.INFORMATION);
+        }
+    }
+
+    /**
+     * dbeaver-mm E1 (UI_UX_MODERNIZASYON.md): a successful fetch is shown as separate row count,
+     * duration and end time items with falling contrast instead of one line of text. "200+" is
+     * drawn in a warning color so a result cut by the fetch size is not mistaken for all the data.
+     */
+    private void setFetchSummary(@NotNull String plainMessage, long rowsFetched) {
+        setStatus(plainMessage, DBPMessageType.INFORMATION);
+
+        boolean limited = isHasMoreData() && model.getTotalRowCount() == null;
+        String rows = NLS.bind(
+            ResultSetMessages.controls_resultset_viewer_status_rows_count,
+            ResultSetUtils.formatRowCount(rowsFetched) + (limited ? "+" : ""));
+        String duration = "";
+        String time = "";
+        DBCStatistics statistics = model.getStatistics();
+        if (statistics != null && !statistics.isEmpty()) {
+            duration = RuntimeUtils.formatExecutionTime(statistics.getTotalTime());
+            time = LocalDateTime
+                .ofInstant(Instant.ofEpochMilli(statistics.getEndTime()), TimeZone.getDefault().toZoneId())
+                .format(STATUS_TIME_FORMATTER);
+        }
+        if (getPreferenceStore().getBoolean(ResultSetPreferences.RESULT_SET_SHOW_CONNECTION_NAME)) {
+            DBSDataContainer dataContainer = getDataContainer();
+            DBPDataSource dataSource = dataContainer == null ? null : dataContainer.getDataSource();
+            if (dataSource != null) {
+                time += " [" + dataSource.getContainer().getName() + "]";
+            }
+        }
+        statusLabel.setFetchSummary(plainMessage, rows, limited, duration, time);
+        // changed=true: the summary labels are measured for the first time here
+        RowData rowData = (RowData) statusLabel.getLayoutData();
+        int newWidth = statusLabel.computeSize(SWT.DEFAULT, SWT.DEFAULT, true).x;
+        if (rowData.width != newWidth) {
+            rowData.width = newWidth;
+            // The status bar wraps (RowLayout); a narrower label can move to another row, which
+            // changes the status bar height, so the whole viewer has to be laid out, not only the
+            // status bar. Without this the summary stayed invisible after the first fetch.
+            if (!getControl().isDisposed()) {
+                getControl().layout(true, true);
+            }
         }
     }
 

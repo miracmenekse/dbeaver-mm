@@ -99,6 +99,9 @@ public class ResultSetMessages extends NLS {
     public static String controls_resultset_viewer_status_no_data;
     public static String controls_resultset_viewer_status_row;
     public static String controls_resultset_viewer_status_rows_fetched;
+    // dbeaver-mm E1
+    public static String controls_resultset_viewer_status_rows_count;
+    public static String controls_resultset_viewer_status_rows_limited_tip;
     public static String controls_resultset_viewer_status_rows_updated;
     public static String controls_resultset_viewer_status_rows_size;
     public static String controls_resultset_viewer_status_rows_time;
