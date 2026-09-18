@@ -111,11 +111,6 @@ public class SpreadsheetPresentation extends AbstractPresentation
 
     private static final Log log = Log.getLog(SpreadsheetPresentation.class);
 
-    // PoC: FK id -> dictionary açıklaması, attribute başına cache
-    private final java.util.Map<DBDAttributeBinding, java.util.Map<Object, String>> fkDictCache = new java.util.HashMap<>();
-    // PoC: attribute -> FK-dictionary association (yoksa null), başlık butonu + label için
-    private final java.util.Map<DBDAttributeBinding, org.jkiss.dbeaver.model.struct.DBSEntityAssociation> fkAssocCache = new java.util.HashMap<>();
-
     private Spreadsheet spreadsheet;
 
     private SpreadsheetFindReplaceTarget findReplaceTarget;
@@ -1037,91 +1032,15 @@ public class SpreadsheetPresentation extends AbstractPresentation
         if (this.columnOrder != SWT.NONE) {
             this.columnOrder = SWT.DEFAULT;
         }
-        this.fkDictCache.clear();
-        this.fkAssocCache.clear();
-    }
-
-    private String getFkDictionaryLabel(DBDAttributeBinding attr, Object value) {
-        if (attr == null || DBUtils.isNullValue(value)) {
-            return null;
-        }
-        org.jkiss.dbeaver.model.struct.DBSEntityAssociation association = getFkDictAssociation(attr);
-        if (association == null) {
-            return null;
-        }
-        java.util.Map<Object, String> colCache = fkDictCache.computeIfAbsent(attr, a -> new java.util.HashMap<>());
-        if (colCache.containsKey(value)) {
-            return colCache.get(value);
-        }
-        String label = null;
-        try {
-            VoidProgressMonitor monitor = new VoidProgressMonitor();
-            org.jkiss.dbeaver.model.struct.DBSEntityAttribute refColumn =
-                DBUtils.getReferenceAttribute(monitor, association, attr.getEntityAttribute(), false);
-            org.jkiss.dbeaver.model.struct.DBSEntityConstraint refConstraint = association.getReferencedConstraint();
-            if (refColumn != null && refConstraint != null
-                && refConstraint.getParentObject() instanceof org.jkiss.dbeaver.model.struct.DBSDictionary dictionary)
-            {
-                java.util.List<org.jkiss.dbeaver.model.data.DBDLabelValuePair> pairs =
-                    dictionary.getDictionaryValues(
-                        monitor,
-                        java.util.Collections.singletonList(refColumn),
-                        java.util.Collections.singletonList(new Object[]{ value }),
-                        null, false, true, false);
-                if (!pairs.isEmpty()) {
-                    label = pairs.get(0).getLabel();
-                }
-            }
-        } catch (Throwable e) {
-            log.debug("FK dictionary PoC lookup failed", e);
-        }
-        // Sadece dolu label'i cache'le; null cache'lenirse metadata sonradan yuklendiginde
-        // grid asla guncellenmez.
-        if (label != null) {
-            colCache.put(value, label);
-        }
-        return label;
     }
 
     /**
      * attr bir sozluk (dictionary) tablosuna giden FK ise ilgili association'i doner, degilse null.
-     * Sonuc attribute basina cache'lenir (her boyamada DB metadata lookup yapmamak icin).
+     * dbeaver-mm A2: arama ve cache FkDictionaryLabels'a tasindi; etiketin kendisi artik
+     * FkDictionaryHintProvider tarafindan soluk bir hucre ipucu olarak ciziliyor.
      */
     private org.jkiss.dbeaver.model.struct.DBSEntityAssociation getFkDictAssociation(DBDAttributeBinding attr) {
-        if (attr == null) {
-            return null;
-        }
-        if (fkAssocCache.containsKey(attr)) {
-            return fkAssocCache.get(attr);
-        }
-        org.jkiss.dbeaver.model.struct.DBSEntityAssociation result = null;
-        try {
-            VoidProgressMonitor monitor = new VoidProgressMonitor();
-            org.jkiss.dbeaver.model.struct.DBSEntityAttribute tableColumn = attr.getEntityAttribute();
-            if (tableColumn != null) {
-                for (org.jkiss.dbeaver.model.struct.DBSEntityReferrer ref :
-                    DBUtils.getAttributeReferrers(monitor, tableColumn, true))
-                {
-                    if (ref instanceof org.jkiss.dbeaver.model.struct.DBSEntityAssociation association) {
-                        org.jkiss.dbeaver.model.struct.DBSEntityConstraint refConstraint = association.getReferencedConstraint();
-                        if (refConstraint != null
-                            && refConstraint.getParentObject() instanceof org.jkiss.dbeaver.model.struct.DBSDictionary)
-                        {
-                            result = association;
-                            break;
-                        }
-                    }
-                }
-            }
-        } catch (Throwable e) {
-            log.debug("FK dictionary association lookup failed", e);
-        }
-        // Sadece dolu sonucu cache'le; null cache'lenirse metadata sonradan yuklendiginde
-        // buton asla gorunmez.
-        if (result != null) {
-            fkAssocCache.put(attr, result);
-        }
-        return result;
+        return org.jkiss.dbeaver.ui.data.hints.FkDictionaryLabels.getAssociation(attr);
     }
 
     /**
@@ -1186,7 +1105,7 @@ public class SpreadsheetPresentation extends AbstractPresentation
             log.error("FK dictionary aciklama kolonu kaydedilemedi", e);
         }
         // Yeni aciklama kolonu ile yeniden cek
-        this.fkDictCache.clear();
+        org.jkiss.dbeaver.ui.data.hints.FkDictionaryLabels.invalidateLabels();
         spreadsheet.redrawGrid();
     }
 
@@ -2694,6 +2613,9 @@ public class SpreadsheetPresentation extends AbstractPresentation
                     {
                         info.font = spreadsheet.getFont(booleanStyles.getStyle((Boolean) cellValue).getFontStyle());
                     }
+                } else if (DBUtils.isNullValue(cellValue)) {
+                    // dbeaver-mm A2: [NULL] in italic, so it never reads like a real value
+                    info.font = spreadsheet.getFont(UIElementFontStyle.ITALIC);
                 }/* else if (isShowAsCollection(rowElement, colElement, cellValue)) {
                     info.font = spreadsheet.getFont(UIElementFontStyle.ITALIC);
                 }*/
@@ -2788,17 +2710,10 @@ public class SpreadsheetPresentation extends AbstractPresentation
                 return composite.toString();
             }
             try {
-                Object display = attr.getValueRenderer().getValueDisplayString(
+                return attr.getValueRenderer().getValueDisplayString(
                     attr.getAttribute(),
                     value,
                     getValueRenderFormat(attr, value));
-                // --- PoC: FK dictionary hint ---
-                String dictLabel = getFkDictionaryLabel(attr, value);
-                if (dictLabel != null && !dictLabel.isEmpty()) {
-                    return display + " | " + dictLabel;
-                }
-                // --- /PoC ---
-                return display;
             } catch (Exception e) {
                 return new DBDValueError(e);
             }

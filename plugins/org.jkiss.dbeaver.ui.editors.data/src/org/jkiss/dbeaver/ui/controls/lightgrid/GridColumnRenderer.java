@@ -89,7 +89,7 @@ class GridColumnRenderer extends AbstractRenderer {
 
     protected Font getColumnFont(IGridColumn element) {
         Font font = grid.getLabelProvider().getFont(element);
-        return font != null ? font : grid.normalFont;
+        return font != null ? font : grid.headerFont; // dbeaver-mm A2 (was normalFont)
     }
 
     public void paint(GC gc, Rectangle bounds, boolean selected, boolean hovering, GridColumn element) {
@@ -202,8 +202,10 @@ class GridColumnRenderer extends AbstractRenderer {
         { // Draw column name
             final String text = UITextUtils.getShortString(grid.fontMetrics, getColumnText(element), bounds.width);
             gc.setFont(getColumnFont(element));
+            // dbeaver-mm A2: the header font is a point smaller, keep it vertically centered
+            int textOffset = Math.max(0, (fontHeight - gc.getFontMetrics().getHeight()) / 2);
             gc.setClipping(bounds.x, bounds.y, bounds.width, fontHeight);
-            gc.drawString(text, bounds.x, bounds.y, true);
+            gc.drawString(text, bounds.x, bounds.y + textOffset, true);
             gc.setClipping((Rectangle) null);
         }
 

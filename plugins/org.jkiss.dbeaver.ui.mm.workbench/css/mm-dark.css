@@ -46,3 +46,8 @@ CTabFolder.active {
 .MPartSashContainer {
     background-color: #2b2b2b;
 }
+
+/* 4. A2 grid colors (NULL, column header) are set at their source,
+      org.jkiss.dbeaver.ui.editors.data/css/e4-dark-data-editor.css: a second
+      IEclipsePreferences block for the same keys here lost to it (stylesheet order is not
+      defined). The FK dictionary label uses the hint color (140 -> 4.0:1), left unchanged. */

@@ -84,6 +84,14 @@
             label="%hints.references.label"
             description="%hints.references.description"
             association="true"/>
+        <!-- dbeaver-mm: FK dictionary label as a dimmed hint (see FkDictionaryHintProvider).
+             association="false" on purpose: FK detection is done by the provider itself. -->
+        <hintProvider
+            id="fk-dictionary"
+            for="cell"
+            class="org.jkiss.dbeaver.ui.data.hints.FkDictionaryHintProvider"
+            label="%hints.fk-dictionary.label"
+            description="%hints.fk-dictionary.description"/>
     </extension>
 
     <extension point="org.jkiss.dbeaver.aggregateFunction">

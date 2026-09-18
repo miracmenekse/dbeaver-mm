@@ -321,6 +321,8 @@ public abstract class LightGrid extends Canvas {
     Font boldFont;
     Font italicFont;
     Font commentFont;
+    // dbeaver-mm A2: column header text one point smaller than cell text (typographic hierarchy)
+    Font headerFont;
 
     @NotNull
     private Color lineColor;
@@ -440,6 +442,7 @@ public abstract class LightGrid extends Canvas {
         boldFont = UIUtils.makeBoldFont(normalFont);
         italicFont = UIUtils.modifyFont(normalFont, SWT.ITALIC);
         commentFont = UIUtils.modifyFontSize(italicFont, -1);
+        headerFont = UIUtils.modifyFontSize(normalFont, -1);
 
         columnHeaderRenderer = new GridColumnRenderer(this);
         rowHeaderRenderer = new GridRowRenderer(this);
@@ -3009,6 +3012,7 @@ public abstract class LightGrid extends Canvas {
         UIUtils.dispose(boldFont);
         UIUtils.dispose(italicFont);
         UIUtils.dispose(commentFont);
+        UIUtils.dispose(headerFont);
     }
 
     /**
@@ -4564,10 +4568,12 @@ public abstract class LightGrid extends Canvas {
         UIUtils.dispose(boldFont);
         UIUtils.dispose(italicFont);
         UIUtils.dispose(commentFont);
+        UIUtils.dispose(headerFont);
 
         boldFont = UIUtils.makeBoldFont(normalFont);
         italicFont = UIUtils.modifyFont(normalFont, SWT.ITALIC);
         commentFont = UIUtils.modifyFontSize(italicFont, -1);
+        headerFont = UIUtils.modifyFontSize(normalFont, -1);
 
         redraw();
     }
