@@ -302,7 +302,10 @@ class ConnectionPageSettings extends ActiveWizardPage<ConnectionWizard> implemen
 
                 // Create and populate top-right toolbar
                 var toolBarComposite = new Composite(tabFolder, SWT.NONE);
-                toolBarComposite.setLayout(GridLayoutFactory.fillDefaults().extendedMargins(0, 0, 0, 0).create());
+                toolBarComposite.setLayout(GridLayoutFactory.fillDefaults().numColumns(2).extendedMargins(0, 0, 0, 0).create());
+
+                // dbeaver-mm G1: choose the environment (connection type) on the main page
+                ConnectionEnvironmentSelector.create(toolBarComposite, wizard);
 
                 handlersToolbar = new ToolBar(toolBarComposite, SWT.FLAT | SWT.RIGHT);
                 handlerItem = createHandlerItem(handlersToolbar, allPages);

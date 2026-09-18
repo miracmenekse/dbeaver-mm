@@ -98,6 +98,8 @@ public class ConnectionPageGeneral extends ConnectionWizardPage implements Navig
 
     private boolean connectionNameChanged = false;
     private boolean activated = false;
+    @Nullable
+    private DBPConnectionType selectedConnectionType;
 
     private Button readOnlyConnection;
 
@@ -112,6 +114,20 @@ public class ConnectionPageGeneral extends ConnectionWizardPage implements Navig
         this.wizard = wizard;
         setTitle(UIConnectionMessages.dialog_connection_edit_wizard_general);
         setDescription(UIConnectionMessages.dialog_connection_wizard_final_description);
+
+        // dbeaver-mm G1: the connection type can also be picked on the main settings page
+        // (ConnectionEnvironmentSelector). Remember the latest choice so this page neither
+        // shows a stale value nor overwrites it on save.
+        wizard.addPropertyChangeListener(event -> {
+            if (ConnectionWizard.PROP_CONNECTION_TYPE.equals(event.getProperty())
+                && event.getNewValue() instanceof DBPConnectionType type) {
+                selectedConnectionType = type;
+                if (connectionTypeCombo != null && !connectionTypeCombo.isDisposed()
+                    && !type.equals(connectionTypeCombo.getSelectedItem())) {
+                    setConnectionType(connectionTypeCombo, type);
+                }
+            }
+        });
 
         filters.add(new FilterInfo(DBSCatalog.class, UIConnectionMessages.dialog_connection_wizard_final_filter_catalogs));
         filters.add(new FilterInfo(DBSSchema.class, UIConnectionMessages.dialog_connection_wizard_final_filter_schemas_users));
@@ -177,7 +193,8 @@ public class ConnectionPageGeneral extends ConnectionWizardPage implements Navig
             {
                 // Get settings from data source descriptor
                 final DBPConnectionConfiguration conConfig = dataSourceDescriptor.getConnectionConfiguration();
-                setConnectionType(connectionTypeCombo, conConfig.getConnectionType());
+                setConnectionType(connectionTypeCombo,
+                    selectedConnectionType != null ? selectedConnectionType : conConfig.getConnectionType());
 
                 folderSelector.setFolder(dataSourceDescriptor.getFolder());
 
@@ -191,7 +208,8 @@ public class ConnectionPageGeneral extends ConnectionWizardPage implements Navig
             }
         } else {
             // Default settings
-            setConnectionType(connectionTypeCombo, DBPConnectionType.getDefaultConnectionType());
+            setConnectionType(connectionTypeCombo,
+                selectedConnectionType != null ? selectedConnectionType : DBPConnectionType.getDefaultConnectionType());
             folderSelector.setFolder(curDataSourceFolder);
 
             readOnlyConnection.setSelection(false);
@@ -331,11 +349,10 @@ public class ConnectionPageGeneral extends ConnectionWizardPage implements Navig
                 connectionTypeCombo = createConnectionTypeCombo(miscGroup);
                 connectionTypeCombo.addSelectionListener(SelectionListener.widgetSelectedAdapter(selectionEvent -> {
                     DBPConnectionType type = connectionTypeCombo.getItem(connectionTypeCombo.getSelectionIndex());
-                    getWizard().firePropertyChangeEvent(
-                        ConnectionWizard.PROP_CONNECTION_TYPE,
-                        getActiveDataSource().getConnectionConfiguration().getConnectionType(),
-                        type
-                    );
+                    // dbeaver-mm G1: old value is null on purpose. The stored type only changes
+                    // on save, so using it here made firePropertyChangeEvent drop a switch back
+                    // to the original type (old == new) and the main-page selector went stale.
+                    getWizard().firePropertyChangeEvent(ConnectionWizard.PROP_CONNECTION_TYPE, null, type);
                 }));
 
                 Composite ctGroup = connectionTypeCombo.getParent();
@@ -564,6 +581,15 @@ public class ConnectionPageGeneral extends ConnectionWizardPage implements Navig
         return navigatorSettingsCombo;
     }
 
+    /**
+     * Latest connection type chosen on this page or on the main settings page, or null if the
+     * user has not picked one yet in this wizard.
+     */
+    @Nullable
+    DBPConnectionType getSelectedConnectionType() {
+        return selectedConnectionType;
+    }
+
     public static CSmartCombo<DBPConnectionType> createConnectionTypeCombo(Composite composite) {
         UIUtils.createControlLabel(composite, UIConnectionMessages.dialog_connection_wizard_final_label_connection_type);
 
@@ -635,7 +661,13 @@ public class ConnectionPageGeneral extends ConnectionWizardPage implements Navig
     @Override
     public void saveSettings(@NotNull DBPDataSourceContainer dataSource) {
         if (dataSourceDescriptor != null && !activated) {
-            // No changes anyway
+            // This page was never shown, but the connection type may have been changed
+            // on the main settings page (dbeaver-mm G1)
+            if (selectedConnectionType != null
+                && !selectedConnectionType.equals(dataSource.getConnectionConfiguration().getConnectionType())) {
+                dataSource.getConnectionConfiguration().setConnectionType(
+                    DataSourceProviderRegistry.getInstance().getConnectionType(selectedConnectionType.getId(), selectedConnectionType));
+            }
             return;
         }
         final DBPConnectionConfiguration confConfig = dataSource.getConnectionConfiguration();
@@ -659,8 +691,12 @@ public class ConnectionPageGeneral extends ConnectionWizardPage implements Navig
             dataSource.setFolder(folderSelector.getFolder());
         }
 
-        if (connectionTypeCombo.getSelectionIndex() >= 0) {
-            DBPConnectionType newConnectionType = connectionTypeCombo.getSelectedItem();
+        // selectedConnectionType tracks every change from either page; the combo itself is
+        // updated asynchronously and may lag behind if Finish is pressed right away
+        DBPConnectionType newConnectionType = selectedConnectionType != null
+            ? DataSourceProviderRegistry.getInstance().getConnectionType(selectedConnectionType.getId(), selectedConnectionType)
+            : (connectionTypeCombo.getSelectionIndex() >= 0 ? connectionTypeCombo.getSelectedItem() : null);
+        if (newConnectionType != null) {
             if (!Objects.equals(newConnectionType, confConfig.getConnectionType())) {
                 // Changing connection types also changes defaults
                 confConfig.setConnectionType(newConnectionType);
