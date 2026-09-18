@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+    <!--
+        B2 (UI_UX_MODERNIZASYON.md): focus mode. One shortcut hides every side panel and
+        leaves only the SQL editor with its results; pressing it again restores the layout.
+        CTRL+ALT+F is free in DBeaver, the Eclipse platform and GNOME (CTRL+SHIFT+F, the
+        roadmap's suggestion, is already "Format SQL").
+    -->
+    <extension point="org.eclipse.ui.commands">
+        <command
+            id="org.jkiss.dbeaver.ui.mm.workbench.focusMode"
+            categoryId="org.jkiss.dbeaver.core.util"
+            name="%command.focusMode.name"
+            description="%command.focusMode.description"/>
+    </extension>
+
+    <extension point="org.eclipse.ui.handlers">
+        <handler
+            commandId="org.jkiss.dbeaver.ui.mm.workbench.focusMode"
+            class="org.jkiss.dbeaver.ui.mm.workbench.FocusModeHandler">
+            <enabledWhen>
+                <with variable="activeEditor">
+                    <instanceof value="org.eclipse.ui.IEditorPart"/>
+                </with>
+            </enabledWhen>
+        </handler>
+    </extension>
+
+    <extension point="org.eclipse.ui.bindings">
+        <key
+            commandId="org.jkiss.dbeaver.ui.mm.workbench.focusMode"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="CTRL+ALT+F"/>
+    </extension>
+
+    <extension point="org.eclipse.ui.menus">
+        <menuContribution allPopups="false" locationURI="menu:window?before=primary.views">
+            <command commandId="org.jkiss.dbeaver.ui.mm.workbench.focusMode"/>
+        </menuContribution>
+    </extension>
+
+    <!--
+        C2 (UI_UX_MODERNIZASYON.md): reduce the main toolbar to three groups -
+        context (connection + schema selector), transactions (commit / rollback / mode)
+        and the two entry points New Connection and SQL. Everything else is hidden
+        through the standard perspective mechanism, so the user can bring any item back
+        with Window > Customize Perspective > Tool Bar Visibility. No upstream file is
+        patched.
+
+        Like every perspectiveExtension this only applies to perspectives that have not
+        been persisted yet; an existing workspace needs Window > Reset Perspective.
+    -->
+    <extension point="org.eclipse.ui.perspectiveExtensions">
+        <perspectiveExtension targetID="org.jkiss.dbeaver.core.perspective">
+            <!-- dbeaver-general: connect / reconnect / disconnect / synchronize, AI -->
+            <hiddenToolBarItem id="org.jkiss.dbeaver.core.connect"/>
+            <hiddenToolBarItem id="org.jkiss.dbeaver.core.invalidate"/>
+            <hiddenToolBarItem id="org.jkiss.dbeaver.core.disconnect"/>
+            <hiddenToolBarItem id="org.jkiss.dbeaver.core.connection.synchronize"/>
+            <hiddenToolBarItem id="ai.dropdown.menu"/>
+
+            <!-- dbeaver-transaction-monitor: monitor bar, transaction log, read-only toggle -->
+            <hiddenToolBarItem id="Transaction monitor toolbar"/>
+            <hiddenToolBarItem id="org.jkiss.dbeaver.core.menu.txn.log"/>
+            <hiddenToolBarItem id="org.jkiss.dbeaver.core.connection.readonly"/>
+
+            <!-- dbeaver-tools: dashboards, tasks, debug, git, recent scripts
+                 (Recent SQL Scripts stays reachable from the Window menu) -->
+            <hiddenToolBarItem id="org.jkiss.dbeaver.menu.dashboards"/>
+            <hiddenToolBarItem id="org.jkiss.dbeaver.menu.tasks"/>
+            <hiddenToolBarItem id="org.jkiss.dbeaver.debug.ui.menu.pulldown"/>
+            <hiddenToolBarItem id="org.jkiss.dbeaver.menu.git"/>
+            <hiddenToolBarItem id="org.jkiss.dbeaver.ui.recentscripts.toolbarItem"/>
+
+            <!-- Eclipse search action set: still available from the Search menu and CTRL+H -->
+            <hiddenToolBarItem id="org.eclipse.search.OpenSearchDialogPage"/>
+        </perspectiveExtension>
+    </extension>
+
+</plugin>

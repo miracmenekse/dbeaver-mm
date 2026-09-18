@@ -1,0 +1,16 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Vendor: DBeaver Corp
+Bundle-Name: DBeaver MM Workbench Tweaks
+Bundle-SymbolicName: org.jkiss.dbeaver.ui.mm.workbench;singleton:=true
+Bundle-Version: 1.0.0.qualifier
+Bundle-RequiredExecutionEnvironment: JavaSE-21
+Bundle-ActivationPolicy: lazy
+Bundle-Localization: OSGI-INF/l10n/bundle
+Require-Bundle: org.eclipse.core.runtime,
+ org.eclipse.core.commands,
+ org.eclipse.ui,
+ org.eclipse.ui.workbench,
+ org.jkiss.dbeaver.ui
+Export-Package: org.jkiss.dbeaver.ui.mm.workbench
+Automatic-Module-Name: org.jkiss.dbeaver.ui.mm.workbench
