@@ -1048,6 +1048,16 @@ public class SpreadsheetPresentation extends AbstractPresentation
      * kolonlarini bir menude listeler; secilen kolon, referans tablonun aciklama kolonu olarak
      * virtual model'e kalici yazilir ve grid yeniden cizilir.
      */
+    /**
+     * dbeaver-mm K3: header button toggles "group rows by this column".
+     */
+    void handleGroupRowsColumnClick(Object element) {
+        if (element instanceof DBDAttributeBinding binding && controller instanceof ResultSetViewer viewer) {
+            new org.jkiss.dbeaver.ui.controls.resultset.colors.GroupRowsByColumnAction(viewer, binding).run();
+            spreadsheet.redraw();
+        }
+    }
+
     void handleFkDictColumnClick(Object element) {
         if (!(element instanceof DBDAttributeBinding binding)) {
             return;
@@ -2445,6 +2455,20 @@ public class SpreadsheetPresentation extends AbstractPresentation
                 return supportsAttributeFilter;
             }
             return false;
+        }
+
+        @Override
+        public boolean isElementSupportsGroupRows(@Nullable IGridColumn element) {
+            // dbeaver-mm K3: real columns of a flat result (not nested document attributes)
+            return element != null && element.getElement() instanceof DBDAttributeBinding binding
+                && binding.getParentObject() == null && controller instanceof ResultSetViewer;
+        }
+
+        @Override
+        public boolean isElementGroupRowsActive(@Nullable IGridColumn element) {
+            return element != null && element.getElement() instanceof DBDAttributeBinding binding
+                && controller instanceof ResultSetViewer viewer
+                && org.jkiss.dbeaver.ui.controls.resultset.colors.GroupRowsByColumnAction.isGroupedBy(viewer, binding);
         }
 
         @Override

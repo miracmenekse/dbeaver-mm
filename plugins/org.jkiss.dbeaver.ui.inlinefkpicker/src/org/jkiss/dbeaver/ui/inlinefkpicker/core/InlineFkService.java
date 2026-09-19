@@ -21,6 +21,9 @@ import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBPDataSource;
+import org.jkiss.dbeaver.model.DBPDataSourceContainer;
+import org.jkiss.dbeaver.model.app.DBPProject;
+import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.data.DBDLabelValuePair;
 import org.jkiss.dbeaver.model.exec.DBCException;
@@ -125,6 +128,60 @@ public final class InlineFkService {
             }
         }
         return null;
+    }
+
+    /**
+     * dbeaver-mm K6: connection tag that opts a connection into SQL auto connection selection.
+     * Stored with the connection (data-sources.json "tags").
+     */
+    public static final String AUTO_CONNECT_TAG = "mm.auto-connect";
+
+    public static boolean isAutoConnect(@NotNull DBPDataSourceContainer container) {
+        return "true".equals(container.getTags().get(AUTO_CONNECT_TAG));
+    }
+
+    public static void setAutoConnect(@NotNull DBPDataSourceContainer container, boolean enabled) {
+        container.setTagValue(AUTO_CONNECT_TAG, enabled ? "true" : null);
+        container.persistConfiguration();
+    }
+
+    /**
+     * dbeaver-mm K6: connected, auto-connect-tagged connections of the active project that contain
+     * every table in {@code tableNames}. Only table names are looked up (metadata cache, loaded once
+     * per schema); no data is read. Unconnected connections are skipped, never opened here.
+     */
+    @NotNull
+    public static List<DBPDataSourceContainer> findConnectionsWithTables(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull List<String> tableNames
+    ) {
+        List<DBPDataSourceContainer> result = new ArrayList<>();
+        DBPProject project = DBWorkbench.getPlatform().getWorkspace().getActiveProject();
+        if (project == null || tableNames.isEmpty()) {
+            return result;
+        }
+        for (DBPDataSourceContainer container : project.getDataSourceRegistry().getDataSources()) {
+            if (!isAutoConnect(container) || !container.isConnected()) {
+                continue;
+            }
+            DBCExecutionContext context = DBUtils.getDefaultContext(container.getDataSource(), false);
+            boolean all = true;
+            for (String table : tableNames) {
+                if (resolveEntity(monitor, context, table) == null) {
+                    all = false;
+                    break;
+                }
+            }
+            if (all) {
+                result.add(container);
+            }
+        }
+        return result;
+    }
+
+    @Nullable
+    public static DBCExecutionContext getDefaultContext(@NotNull DBPDataSourceContainer container) {
+        return DBUtils.getDefaultContext(container.getDataSource(), false);
     }
 
     /** Resolved (table, column) pair for the value being edited. */

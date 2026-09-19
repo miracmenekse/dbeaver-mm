@@ -63,10 +63,6 @@ import org.jkiss.dbeaver.model.sql.SQLUtils;
 import org.jkiss.dbeaver.model.sql.parser.SQLWordPartDetector;
 import org.jkiss.dbeaver.model.struct.DBSDataContainer;
 import org.jkiss.dbeaver.model.struct.DBSEntity;
-import org.jkiss.dbeaver.model.struct.DBSDictionary;
-import org.jkiss.dbeaver.model.struct.DBSEntityAssociation;
-import org.jkiss.dbeaver.model.struct.DBSEntityAttribute;
-import org.jkiss.dbeaver.model.struct.DBSEntityConstraint;
 import org.jkiss.dbeaver.model.data.DBDLabelValuePair;
 import org.jkiss.dbeaver.ui.data.hints.FkDictionaryLabels;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
@@ -898,22 +894,15 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
                 break;
             }
         }
-        DBSEntityAssociation association = FkDictionaryLabels.getAssociation(attribute);
-        if (association == null) {
+        if (FkDictionaryLabels.getAssociation(attribute) == null) {
             return null;
         }
         DBDAttributeBinding fkAttribute = attribute;
         List<IContentProposal> proposals = new ArrayList<>();
         SystemJob job = new SystemJob("Read FK values", monitor -> {
             try {
-                DBSEntityAttribute refColumn = DBUtils.getReferenceAttribute(monitor, association, fkAttribute.getEntityAttribute(), false);
-                DBSEntityConstraint refConstraint = association.getReferencedConstraint();
-                if (refColumn == null || refConstraint == null || !(refConstraint.getParentObject() instanceof DBSDictionary dictionary)) {
-                    return;
-                }
                 // ponytail: first 50 values, filtered by the typed value prefix; add a label search if dictionaries get big
-                for (DBDLabelValuePair pair : dictionary.getDictionaryEnumeration(
-                    monitor, refColumn, null, null, null, false, true, true, 0, 50)) {
+                for (DBDLabelValuePair pair : FkDictionaryLabels.listValues(monitor, fkAttribute, 50)) {
                     String literal = SQLUtils.convertValueToSQL(dataSource, fkAttribute, pair.getValue());
                     if (literal.startsWith(typed)) {
                         proposals.add(new ContentProposal(literal, literal + "  " + pair.getLabel(), pair.getLabel()));

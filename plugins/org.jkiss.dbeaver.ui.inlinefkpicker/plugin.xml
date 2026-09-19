@@ -27,6 +27,28 @@
             name="%command.whereParams.name"
             description="%command.whereParams.description"
             defaultHandler="org.jkiss.dbeaver.ui.inlinefkpicker.trigger.OpenWhereParamsHandler"/>
+        <!-- dbeaver-mm K6: opt a connection into SQL auto connection selection -->
+        <command
+            id="org.jkiss.dbeaver.ui.inlinefkpicker.toggleAutoConnect"
+            categoryId="org.jkiss.dbeaver.ui.inlinefkpicker.category"
+            name="Use for SQL auto connection"
+            description="The SQL editor switches to this connection when a query's tables are found in it"
+            defaultHandler="org.jkiss.dbeaver.ui.inlinefkpicker.trigger.ToggleAutoConnectHandler"/>
+    </extension>
+
+    <extension point="org.eclipse.ui.menus">
+        <menuContribution allPopups="false" locationURI="popup:org.eclipse.ui.popup.any?after=additions">
+            <command commandId="org.jkiss.dbeaver.ui.inlinefkpicker.toggleAutoConnect" style="toggle">
+                <visibleWhen checkEnabled="false">
+                    <with variable="selection">
+                        <count value="1"/>
+                        <iterate operator="and">
+                            <instanceof value="org.jkiss.dbeaver.model.navigator.DBNDataSource"/>
+                        </iterate>
+                    </with>
+                </visibleWhen>
+            </command>
+        </menuContribution>
     </extension>
 
     <!--

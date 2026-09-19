@@ -3434,6 +3434,10 @@ public class ResultSetViewer extends Viewer
                 }
             }
             viewMenu.add(new CustomizeColorsAction(this, attr, row));
+            if (attr != null) {
+                // dbeaver-mm K3: one click grouping by the clicked column
+                viewMenu.add(new org.jkiss.dbeaver.ui.controls.resultset.colors.GroupRowsByColumnAction(this, attr));
+            }
             viewMenu.add(new GroupRowStripingAction(this));
             if (hasColorOverrides()) {
                 viewMenu.add(new ResetAllColorAction(this));

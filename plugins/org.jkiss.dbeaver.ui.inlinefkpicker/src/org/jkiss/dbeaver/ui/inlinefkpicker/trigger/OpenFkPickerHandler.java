@@ -22,7 +22,6 @@ import org.eclipse.jface.text.ITextViewer;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.handlers.HandlerUtil;
-import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.model.sql.SQLScriptElement;
 import org.jkiss.dbeaver.ui.editors.sql.SQLEditorBase;
 import org.jkiss.dbeaver.ui.inlinefkpicker.core.FkColumnRef;
@@ -54,8 +53,8 @@ public class OpenFkPickerHandler extends AbstractHandler {
         if (ref == null) {
             return null;
         }
-        DBCExecutionContext context = editor.getExecutionContext();
-        FkPickerPopup.trigger(viewer, context, ref);
+        // dbeaver-mm K6: pick the connection the statement's tables live in first
+        AutoConnectionSelector.resolveThen(editor, ref, context -> FkPickerPopup.trigger(viewer, context, ref));
         return null;
     }
 }

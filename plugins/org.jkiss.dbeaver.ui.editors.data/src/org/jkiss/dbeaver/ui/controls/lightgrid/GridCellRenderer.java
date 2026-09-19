@@ -446,6 +446,8 @@ public class GridCellRenderer extends AbstractRenderer {
                     hint.performAction(grid.getGridController(), grid.toDisplay(x, y), state);
                     return;
                 }
+                // dbeaver-mm K5: advance to the next icon (was missing, only the rightmost icon was clickable)
+                iconsWidth += iconSize.width + 1;
             }
         }
         log.error("Cannot detect action hint");

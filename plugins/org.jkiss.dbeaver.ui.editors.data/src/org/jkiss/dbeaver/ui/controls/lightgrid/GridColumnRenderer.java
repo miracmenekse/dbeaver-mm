@@ -46,6 +46,9 @@ class GridColumnRenderer extends AbstractRenderer {
     public static final Image IMAGE_FILTER = DBeaverIcons.getImage(UIIcon.DROP_DOWN);
     // PoC: FK sozluk aciklama kolonu secici butonu
     public static final Image IMAGE_FK_DICT = DBeaverIcons.getImage(UIIcon.DOTS_BUTTON);
+    // dbeaver-mm K3: group rows by column button; dimmed unless grouping by this column is active
+    public static final Image IMAGE_GROUP_ROWS = DBeaverIcons.getImage(UIIcon.GROUP_BY_ATTR);
+    private static final int GROUP_ROWS_INACTIVE_ALPHA = 90;
 
     public static final int SORT_WIDTH = IMAGE_DESC.getBounds().width;
     public static final int SORT_HEIGHT = IMAGE_DESC.getBounds().height;
@@ -70,6 +73,10 @@ class GridColumnRenderer extends AbstractRenderer {
 
     public static Rectangle getFkDictControlBounds() {
         return IMAGE_FK_DICT.getBounds();
+    }
+
+    public static Rectangle getGroupRowsControlBounds() {
+        return IMAGE_GROUP_ROWS.getBounds();
     }
 
     @Nullable
@@ -193,6 +200,20 @@ class GridColumnRenderer extends AbstractRenderer {
             if (contentProvider.isElementSupportsFkDict(element)) {
                 bounds.width -= getFkDictControlBounds().width;
                 gc.drawImage(IMAGE_FK_DICT, bounds.x + bounds.width, bounds.y);
+                bounds.width -= IMAGE_SPACING;
+            }
+        }
+
+        { // dbeaver-mm K3: group rows by this column
+            if (contentProvider.isElementSupportsGroupRows(element)) {
+                bounds.width -= getGroupRowsControlBounds().width;
+                boolean active = contentProvider.isElementGroupRowsActive(element);
+                int oldAlpha = gc.getAlpha();
+                if (!active && !hovering) {
+                    gc.setAlpha(GROUP_ROWS_INACTIVE_ALPHA);
+                }
+                gc.drawImage(IMAGE_GROUP_ROWS, bounds.x + bounds.width, bounds.y);
+                gc.setAlpha(oldAlpha);
                 bounds.width -= IMAGE_SPACING;
             }
         }

@@ -58,6 +58,8 @@ public abstract class LightGrid extends Canvas {
     protected static final int Event_NavigateLink = 1001;
     protected static final int Event_FilterColumn = 1002;
     protected static final int Event_FkDictColumn = 1003;
+    // dbeaver-mm K3: header "group rows by this column" button
+    protected static final int Event_GroupRowsColumn = 1004;
 
     /**
      * Horizontal scrolling increment, in pixels.
@@ -256,6 +258,7 @@ public abstract class LightGrid extends Canvas {
     private boolean hoveringOnColumnSorter = false;
     private boolean hoveringOnColumnFilter = false;
     private boolean hoveringOnColumnFkDict = false;
+    private boolean hoveringOnColumnGroupRows = false;
     private boolean hoveringOnLink = false;
     private boolean hoveringOnRowHeader = false;
     private boolean hoveringOnRowExpander = false;
@@ -264,6 +267,7 @@ public abstract class LightGrid extends Canvas {
     private GridColumn columnBeingSorted;
     private GridColumn columnBeingFiltered;
     private GridColumn columnBeingFkDict;
+    private GridColumn columnBeingGroupRows;
     private boolean hoveringOnColumnResizer = false;
     private GridColumn columnBeingResized;
     private boolean resizingColumn = false;
@@ -2018,6 +2022,7 @@ public abstract class LightGrid extends Canvas {
         hoveringOnHeader = false;
         boolean overIcon = false;
         boolean overFkDict = false;
+        boolean overGroupRows = false;
 
         if (y <= headerHeight) {
             int x2 = 0;
@@ -2059,6 +2064,12 @@ public abstract class LightGrid extends Canvas {
                             if (column.isOverFkDictButton(x - x2, y)) {
                                 columnBeingFkDict = column;
                                 overFkDict = true;
+                                break;
+                            }
+
+                            if (column.isOverGroupRowsButton(x - x2, y)) {
+                                columnBeingGroupRows = column;
+                                overGroupRows = true;
                                 break;
                             }
 
@@ -2127,6 +2138,18 @@ public abstract class LightGrid extends Canvas {
                 setCursor(null);
             }
             hoveringOnColumnFkDict = overFkDict;
+        }
+
+        if (overGroupRows) {
+            setCursor(sortCursor);
+        }
+
+        if (overGroupRows != hoveringOnColumnGroupRows) {
+            if (!overSorter && !overFilter && !overFkDict) {
+                columnBeingGroupRows = null;
+                setCursor(null);
+            }
+            hoveringOnColumnGroupRows = overGroupRows;
         }
 
         if (overResizer != hoveringOnColumnResizer) {
@@ -3473,6 +3496,19 @@ public abstract class LightGrid extends Canvas {
             }
         }
 
+        if (hoveringOnColumnGroupRows) {
+            handleHoverOnColumnHeader(e.x, e.y);
+            if (hoveringOnColumnGroupRows && e.button == 1) {
+                Event event = new Event();
+                event.x = e.x;
+                event.y = e.y;
+                event.data = columnBeingGroupRows == null ? null : columnBeingGroupRows.getElement();
+                event.stateMask = e.stateMask;
+                notifyListeners(Event_GroupRowsColumn, event);
+                return;
+            }
+        }
+
         if (resizingColumn) {
             resizingColumn = false;
             handleHoverOnColumnHeader(e.x, e.y); // resets cursor if
@@ -4073,6 +4109,7 @@ public abstract class LightGrid extends Canvas {
         Integer detail =
             (hoveringOnColumnSorter ? 1000000 : 0) +
             (hoveringOnColumnFilter ? 1000000 : 0) +
+            (hoveringOnColumnGroupRows ? 2000000 : 0) +
             y;
 
         boolean hoverChange = false;
@@ -4122,6 +4159,12 @@ public abstract class LightGrid extends Canvas {
                 } else */
                 if (hoveringOnColumnFilter) {
                     newTip = DataEditorsMessages.pref_page_database_resultsets_label_show_attr_filters;
+                } else if (hoveringOnColumnGroupRows) {
+                    // dbeaver-mm K3
+                    newTip = getContentProvider().isElementGroupRowsActive(hoveringColumn)
+                        ? "Stop grouping rows"
+                        : "Group rows by this column: equal values are sorted together and"
+                            + " groups get alternating soft colors";
                 } else {
                     newTip = hoveringColumn.getHeaderTooltip();
                 }

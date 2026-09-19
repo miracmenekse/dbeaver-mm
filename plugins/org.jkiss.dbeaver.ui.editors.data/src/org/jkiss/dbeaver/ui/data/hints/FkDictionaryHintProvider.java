@@ -26,6 +26,7 @@ import org.jkiss.dbeaver.model.data.hints.DBDValueHint;
 import org.jkiss.dbeaver.model.data.hints.DBDValueHintContext;
 import org.jkiss.dbeaver.model.data.hints.ValueHintText;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
+import org.jkiss.dbeaver.ui.controls.resultset.ResultSetRow;
 import org.jkiss.utils.CommonUtils;
 
 import java.util.ArrayList;
@@ -59,17 +60,21 @@ public class FkDictionaryHintProvider implements DBDCellHintProvider {
         @NotNull EnumSet<DBDValueHint.HintType> types,
         int options
     ) {
-        if (!types.contains(DBDValueHint.HintType.STRING)) {
+        if (FkDictionaryLabels.getAssociation(attribute) == null) {
             return null;
         }
-        String label = FkDictionaryLabels.getLabel(attribute, value);
-        if (CommonUtils.isEmpty(label)) {
-            return null;
+        List<DBDValueHint> hints = new ArrayList<>(2);
+        if (types.contains(DBDValueHint.HintType.STRING)) {
+            String label = FkDictionaryLabels.getLabel(attribute, value);
+            if (!CommonUtils.isEmpty(label)) {
+                hints.add(FkDictionaryLabels.isExternal(attribute) ? new ExternalHint(label) : new ValueHintText(label, label, null));
+            }
         }
-        if (FkDictionaryLabels.isExternal(attribute)) {
-            return new DBDValueHint[]{new ExternalHint(label)};
+        if (types.contains(DBDValueHint.HintType.ACTION) && row instanceof ResultSetRow rsRow) {
+            // dbeaver-mm K5: in-cell "pick value" button (shown on hover / focus like the link icon)
+            hints.add(new ValueHintFkPicker(attribute, rsRow, value));
         }
-        return new DBDValueHint[]{new ValueHintText(label, label, null)};
+        return hints.isEmpty() ? null : hints.toArray(new DBDValueHint[0]);
     }
 
     /**

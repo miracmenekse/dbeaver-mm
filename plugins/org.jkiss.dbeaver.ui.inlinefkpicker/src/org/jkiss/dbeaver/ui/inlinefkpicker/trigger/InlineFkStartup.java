@@ -129,7 +129,8 @@ public class InlineFkStartup implements IStartup {
                 if (ref == null) {
                     return;
                 }
-                FkPickerPopup.trigger(viewer, editor.getExecutionContext(), ref);
+                // dbeaver-mm K6: pick the connection the statement's tables live in first
+                AutoConnectionSelector.resolveThen(editor, ref, context -> FkPickerPopup.trigger(viewer, context, ref));
             } catch (Throwable ex) {
                 log.debug("Inline FK auto-trigger evaluation failed", ex);
             }

@@ -128,10 +128,9 @@ public class GroupRowStripingDialog extends BaseDialog {
     private void loadFromEntity() {
         columnList.removeAll();
         DBVGroupRowStriping grs = vEntity.getGroupRowStriping();
-        RGB defaultRgb = resultSetViewer.getControl().getBackground().getRGB();
-        RGB alternateRgb = ResultSetThemeSettings.instance.backgroundOdd != null
-            ? ResultSetThemeSettings.instance.backgroundOdd.getRGB()
-            : defaultRgb;
+        // dbeaver-mm K3: matte soft pair instead of grid background / odd row (almost identical)
+        RGB defaultRgb = GroupRowsByColumnAction.softColors()[0];
+        RGB alternateRgb = GroupRowsByColumnAction.softColors()[1];
         if (grs == null || !grs.isEnabled() || CommonUtils.isEmpty(grs.getColumnNames())) {
             enableCheck.setSelection(false);
             sortByGroupCheck.setSelection(false);

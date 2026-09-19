@@ -107,6 +107,29 @@ public final class FkDictionaryLabels {
     }
 
     /**
+     * dbeaver-mm K2/K5: the referenced dictionary's values with their labels (same description
+     * column as the grid), first {@code maxResults} ordered by value. Used by the filter box
+     * {@code column =} proposals and the in-cell value picker.
+     */
+    @NotNull
+    public static List<DBDLabelValuePair> listValues(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBDAttributeBinding attr,
+        int maxResults
+    ) throws Exception {
+        DBSEntityAssociation association = getAssociation(attr);
+        if (association == null) {
+            return Collections.emptyList();
+        }
+        DBSEntityAttribute refColumn = DBUtils.getReferenceAttribute(monitor, association, attr.getEntityAttribute(), false);
+        DBSEntityConstraint refConstraint = association.getReferencedConstraint();
+        if (refColumn == null || refConstraint == null || !(refConstraint.getParentObject() instanceof DBSDictionary dictionary)) {
+            return Collections.emptyList();
+        }
+        return dictionary.getDictionaryEnumeration(monitor, refColumn, null, null, null, false, true, true, 0, maxResults);
+    }
+
+    /**
      * Returns the dictionary label for {@code value}, or null if the column is not a dictionary FK
      * or the label is not available (yet).
      */

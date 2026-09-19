@@ -92,6 +92,16 @@ public interface IGridContentProvider extends IContentProvider {
         return false;
     }
 
+    // dbeaver-mm K3: column header "group rows by this column" button
+    default boolean isElementSupportsGroupRows(@Nullable IGridColumn element) {
+        return false;
+    }
+
+    // dbeaver-mm K3: rows are currently grouped by this column (button drawn fully opaque)
+    default boolean isElementGroupRowsActive(@Nullable IGridColumn element) {
+        return false;
+    }
+
     boolean isElementReadOnly(@NotNull IGridColumn element);
 
     boolean isElementExpandable(@NotNull IGridItem item);

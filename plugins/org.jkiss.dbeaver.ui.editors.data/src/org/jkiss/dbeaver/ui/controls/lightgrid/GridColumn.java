@@ -182,6 +182,30 @@ public class GridColumn implements IGridColumn {
         return fkBounds.contains(x, y);
     }
 
+    /**
+     * dbeaver-mm K3: the group-rows button sits left of filter, sort and FK buttons (paint order).
+     */
+    public boolean isOverGroupRowsButton(int x, int y) {
+        IGridContentProvider contentProvider = grid.getContentProvider();
+        if (!contentProvider.isElementSupportsGroupRows(this)) {
+            return false;
+        }
+        Rectangle bounds = getBounds();
+        Rectangle groupBounds = GridColumnRenderer.getGroupRowsControlBounds();
+        groupBounds.x = bounds.width - groupBounds.width - GridColumnRenderer.RIGHT_MARGIN;
+        groupBounds.y = bounds.y + GridColumnRenderer.TOP_MARGIN;
+        if (isFilterable()) {
+            groupBounds.x -= GridColumnRenderer.getFilterControlBounds().width + GridColumnRenderer.IMAGE_SPACING;
+        }
+        if (contentProvider.getSortOrder(this) > 0 || contentProvider.isElementSupportsSort(this)) {
+            groupBounds.x -= GridColumnRenderer.getSortControlBounds().width + GridColumnRenderer.IMAGE_SPACING;
+        }
+        if (contentProvider.isElementSupportsFkDict(this)) {
+            groupBounds.x -= GridColumnRenderer.getFkDictControlBounds().width + GridColumnRenderer.IMAGE_SPACING;
+        }
+        return groupBounds.contains(x, y);
+    }
+
     public boolean isOverSortArrow(int x, int y) {
         IGridContentProvider contentProvider = grid.getContentProvider();
         if (contentProvider.getSortOrder(this) <= 0 && !contentProvider.isElementSupportsSort(this)) {
