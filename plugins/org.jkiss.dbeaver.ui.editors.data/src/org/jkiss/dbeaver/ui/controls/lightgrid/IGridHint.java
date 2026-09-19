@@ -51,6 +51,13 @@ public interface IGridHint {
     boolean isError();
 
     /**
+     * dbeaver-mm K1: true if the hint comes from another connection (cross-connection virtual FK)
+     */
+    default boolean isExternal() {
+        return false;
+    }
+
+    /**
      * @return true if hint is a disablement
      */
     boolean isReadOnly();

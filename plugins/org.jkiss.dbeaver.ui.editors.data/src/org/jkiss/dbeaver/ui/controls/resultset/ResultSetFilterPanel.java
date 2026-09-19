@@ -63,6 +63,12 @@ import org.jkiss.dbeaver.model.sql.SQLUtils;
 import org.jkiss.dbeaver.model.sql.parser.SQLWordPartDetector;
 import org.jkiss.dbeaver.model.struct.DBSDataContainer;
 import org.jkiss.dbeaver.model.struct.DBSEntity;
+import org.jkiss.dbeaver.model.struct.DBSDictionary;
+import org.jkiss.dbeaver.model.struct.DBSEntityAssociation;
+import org.jkiss.dbeaver.model.struct.DBSEntityAttribute;
+import org.jkiss.dbeaver.model.struct.DBSEntityConstraint;
+import org.jkiss.dbeaver.model.data.DBDLabelValuePair;
+import org.jkiss.dbeaver.ui.data.hints.FkDictionaryLabels;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.runtime.ui.UIServiceSQL;
 import org.jkiss.dbeaver.ui.*;
@@ -97,6 +103,9 @@ import java.util.regex.Pattern;
  */
 class ResultSetFilterPanel extends Composite implements IContentProposalProvider, DBPAdaptable
 {
+    /** dbeaver-mm K2: {@code column =} (optionally a typed value prefix) right before the caret */
+    private static final Pattern FK_VALUE_POSITION = Pattern.compile("([\\w.\"`]+)\\s*=\\s*([^\\s=]*)$");
+
     private static final Log log = Log.getLog(ResultSetFilterPanel.class);
 
     private static final int MIN_FILTER_TEXT_WIDTH = 50;
@@ -305,6 +314,21 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
                 filtersText,
                 contentAdapter,
                 this);
+            // dbeaver-mm K2: '=' opens the FK value list
+            filtersProposalAdapter.setAutoActivationCharacters(
+                (new String(filtersProposalAdapter.getAutoActivationCharacters()) + "=").toCharArray());
+            // dbeaver-mm K2: space closes proposals, but "column = " is still a value position
+            filtersText.addModifyListener(e -> UIUtils.asyncExec(() -> {
+                if (filtersText.isDisposed() || filtersProposalAdapter.isProposalPopupOpen()) {
+                    return;
+                }
+                String text = filtersText.getText();
+                int caret = filtersText.getCaretOffset();
+                if (caret > 1 && caret <= text.length() && text.charAt(caret - 1) == ' '
+                    && text.substring(0, caret).stripTrailing().endsWith("=")) {
+                    filtersProposalAdapter.openProposalPopup();
+                }
+            }));
         }
 
         // Handle all shortcuts by filters editor, not by host editor
@@ -802,6 +826,11 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
         SQLWordPartDetector wordDetector = new SQLWordPartDetector(new Document(contents), syntaxManager, position);
         final List<IContentProposal> proposals = new ArrayList<>();
 
+        IContentProposal[] fkValues = getFkValueProposals(contents.substring(0, Math.min(position, contents.length())));
+        if (fkValues != null) {
+            return fkValues;
+        }
+
         String attrName = wordDetector.getFullWord().toLowerCase(Locale.ENGLISH);
 
         final DBRRunnableWithProgress reader = monitor -> {
@@ -845,6 +874,57 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
             }
         }
 
+        return proposals.toArray(new IContentProposal[0]);
+    }
+
+    /**
+     * dbeaver-mm K2: after {@code <fk column> =} the proposals are the referenced dictionary's values
+     * with their labels ({@code 2  Aktif}), also when the FK is a virtual one into another connection.
+     * Returns null when the caret is not in such a value position.
+     */
+    @Nullable
+    private IContentProposal[] getFkValueProposals(@NotNull String beforeCaret) {
+        Matcher matcher = FK_VALUE_POSITION.matcher(beforeCaret);
+        DBPDataSource dataSource = viewer.getDataSource();
+        if (!matcher.find() || dataSource == null) {
+            return null;
+        }
+        String columnName = DBUtils.getUnQuotedIdentifier(dataSource, matcher.group(1));
+        String typed = matcher.group(2);
+        DBDAttributeBinding attribute = null;
+        for (DBDAttributeBinding binding : viewer.getModel().getAttributes()) {
+            if (binding.getName().equalsIgnoreCase(columnName)) {
+                attribute = binding;
+                break;
+            }
+        }
+        DBSEntityAssociation association = FkDictionaryLabels.getAssociation(attribute);
+        if (association == null) {
+            return null;
+        }
+        DBDAttributeBinding fkAttribute = attribute;
+        List<IContentProposal> proposals = new ArrayList<>();
+        SystemJob job = new SystemJob("Read FK values", monitor -> {
+            try {
+                DBSEntityAttribute refColumn = DBUtils.getReferenceAttribute(monitor, association, fkAttribute.getEntityAttribute(), false);
+                DBSEntityConstraint refConstraint = association.getReferencedConstraint();
+                if (refColumn == null || refConstraint == null || !(refConstraint.getParentObject() instanceof DBSDictionary dictionary)) {
+                    return;
+                }
+                // ponytail: first 50 values, filtered by the typed value prefix; add a label search if dictionaries get big
+                for (DBDLabelValuePair pair : dictionary.getDictionaryEnumeration(
+                    monitor, refColumn, null, null, null, false, true, true, 0, 50)) {
+                    String literal = SQLUtils.convertValueToSQL(dataSource, fkAttribute, pair.getValue());
+                    if (literal.startsWith(typed)) {
+                        proposals.add(new ContentProposal(literal, literal + "  " + pair.getLabel(), pair.getLabel()));
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Error reading FK values for filter proposals", e);
+            }
+        });
+        job.schedule();
+        UIUtils.waitJobCompletion(job);
         return proposals.toArray(new IContentProposal[0]);
     }
 

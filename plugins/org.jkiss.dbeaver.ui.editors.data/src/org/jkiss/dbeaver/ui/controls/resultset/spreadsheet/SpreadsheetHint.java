@@ -67,6 +67,11 @@ public class SpreadsheetHint implements IGridHint {
     }
 
     @Override
+    public boolean isExternal() {
+        return valueHint instanceof org.jkiss.dbeaver.ui.data.hints.FkDictionaryHintProvider.ExternalHint;
+    }
+
+    @Override
     public boolean isReadOnly() {
         return CommonUtils.isBitSet(valueHint.getHintOptions(), DBDValueHint.OPTION_READ_ONLY);
     }

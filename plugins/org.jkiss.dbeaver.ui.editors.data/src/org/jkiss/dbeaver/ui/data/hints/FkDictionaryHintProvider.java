@@ -66,7 +66,20 @@ public class FkDictionaryHintProvider implements DBDCellHintProvider {
         if (CommonUtils.isEmpty(label)) {
             return null;
         }
+        if (FkDictionaryLabels.isExternal(attribute)) {
+            return new DBDValueHint[]{new ExternalHint(label)};
+        }
         return new DBDValueHint[]{new ValueHintText(label, label, null)};
+    }
+
+    /**
+     * dbeaver-mm K1: label resolved through a virtual FK into another connection; the grid paints it
+     * in its own color so it is not mistaken for data of this database.
+     */
+    public static class ExternalHint extends ValueHintText {
+        ExternalHint(@NotNull String label) {
+            super(label, label, null);
+        }
     }
 
     @Override

@@ -26,7 +26,12 @@ import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.graphics.Rectangle;
+import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Menu;
+import org.eclipse.swt.widgets.MenuItem;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Table;
@@ -37,6 +42,7 @@ import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.model.runtime.AbstractJob;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
+import org.jkiss.dbeaver.model.runtime.VoidProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSEntity;
 import org.jkiss.dbeaver.model.struct.DBSEntityAttribute;
 import org.jkiss.dbeaver.ui.UIUtils;
@@ -75,6 +81,8 @@ public final class FkPickerPopup {
     private Shell shell;
     private Text filterText;
     private Table table;
+    private Button labelButton;
+    private boolean menuOpen;
     private List<FkRow> rows;
     private int filterSeq;
     private final Runnable filterRunnable = this::runFilter;
@@ -161,10 +169,20 @@ public final class FkPickerPopup {
         layout.verticalSpacing = 2;
         shell.setLayout(layout);
 
-        Label header = new Label(shell, SWT.NONE);
+        Composite headerRow = new Composite(shell, SWT.NONE);
+        GridLayout headerLayout = new GridLayout(2, false);
+        headerLayout.marginWidth = 0;
+        headerLayout.marginHeight = 0;
+        headerRow.setLayout(headerLayout);
+        headerRow.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        Label header = new Label(headerRow, SWT.NONE);
         header.setText(entity.getName() + " → " + keyColumn.getName()
             + (multi ? "  (Space: toggle, Enter: insert list)" : ""));
         header.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        // dbeaver-mm: pick which column of the table is shown next to the id
+        labelButton = new Button(headerRow, SWT.PUSH | SWT.FLAT);
+        updateLabelButton();
+        labelButton.addListener(SWT.Selection, e -> showLabelColumnMenu());
 
         filterText = new Text(shell, SWT.BORDER | SWT.SEARCH | SWT.ICON_SEARCH);
         filterText.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -193,7 +211,11 @@ public final class FkPickerPopup {
 
         table.addListener(SWT.MouseDoubleClick, e -> accept(multi));
 
-        shell.addListener(SWT.Deactivate, e -> close());
+        shell.addListener(SWT.Deactivate, e -> {
+            if (!menuOpen) {
+                close();
+            }
+        });
         shell.addListener(SWT.Traverse, e -> {
             if (e.detail == SWT.TRAVERSE_ESCAPE) {
                 e.doit = false;
@@ -221,6 +243,43 @@ public final class FkPickerPopup {
         if (table.getItemCount() > 0) {
             table.setSelection(0);
         }
+    }
+
+    private void updateLabelButton() {
+        String current = InlineFkService.getLabelColumn(entity);
+        labelButton.setText((current == null ? "Label" : current) + " ▾");
+        labelButton.setToolTipText("Column of " + entity.getName() + " shown next to the value");
+        labelButton.getParent().layout(true);
+    }
+
+    private void showLabelColumnMenu() {
+        String current = InlineFkService.getLabelColumn(entity);
+        Menu menu = new Menu(shell, SWT.POP_UP);
+        for (String column : InlineFkService.listLabelColumns(new VoidProgressMonitor(), entity)) {
+            MenuItem item = new MenuItem(menu, SWT.RADIO);
+            item.setText(column);
+            item.setSelection(column.equalsIgnoreCase(current));
+            item.addListener(SWT.Selection, e -> {
+                if (item.getSelection()) {
+                    InlineFkService.setLabelColumn(entity, column);
+                    updateLabelButton();
+                    runFilter();
+                }
+            });
+        }
+        // The menu takes focus from the popup shell; don't let that close the popup
+        menuOpen = true;
+        menu.addListener(SWT.Hide, e -> shell.getDisplay().asyncExec(() -> {
+            menuOpen = false;
+            if (!shell.isDisposed()) {
+                shell.setActive();
+                filterText.setFocus();
+            }
+            menu.dispose();
+        }));
+        Rectangle bounds = labelButton.getBounds();
+        menu.setLocation(labelButton.getParent().toDisplay(bounds.x, bounds.y + bounds.height));
+        menu.setVisible(true);
     }
 
     private void onFilterKey(org.eclipse.swt.widgets.Event e, boolean multi) {

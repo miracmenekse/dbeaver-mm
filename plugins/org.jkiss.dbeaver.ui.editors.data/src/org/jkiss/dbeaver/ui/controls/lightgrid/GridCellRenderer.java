@@ -23,6 +23,7 @@ import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBPImage;
 import org.jkiss.dbeaver.ui.DBeaverIcons;
+import org.jkiss.dbeaver.ui.UIStyles;
 import org.jkiss.dbeaver.ui.UIIcon;
 import org.jkiss.dbeaver.ui.UITextUtils;
 import org.jkiss.dbeaver.ui.UIUtils;
@@ -45,6 +46,10 @@ public class GridCellRenderer extends AbstractRenderer {
 
     private static final int TEXT_TOP_MARGIN = 1;
     private static final int INSIDE_MARGIN = 3;
+
+    // dbeaver-mm K1: cross-connection FK labels, noticeably different from the grey hint
+    private static final RGB EXTERNAL_HINT_DARK = new RGB(86, 190, 196);
+    private static final RGB EXTERNAL_HINT_LIGHT = new RGB(0, 118, 128);
 
     static final Image LINK_IMAGE = DBeaverIcons.getImage(UIIcon.LINK);
     static final Image LINK2_IMAGE = DBeaverIcons.getImage(UIIcon.LINK2);
@@ -306,6 +311,9 @@ public class GridCellRenderer extends AbstractRenderer {
 
                         if (hint.isError()) {
                             foreground = grid.getLabelProvider().getErrorForeground();
+                        } else if (hint.isExternal()) {
+                            // dbeaver-mm K1: label from another connection - teal instead of the grey hint
+                            foreground = UIUtils.getSharedColor(UIStyles.isDarkTheme() ? EXTERNAL_HINT_DARK : EXTERNAL_HINT_LIGHT);
                         } else {
                             foreground = grid.getLabelProvider().getHintForeground();
                         }

@@ -95,6 +95,18 @@ public final class FkDictionaryLabels {
     }
 
     /**
+     * dbeaver-mm K1: true if the dictionary FK of {@code attr} points into another connection
+     * (only possible with a virtual FK; physical FKs never leave their database).
+     */
+    public static boolean isExternal(@Nullable DBDAttributeBinding attr) {
+        DBSEntityAssociation association = getAssociation(attr);
+        DBSEntityConstraint refConstraint = association == null ? null : association.getReferencedConstraint();
+        return refConstraint != null && attr.getDataSource() != null
+            && refConstraint.getDataSource() != null
+            && refConstraint.getDataSource().getContainer() != attr.getDataSource().getContainer();
+    }
+
+    /**
      * Returns the dictionary label for {@code value}, or null if the column is not a dictionary FK
      * or the label is not available (yet).
      */

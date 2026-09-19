@@ -40,6 +40,8 @@ import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.model.struct.DBSObjectContainer;
 import org.jkiss.dbeaver.model.struct.rdb.DBSCatalog;
 import org.jkiss.dbeaver.model.struct.rdb.DBSSchema;
+import org.jkiss.dbeaver.model.virtual.DBVEntity;
+import org.jkiss.dbeaver.model.virtual.DBVUtils;
 import org.jkiss.utils.CommonUtils;
 
 import java.util.ArrayList;
@@ -254,6 +256,41 @@ public final class InlineFkService {
         } catch (DBException e) {
             log.debug("FK enumeration failed for " + entity.getName(), e);
             return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Column names of {@code entity} that can be shown as the label, plus the current choice
+     * (first element of the virtual model's description columns, or null for DBeaver's default).
+     * Same setting as the result grid's FK header "..." button, so both stay in sync.
+     */
+    @NotNull
+    public static List<String> listLabelColumns(@NotNull DBRProgressMonitor monitor, @NotNull DBSEntity entity) {
+        List<String> names = new ArrayList<>();
+        try {
+            for (DBSEntityAttribute attr : CommonUtils.safeCollection(entity.getAttributes(monitor))) {
+                if (!DBUtils.isHiddenObject(attr)) {
+                    names.add(attr.getName());
+                }
+            }
+        } catch (DBException e) {
+            log.debug("Failed to list columns of " + entity.getName(), e);
+        }
+        return names;
+    }
+
+    @Nullable
+    public static String getLabelColumn(@NotNull DBSEntity entity) {
+        DBVEntity vEntity = DBVUtils.getVirtualEntity(entity, false);
+        String names = vEntity == null ? null : vEntity.getDescriptionColumnNames();
+        return CommonUtils.isEmpty(names) ? null : names.split(",")[0].trim();
+    }
+
+    public static void setLabelColumn(@NotNull DBSEntity entity, @NotNull String columnName) {
+        DBVEntity vEntity = DBVUtils.getVirtualEntity(entity, true);
+        if (vEntity != null) {
+            vEntity.setDescriptionColumnNames(columnName);
+            vEntity.persistConfiguration();
         }
     }
 

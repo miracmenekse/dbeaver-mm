@@ -377,6 +377,16 @@ olarak gelecek; bağlantı adı + ortam rengi (G1) + şema. Mevcut `DataSourceTo
 `SelectDataSourceCombo` mantığı yeniden kullanılmalı, yeni bir seçim modeli yazılmamalı.
 Araç çubuğu geri getirilmez.
 
+#### K1. Bağlantılar arası FK etiketi · yapıldı (2026-09-19)
+
+Veritabanının kuramadığı bağlantı (ör. `mm_test_db.bsn_flow_spec.service_id` →
+`mm_config_db.service_spec.id`) DBeaver'ın **sanal FK**'sı ile tanımlanır: kolona sağ tık ›
+Logical structure › Add virtual foreign key › Choose… ile diğer bağlantı. Kural
+`data-sources.json` › `virtual-models` içinde saklanır, yeni kod gerekmez. FK etiketi (A2) hedef
+tablonun kendi bağlantısından okunur; başka bağlantıdan gelen etiket gri yerine **teal** çizilir
+(`FkDictionaryHintProvider.ExternalHint`, `GridCellRenderer`). Açıklama kolonu hedef tabloda
+seçilir (`service_spec` → `name`). Test verisi: `cross_connection_fk_setup.sql`.
+
 ---
 
 ### G. Bağlantı yönetimi ve güvenlik hissi
