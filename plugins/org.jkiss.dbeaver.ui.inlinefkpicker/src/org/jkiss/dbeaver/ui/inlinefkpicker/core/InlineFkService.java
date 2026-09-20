@@ -179,6 +179,57 @@ public final class InlineFkService {
         return result;
     }
 
+    /**
+     * dbeaver-mm K12: lower case (Locale.ROOT) + accents folded, so searching is blind to case and
+     * to Turkish letters. Same rule as the data editor's value pickers.
+     */
+    @NotNull
+    public static String foldForSearch(@Nullable String text) {
+        if (text == null) {
+            return "";
+        }
+        String lower = text.toLowerCase(java.util.Locale.ROOT);
+        StringBuilder sb = new StringBuilder(lower.length());
+        for (int i = 0; i < lower.length(); i++) {
+            char c = lower.charAt(i);
+            int idx = "âàäáçğıîöşûüñ".indexOf(c);
+            sb.append(idx < 0 ? c : "aaaacgiiosuun".charAt(idx));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * dbeaver-mm K13: short code of a connection, typed in SQL as {@code <code>.} to list only that
+     * connection's tables. Stored with the connection (data-sources.json "tags").
+     */
+    public static final String CODE_TAG = "mm.code";
+
+    @Nullable
+    public static String getShortCode(@NotNull DBPDataSourceContainer container) {
+        return CommonUtils.nullIfEmpty(container.getTags().get(CODE_TAG));
+    }
+
+    public static void setShortCode(@NotNull DBPDataSourceContainer container, @Nullable String code) {
+        container.setTagValue(CODE_TAG, CommonUtils.isEmpty(code) ? null : code.trim());
+        container.persistConfiguration();
+    }
+
+    /** The connection whose short code is {@code code}, or null. */
+    @Nullable
+    public static DBPDataSourceContainer findByShortCode(@NotNull String code) {
+        DBPProject project = DBWorkbench.getPlatform().getWorkspace().getActiveProject();
+        if (project == null) {
+            return null;
+        }
+        for (DBPDataSourceContainer container : project.getDataSourceRegistry().getDataSources()) {
+            String containerCode = getShortCode(container);
+            if (containerCode != null && containerCode.equalsIgnoreCase(code)) {
+                return container;
+            }
+        }
+        return null;
+    }
+
     /** dbeaver-mm K11: a table of one of the candidate connections. */
     public record TableRef(@NotNull DBPDataSourceContainer container, @NotNull String tableName) {
     }
@@ -194,7 +245,7 @@ public final class InlineFkService {
         @Nullable String filter,
         int maxResults
     ) {
-        String pattern = filter == null ? "" : filter.toLowerCase(java.util.Locale.ROOT);
+        String pattern = foldForSearch(filter);
         List<TableRef> result = new ArrayList<>();
         for (DBPDataSourceContainer container : candidates) {
             if (!container.isConnected() || result.size() >= maxResults) {
@@ -214,7 +265,7 @@ public final class InlineFkService {
                         continue;
                     }
                     String name = child.getName();
-                    if (pattern.isEmpty() || name.toLowerCase(java.util.Locale.ROOT).contains(pattern)) {
+                    if (pattern.isEmpty() || foldForSearch(name).contains(pattern)) {
                         result.add(new TableRef(container, name));
                     }
                 }

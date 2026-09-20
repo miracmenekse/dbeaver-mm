@@ -111,6 +111,11 @@ public class InlineFkStartup implements IStartup {
             e.display.asyncExec(() -> openColumnAssistAfterKeyword(editor));
             return;
         }
+        if (c == '.') {
+            // dbeaver-mm K13: "<code>." lists only that connection's tables
+            e.display.asyncExec(() -> openTablesForShortCode(editor));
+            return;
+        }
         if (c != '=' && c != '(') {
             return;
         }
@@ -145,6 +150,40 @@ public class InlineFkStartup implements IStartup {
 
     private static final java.util.Set<String> COLUMN_KEYWORDS = java.util.Set.of("where", "and", "or");
     // dbeaver-mm K11: after these the table picker (all candidate connections) opens
+    private static void openTablesForShortCode(SQLEditorBase editor) {
+        ITextViewer viewer = editor.getTextViewer();
+        if (viewer == null || viewer.getDocument() == null) {
+            return;
+        }
+        StyledText widget = viewer.getTextWidget();
+        if (widget == null || widget.isDisposed() || !widget.isFocusControl()) {
+            return;
+        }
+        int caret = viewer.getSelectedRange().x;
+        String before = viewer.getDocument().get().substring(0, caret);
+        if (!before.endsWith(".")) {
+            return;
+        }
+        int start = before.length() - 1;
+        while (start > 0 && (Character.isLetterOrDigit(before.charAt(start - 1)) || before.charAt(start - 1) == '_')) {
+            start--;
+        }
+        String code = before.substring(start, before.length() - 1);
+        if (code.isEmpty()) {
+            return;
+        }
+        org.jkiss.dbeaver.model.DBPDataSourceContainer container =
+            org.jkiss.dbeaver.ui.inlinefkpicker.core.InlineFkService.findByShortCode(code);
+        if (container == null || !container.isConnected()) {
+            return;
+        }
+        org.jkiss.dbeaver.ui.inlinefkpicker.ui.TablePickerPopup.trigger(
+            viewer,
+            java.util.List.of(container),
+            start,
+            (picked, table) -> AutoConnectionSelector.switchTo(editor, picked));
+    }
+
     private static final java.util.Set<String> TABLE_KEYWORDS = java.util.Set.of("from", "join", "into", "update");
 
     private static void openColumnAssistAfterKeyword(SQLEditorBase editor) {

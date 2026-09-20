@@ -405,6 +405,13 @@ seçilir (`service_spec` → `name`). Test verisi: `cross_connection_fk_setup.sq
   tablo adları (veri okunmaz), birden çok eşleşmede imleçte seçim menüsü.
 - **K10:** SQL editörünün üstünde "Connections: …" çubuğu; filtrelenebilir, çoklu seçimli bağlantı
   listesi (`SqlConnectionsBar`). Menü satırına konulamaz: GTK menü çubuğu kontrol barındırmaz.
+- **K12:** Aramalar büyük/küçük harf ve Türkçe harf duyarsız (`foldForSearch`: `Locale.ROOT` +
+  aksan katlama, "müşteri" → "Musteri"). Veritabanı araması sonuç vermezse geniş bir dilim çekilip
+  yerelde katlanmış karşılaştırma yapılır. Ayrıca: değer = etiket olan kolonlarda (`label =`) değer
+  iki kez yazılmaz; editörün bağlantısı zaten sorgudaki tabloları içeriyorsa değiştirilmez.
+- **K13:** Bağlantıya **kısa kod** verilir (sağ tık › Set SQL short code …, ör. `test`, `config`).
+  SQL'de `config.` yazınca yalnızca o bağlantının tabloları listelenir ve seçilen tablo adı
+  `config.` yerine yazılır. Tüm bağlantıları taramaya gerek kalmadığı için daha hızlıdır.
 - **K11:** `from ` / `join ` / `into ` / `update ` sonrası tablo seçici açılır: aday bağlantıların
   tabloları "Tablo | Bağlantı" olarak listelenir, yazdıkça filtrelenir. Seçilen tablonun adı yazılır
   ve editör o bağlantıya geçer. Yalnızca **bağlı** bağlantıların önbellekteki tablo listesi okunur.

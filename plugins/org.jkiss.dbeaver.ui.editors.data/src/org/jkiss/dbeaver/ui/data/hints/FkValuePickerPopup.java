@@ -44,6 +44,8 @@ class FkValuePickerPopup {
     private static final Log log = Log.getLog(FkValuePickerPopup.class);
 
     private static final int MAX_VALUES = 50;
+    // ponytail: accent-blind search scans this many rows client side; raise only if it proves too few
+    private static final int LOCAL_SEARCH_ROWS = 500;
     private static final int SEARCH_DELAY_MS = 300;
     private static final int LIST_WIDTH = 320;
     private static final int LIST_HEIGHT = 200;
@@ -148,6 +150,20 @@ class FkValuePickerPopup {
         SystemJob job = new SystemJob("Read column values", monitor -> {
             try {
                 result.addAll(FkDictionaryLabels.listValues(monitor, attribute, CommonUtils.nullIfEmpty(filter), MAX_VALUES));
+                if (result.isEmpty() && !CommonUtils.isEmpty(filter)) {
+                    // dbeaver-mm K12: the database search is exact; retry accent/case blind on a
+                    // wider slice so "sisman"/"SISMAN" still finds "Şişman"
+                    String folded = FkDictionaryLabels.foldForSearch(filter);
+                    for (DBDLabelValuePair pair : FkDictionaryLabels.listValues(monitor, attribute, null, LOCAL_SEARCH_ROWS)) {
+                        if (FkDictionaryLabels.foldForSearch(CommonUtils.toString(pair.getValue())).contains(folded)
+                            || FkDictionaryLabels.foldForSearch(pair.getLabel()).contains(folded)) {
+                            result.add(pair);
+                            if (result.size() >= MAX_VALUES) {
+                                break;
+                            }
+                        }
+                    }
+                }
             } catch (Exception e) {
                 log.debug("Error reading values for the cell picker", e);
             }

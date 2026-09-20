@@ -91,11 +91,24 @@ public final class TablePickerPopup {
         List<DBPDataSourceContainer> candidates,
         BiConsumer<DBPDataSourceContainer, String> onPick
     ) {
+        trigger(viewer, candidates, viewer == null ? 0 : viewer.getSelectedRange().x, onPick);
+    }
+
+    /**
+     * dbeaver-mm K13: same, but the text from {@code replaceFrom} to the caret (e.g. the typed
+     * {@code test.}) is replaced by the chosen table name.
+     */
+    public static void trigger(
+        ITextViewer viewer,
+        List<DBPDataSourceContainer> candidates,
+        int replaceFrom,
+        BiConsumer<DBPDataSourceContainer, String> onPick
+    ) {
         if (viewer == null || viewer.getTextWidget() == null || candidates.isEmpty()) {
             return;
         }
         TablePickerPopup popup = new TablePickerPopup(viewer, candidates, onPick);
-        popup.insertStart = viewer.getSelectedRange().x;
+        popup.insertStart = replaceFrom;
         popup.load(null, popup::open);
     }
 

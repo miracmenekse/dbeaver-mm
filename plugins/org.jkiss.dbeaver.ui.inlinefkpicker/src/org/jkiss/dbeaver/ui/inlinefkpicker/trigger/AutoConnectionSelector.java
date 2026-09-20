@@ -92,6 +92,12 @@ final class AutoConnectionSelector {
             then.accept(editor.getExecutionContext());
             return;
         }
+        DBPDataSourceContainer current = currentContainer(editor);
+        if (current != null && candidates.contains(current)) {
+            // dbeaver-mm K12: the editor's own connection already has these tables - don't move it
+            use(editor, current, then);
+            return;
+        }
         DBPDataSourceContainer remembered = PICKS.getOrDefault(editor, Map.of()).get(key);
         if (remembered != null && candidates.contains(remembered)) {
             use(editor, remembered, then);

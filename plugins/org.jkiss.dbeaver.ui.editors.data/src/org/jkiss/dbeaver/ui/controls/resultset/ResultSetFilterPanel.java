@@ -899,10 +899,18 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
         SystemJob job = new SystemJob("Read FK values", monitor -> {
             try {
                 // ponytail: first 50 values, filtered by the typed value prefix; add a label search if dictionaries get big
+                String typedFolded = FkDictionaryLabels.foldForSearch(typed);
                 for (DBDLabelValuePair pair : FkDictionaryLabels.listValues(monitor, fkAttribute, null, 50)) {
                     String literal = SQLUtils.convertValueToSQL(dataSource, fkAttribute, pair.getValue());
-                    if (literal.startsWith(typed)) {
-                        proposals.add(new ContentProposal(literal, literal + "  " + pair.getLabel(), pair.getLabel()));
+                    String label = CommonUtils.notEmpty(pair.getLabel());
+                    // dbeaver-mm K12: a plain column's label is its own value - don't show it twice
+                    boolean sameAsValue = label.isEmpty() || label.equals(CommonUtils.toString(pair.getValue()));
+                    String text = sameAsValue ? literal : literal + "  " + label;
+                    // dbeaver-mm K12: match the typed text against value and label, accent/case blind
+                    if (typed.isEmpty()
+                        || FkDictionaryLabels.foldForSearch(literal).contains(typedFolded)
+                        || FkDictionaryLabels.foldForSearch(label).contains(typedFolded)) {
+                        proposals.add(new ContentProposal(literal, text, sameAsValue ? null : label));
                     }
                 }
             } catch (Exception e) {

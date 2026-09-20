@@ -34,11 +34,28 @@
             name="Use for SQL auto connection"
             description="The SQL editor switches to this connection when a query's tables are found in it"
             defaultHandler="org.jkiss.dbeaver.ui.inlinefkpicker.trigger.ToggleAutoConnectHandler"/>
+        <!-- dbeaver-mm K13: short code typed as "<code>." to list that connection's tables -->
+        <command
+            id="org.jkiss.dbeaver.ui.inlinefkpicker.setShortCode"
+            categoryId="org.jkiss.dbeaver.ui.inlinefkpicker.category"
+            name="Set SQL short code ..."
+            description="Short code typed as &quot;code.&quot; in a SQL editor to list this connection's tables"
+            defaultHandler="org.jkiss.dbeaver.ui.inlinefkpicker.trigger.SetShortCodeHandler"/>
     </extension>
 
     <extension point="org.eclipse.ui.menus">
         <menuContribution allPopups="false" locationURI="popup:org.eclipse.ui.popup.any?after=additions">
             <command commandId="org.jkiss.dbeaver.ui.inlinefkpicker.toggleAutoConnect" style="toggle">
+                <visibleWhen checkEnabled="false">
+                    <with variable="selection">
+                        <count value="1"/>
+                        <iterate operator="and">
+                            <instanceof value="org.jkiss.dbeaver.model.navigator.DBNDataSource"/>
+                        </iterate>
+                    </with>
+                </visibleWhen>
+            </command>
+            <command commandId="org.jkiss.dbeaver.ui.inlinefkpicker.setShortCode">
                 <visibleWhen checkEnabled="false">
                     <with variable="selection">
                         <count value="1"/>
