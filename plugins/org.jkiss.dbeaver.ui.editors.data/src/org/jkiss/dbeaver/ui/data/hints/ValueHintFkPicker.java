@@ -16,42 +16,29 @@
  */
 package org.jkiss.dbeaver.ui.data.hints;
 
-import org.eclipse.jface.action.Action;
-import org.eclipse.jface.action.MenuManager;
 import org.eclipse.swt.graphics.Point;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
-import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBPImage;
 import org.jkiss.dbeaver.model.data.DBDAttributeBinding;
-import org.jkiss.dbeaver.model.data.DBDLabelValuePair;
 import org.jkiss.dbeaver.model.data.hints.DBDValueHint;
 import org.jkiss.dbeaver.ui.data.DBDValueHintActionHandler;
-import org.jkiss.dbeaver.model.runtime.SystemJob;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.ui.UIIcon;
-import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.controls.resultset.IResultSetController;
 import org.jkiss.dbeaver.ui.controls.resultset.ResultSetCellLocation;
 import org.jkiss.dbeaver.ui.controls.resultset.ResultSetRow;
 import org.jkiss.dbeaver.ui.controls.resultset.ResultSetValueController;
 import org.jkiss.dbeaver.ui.data.IValueController;
-import org.jkiss.utils.CommonUtils;
 
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * dbeaver-mm K5: in-cell button on a dictionary FK cell. Click lists the referenced values with
- * their labels ({@code 2  Orta}), the current one checked; picking one writes it into the cell
+ * their labels ({@code 2  Orta}) in a small searchable popup; picking one writes it into the cell
  * like a normal edit (Save / Cancel as usual). Same values as the filter box {@code column =} list.
  */
 record ValueHintFkPicker(@NotNull DBDAttributeBinding attribute, @NotNull ResultSetRow row, @Nullable Object value)
     implements DBDValueHint, DBDValueHintActionHandler {
-
-    private static final Log log = Log.getLog(ValueHintFkPicker.class);
-    // ponytail: a plain menu of the first 50 values; switch to a filterable popup if dictionaries get big
-    private static final int MAX_VALUES = 50;
 
     @NotNull
     @Override
@@ -90,41 +77,11 @@ record ValueHintFkPicker(@NotNull DBDAttributeBinding attribute, @NotNull Result
             DBWorkbench.getPlatformUI().showMessageBox("Pick value", "Column is read-only: " + readOnly, false);
             return;
         }
-        List<DBDLabelValuePair> values = new ArrayList<>();
-        SystemJob job = new SystemJob("Read FK values", monitor -> {
-            try {
-                values.addAll(FkDictionaryLabels.listValues(monitor, attribute, MAX_VALUES));
-            } catch (Exception e) {
-                log.debug("Error reading FK values for the cell picker", e);
-            }
-        });
-        job.schedule();
-        UIUtils.waitJobCompletion(job);
-        if (values.isEmpty()) {
-            return;
-        }
-
-        MenuManager manager = new MenuManager();
-        String current = CommonUtils.toString(value);
-        for (DBDLabelValuePair pair : values) {
-            String valueText = CommonUtils.toString(pair.getValue());
-            Action action = new Action(valueText + "  " + CommonUtils.notEmpty(pair.getLabel()), Action.AS_RADIO_BUTTON) {
-                @Override
-                public void run() {
-                    new ResultSetValueController(
-                        controller,
-                        new ResultSetCellLocation(attribute, row),
-                        IValueController.EditType.NONE,
-                        null
-                    ).updateValue(pair.getValue(), true);
-                }
-            };
-            action.setChecked(valueText.equals(current));
-            manager.add(action);
-        }
-        var menu = manager.createContextMenu(controller.getControl());
-        menu.addListener(org.eclipse.swt.SWT.Hide, e -> UIUtils.asyncExec(manager::dispose));
-        menu.setLocation(location);
-        menu.setVisible(true);
+        new FkValuePickerPopup(attribute, value, picked -> new ResultSetValueController(
+            controller,
+            new ResultSetCellLocation(attribute, row),
+            IValueController.EditType.NONE,
+            null
+        ).updateValue(picked, true)).open(controller.getControl(), location);
     }
 }

@@ -153,15 +153,15 @@ public final class InlineFkService {
     @NotNull
     public static List<DBPDataSourceContainer> findConnectionsWithTables(
         @NotNull DBRProgressMonitor monitor,
-        @NotNull List<String> tableNames
+        @NotNull List<String> tableNames,
+        @NotNull List<DBPDataSourceContainer> candidates
     ) {
         List<DBPDataSourceContainer> result = new ArrayList<>();
-        DBPProject project = DBWorkbench.getPlatform().getWorkspace().getActiveProject();
-        if (project == null || tableNames.isEmpty()) {
+        if (tableNames.isEmpty()) {
             return result;
         }
-        for (DBPDataSourceContainer container : project.getDataSourceRegistry().getDataSources()) {
-            if (!isAutoConnect(container) || !container.isConnected()) {
+        for (DBPDataSourceContainer container : candidates) {
+            if (!container.isConnected()) {
                 continue;
             }
             DBCExecutionContext context = DBUtils.getDefaultContext(container.getDataSource(), false);

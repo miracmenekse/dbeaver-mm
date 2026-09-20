@@ -59,6 +59,11 @@ final class AutoConnectionSelector {
         for (FkColumnRef.TableRef t : ref.getFromTables()) {
             tables.add(t.getName());
         }
+        resolveTables(editor, tables, then);
+    }
+
+    /** dbeaver-mm K9: same, for a statement's table names (used before content assist). */
+    static void resolveTables(@NotNull SQLEditorBase editor, @NotNull List<String> tables, @NotNull Consumer<DBCExecutionContext> then) {
         if (tables.isEmpty()) {
             then.accept(editor.getExecutionContext());
             return;
@@ -67,7 +72,10 @@ final class AutoConnectionSelector {
         new AbstractJob("Find connection for SQL tables") {
             @Override
             protected IStatus run(DBRProgressMonitor monitor) {
-                List<DBPDataSourceContainer> candidates = InlineFkService.findConnectionsWithTables(monitor, tables);
+                // dbeaver-mm K10: the editor's connections bar wins; empty means the tagged ones
+                List<DBPDataSourceContainer> pool = org.jkiss.dbeaver.ui.editors.sql.SqlConnectionsBar.candidates(
+                    editor instanceof SQLEditor sqlEditor ? sqlEditor.getMmAutoConnectionIds() : java.util.Set.of());
+                List<DBPDataSourceContainer> candidates = InlineFkService.findConnectionsWithTables(monitor, tables, pool);
                 UIUtils.asyncExec(() -> choose(editor, key, candidates, then));
                 return Status.OK_STATUS;
             }

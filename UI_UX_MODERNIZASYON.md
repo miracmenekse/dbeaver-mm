@@ -387,6 +387,26 @@ tablonun kendi bağlantısından okunur; başka bağlantıdan gelen etiket gri y
 (`FkDictionaryHintProvider.ExternalHint`, `GridCellRenderer`). Açıklama kolonu hedef tabloda
 seçilir (`service_spec` → `name`). Test verisi: `cross_connection_fk_setup.sql`.
 
+#### K2-K10. FK/bağlantı akışı · yapıldı (2026-09-19/20)
+
+- **K2:** Sonuç filtre kutusunda `kolon =` yazınca değerler etiketleriyle listelenir. FK kolonunda
+  referans tablonun değerleri, FK olmayan kolonda (ör. `label =`) kolonun kendi değerleri gelir;
+  sözlük sorgusu desteklenmiyorsa upstream'in kolon önerilerine düşer
+  (`ResultSetFilterPanel.getFkValueProposals` + `FkDictionaryLabels.listValues`).
+- **K3:** "Group rows by <kolon>" (sağ tık + başlık simgesi), mat iki renk.
+- **K4:** Navigator: tablolar doğrudan bağlantının altında, gerisi kapalı "Other objects".
+- **K5/K8:** FK hücresinde ▾ düğmesi; Value paneli gibi arama kutulu popup (`FkValuePickerPopup`),
+  sunucu tarafı arama + 50 satır sınırı. Upstream hatası düzeltildi: `GridCellRenderer
+  .executeHintAction` içinde `iconsWidth` artırılmıyordu, bu yüzden yalnızca en sağdaki simge
+  tıklanabiliyordu.
+- **K6/K9:** SQL editöründe `=` ve `WHERE`/`AND`/`OR` sonrası bağlantı, ifadedeki tablolara göre
+  seçilir; sonra tamamlama listesi açılır. Aday havuzu: editördeki çubukta işaretliler, yoksa
+  navigator'da "Use for SQL auto connection" etiketliler. Yalnızca bağlı bağlantılar, yalnızca
+  tablo adları (veri okunmaz), birden çok eşleşmede imleçte seçim menüsü.
+- **K10:** SQL editörünün üstünde "Connections: …" çubuğu; filtrelenebilir, çoklu seçimli bağlantı
+  listesi (`SqlConnectionsBar`). Menü satırına konulamaz: GTK menü çubuğu kontrol barındırmaz.
+- **Açık:** Başka bağlantıdaki tablo adı henüz otomatik tamamlanmıyor (elle yazılmalı).
+
 ---
 
 ### G. Bağlantı yönetimi ve güvenlik hissi

@@ -194,6 +194,8 @@ public class SQLEditor extends SQLEditorBase implements
     private Composite sqlEditorPanel;
     @Nullable
     private Composite presentationStack;
+    // dbeaver-mm K10: multi-select of connections used for automatic connection selection
+    private final SqlConnectionsBar mmConnectionsBar = new SqlConnectionsBar();
     private SashForm sqlExtraPanelSash;
     private CTabFolder sqlExtraPanelFolder;
     private ToolBarManager sqlExtraPanelToolbar;
@@ -444,6 +446,12 @@ public class SQLEditor extends SQLEditorBase implements
     @Override
     public DBPDataSourceContainer getDataSourceContainer() {
         return dataSourceContainer;
+    }
+
+    /** dbeaver-mm K10: connections checked in the editor's connections bar (empty = tagged ones). */
+    @NotNull
+    public java.util.Set<String> getMmAutoConnectionIds() {
+        return mmConnectionsBar.getSelectedIds();
     }
 
     @Override
@@ -1176,6 +1184,9 @@ public class SQLEditor extends SQLEditorBase implements
         Composite editorContainer;
         sqlEditorPanel = UIUtils.createPlaceholder(resultsSash, 3, 0);
         CSSUtils.markConnectionTypeColor(sqlEditorPanel);
+
+        // dbeaver-mm K10: connections this editor may run against
+        mmConnectionsBar.createControl(sqlEditorPanel);
 
         // Create left vertical toolbar
         createControlsBar(sqlEditorPanel);

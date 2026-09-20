@@ -894,15 +894,12 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
                 break;
             }
         }
-        if (FkDictionaryLabels.getAssociation(attribute) == null) {
-            return null;
-        }
         DBDAttributeBinding fkAttribute = attribute;
         List<IContentProposal> proposals = new ArrayList<>();
         SystemJob job = new SystemJob("Read FK values", monitor -> {
             try {
                 // ponytail: first 50 values, filtered by the typed value prefix; add a label search if dictionaries get big
-                for (DBDLabelValuePair pair : FkDictionaryLabels.listValues(monitor, fkAttribute, 50)) {
+                for (DBDLabelValuePair pair : FkDictionaryLabels.listValues(monitor, fkAttribute, null, 50)) {
                     String literal = SQLUtils.convertValueToSQL(dataSource, fkAttribute, pair.getValue());
                     if (literal.startsWith(typed)) {
                         proposals.add(new ContentProposal(literal, literal + "  " + pair.getLabel(), pair.getLabel()));
@@ -914,7 +911,8 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
         });
         job.schedule();
         UIUtils.waitJobCompletion(job);
-        return proposals.toArray(new IContentProposal[0]);
+        // No values (not a dictionary column): fall back to the standard column/keyword proposals
+        return proposals.isEmpty() ? null : proposals.toArray(new IContentProposal[0]);
     }
 
     @Override

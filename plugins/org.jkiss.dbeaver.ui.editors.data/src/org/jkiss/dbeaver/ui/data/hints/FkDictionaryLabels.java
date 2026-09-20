@@ -25,6 +25,7 @@ import org.jkiss.dbeaver.model.data.DBDLabelValuePair;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.runtime.VoidProgressMonitor;
 import org.jkiss.dbeaver.model.struct.*;
+import org.jkiss.utils.CommonUtils;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -115,18 +116,32 @@ public final class FkDictionaryLabels {
     public static List<DBDLabelValuePair> listValues(
         @NotNull DBRProgressMonitor monitor,
         @NotNull DBDAttributeBinding attr,
+        @Nullable String search,
         int maxResults
     ) throws Exception {
+        DBSEntityAttribute keyColumn;
+        DBSDictionary dictionary;
         DBSEntityAssociation association = getAssociation(attr);
-        if (association == null) {
+        if (association != null) {
+            // Dictionary FK: values of the referenced table
+            keyColumn = DBUtils.getReferenceAttribute(monitor, association, attr.getEntityAttribute(), false);
+            DBSEntityConstraint refConstraint = association.getReferencedConstraint();
+            dictionary = refConstraint != null && refConstraint.getParentObject() instanceof DBSDictionary d ? d : null;
+        } else {
+            // dbeaver-mm K8: plain column - its own distinct values (e.g. "label =")
+            keyColumn = attr.getEntityAttribute();
+            dictionary = keyColumn != null && keyColumn.getParentObject() instanceof DBSDictionary d ? d : null;
+        }
+        if (keyColumn == null || dictionary == null || !dictionary.supportsDictionaryEnumeration()) {
             return Collections.emptyList();
         }
-        DBSEntityAttribute refColumn = DBUtils.getReferenceAttribute(monitor, association, attr.getEntityAttribute(), false);
-        DBSEntityConstraint refConstraint = association.getReferencedConstraint();
-        if (refColumn == null || refConstraint == null || !(refConstraint.getParentObject() instanceof DBSDictionary dictionary)) {
-            return Collections.emptyList();
-        }
-        return dictionary.getDictionaryEnumeration(monitor, refColumn, null, null, null, false, true, true, 0, maxResults);
+        // Numbers are matched against the value, text against the description column
+        boolean numeric = search != null && search.matches("-?\\d+(\\.\\d+)?");
+        return dictionary.getDictionaryEnumeration(
+            monitor, keyColumn,
+            numeric ? search : null,
+            numeric || CommonUtils.isEmpty(search) ? null : search,
+            null, true, true, true, 0, maxResults);
     }
 
     /**

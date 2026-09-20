@@ -105,6 +105,12 @@ public class InlineFkStartup implements IStartup {
 
     private void onKeyDown(SQLEditorBase editor, Event e) {
         char c = e.character;
+        if (c == ' ') {
+            // dbeaver-mm K7: "WHERE " / "AND " / "OR " opens the standard completion list (columns of
+            // the FROM tables with their info panel), filtered as you type. Nothing new is queried.
+            e.display.asyncExec(() -> openColumnAssistAfterKeyword(editor));
+            return;
+        }
         if (c != '=' && c != '(') {
             return;
         }
@@ -133,6 +139,48 @@ public class InlineFkStartup implements IStartup {
                 AutoConnectionSelector.resolveThen(editor, ref, context -> FkPickerPopup.trigger(viewer, context, ref));
             } catch (Throwable ex) {
                 log.debug("Inline FK auto-trigger evaluation failed", ex);
+            }
+        });
+    }
+
+    private static final java.util.Set<String> COLUMN_KEYWORDS = java.util.Set.of("where", "and", "or");
+
+    private static void openColumnAssistAfterKeyword(SQLEditorBase editor) {
+        ITextViewer viewer = editor.getTextViewer();
+        if (!(viewer instanceof org.eclipse.jface.text.ITextOperationTarget target) || viewer.getDocument() == null) {
+            return;
+        }
+        StyledText widget = viewer.getTextWidget();
+        if (widget == null || widget.isDisposed() || !widget.isFocusControl()) {
+            return;
+        }
+        int caret = viewer.getSelectedRange().x;
+        String before = viewer.getDocument().get().substring(0, caret);
+        if (!before.endsWith(" ")) {
+            return;
+        }
+        String trimmed = before.stripTrailing();
+        int start = trimmed.length();
+        while (start > 0 && Character.isLetter(trimmed.charAt(start - 1))) {
+            start--;
+        }
+        String word = trimmed.substring(start).toLowerCase(java.util.Locale.ROOT);
+        if (!COLUMN_KEYWORDS.contains(word)) {
+            return;
+        }
+        // dbeaver-mm K9: switch to the connection holding the statement's tables first, so the
+        // proposals are that table's columns even when it lives in another connection
+        SQLScriptElement stmt = editor.extractQueryAtPos(caret);
+        java.util.List<String> tables = new java.util.ArrayList<>();
+        if (stmt != null) {
+            for (FkColumnRef.TableRef t : org.jkiss.dbeaver.ui.inlinefkpicker.core.SqlCaretAnalyzer.tablesOf(stmt.getText())) {
+                tables.add(t.getName());
+            }
+        }
+        AutoConnectionSelector.resolveTables(editor, tables, context -> {
+            if (!widget.isDisposed() && widget.isFocusControl()
+                && target.canDoOperation(org.eclipse.jface.text.source.ISourceViewer.CONTENTASSIST_PROPOSALS)) {
+                target.doOperation(org.eclipse.jface.text.source.ISourceViewer.CONTENTASSIST_PROPOSALS);
             }
         });
     }

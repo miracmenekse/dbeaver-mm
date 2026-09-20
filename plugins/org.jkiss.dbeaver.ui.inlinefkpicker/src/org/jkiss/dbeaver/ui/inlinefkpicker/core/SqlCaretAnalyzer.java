@@ -151,6 +151,11 @@ public final class SqlCaretAnalyzer {
      * Parse table references from a statement: everything named after FROM/JOIN/UPDATE/INTO,
      * with an optional alias. ON/USING conditions and other keywords are skipped.
      */
+    /** dbeaver-mm K9: FROM/UPDATE/JOIN tables of a statement, for connection auto-selection. */
+    public static List<FkColumnRef.TableRef> tablesOf(String stmt) {
+        return parseTables(stmt);
+    }
+
     static List<FkColumnRef.TableRef> parseTables(String stmt) {
         List<FkColumnRef.TableRef> refs = new ArrayList<>();
         List<String> tokens = tokenize(stmt);
