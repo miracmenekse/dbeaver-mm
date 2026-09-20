@@ -179,6 +179,53 @@ public final class InlineFkService {
         return result;
     }
 
+    /** dbeaver-mm K11: a table of one of the candidate connections. */
+    public record TableRef(@NotNull DBPDataSourceContainer container, @NotNull String tableName) {
+    }
+
+    /**
+     * dbeaver-mm K11: table names of the connected candidate connections that start with / contain
+     * {@code filter}. Only cached metadata (table lists) is used - no data is read.
+     */
+    @NotNull
+    public static List<TableRef> listTables(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull List<DBPDataSourceContainer> candidates,
+        @Nullable String filter,
+        int maxResults
+    ) {
+        String pattern = filter == null ? "" : filter.toLowerCase(java.util.Locale.ROOT);
+        List<TableRef> result = new ArrayList<>();
+        for (DBPDataSourceContainer container : candidates) {
+            if (!container.isConnected() || result.size() >= maxResults) {
+                continue;
+            }
+            DBCExecutionContext context = getDefaultContext(container);
+            if (context == null) {
+                continue;
+            }
+            try {
+                DBSObjectContainer objectContainer = getActiveContainer(context);
+                if (objectContainer == null) {
+                    continue;
+                }
+                for (DBSObject child : CommonUtils.safeCollection(objectContainer.getChildren(monitor))) {
+                    if (!(child instanceof DBSEntity) || result.size() >= maxResults) {
+                        continue;
+                    }
+                    String name = child.getName();
+                    if (pattern.isEmpty() || name.toLowerCase(java.util.Locale.ROOT).contains(pattern)) {
+                        result.add(new TableRef(container, name));
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Failed to list tables of " + container.getName(), e);
+            }
+        }
+        result.sort(java.util.Comparator.comparing(TableRef::tableName, String.CASE_INSENSITIVE_ORDER));
+        return result;
+    }
+
     @Nullable
     public static DBCExecutionContext getDefaultContext(@NotNull DBPDataSourceContainer container) {
         return DBUtils.getDefaultContext(container.getDataSource(), false);

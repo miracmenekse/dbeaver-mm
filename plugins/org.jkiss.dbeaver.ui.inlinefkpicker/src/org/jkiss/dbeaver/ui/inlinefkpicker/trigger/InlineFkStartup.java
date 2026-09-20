@@ -144,6 +144,8 @@ public class InlineFkStartup implements IStartup {
     }
 
     private static final java.util.Set<String> COLUMN_KEYWORDS = java.util.Set.of("where", "and", "or");
+    // dbeaver-mm K11: after these the table picker (all candidate connections) opens
+    private static final java.util.Set<String> TABLE_KEYWORDS = java.util.Set.of("from", "join", "into", "update");
 
     private static void openColumnAssistAfterKeyword(SQLEditorBase editor) {
         ITextViewer viewer = editor.getTextViewer();
@@ -165,6 +167,14 @@ public class InlineFkStartup implements IStartup {
             start--;
         }
         String word = trimmed.substring(start).toLowerCase(java.util.Locale.ROOT);
+        if (TABLE_KEYWORDS.contains(word)) {
+            // dbeaver-mm K11: tables of every candidate connection, not just the editor's own
+            org.jkiss.dbeaver.ui.inlinefkpicker.ui.TablePickerPopup.trigger(
+                viewer,
+                AutoConnectionSelector.candidateConnections(editor),
+                (container, table) -> AutoConnectionSelector.switchTo(editor, container));
+            return;
+        }
         if (!COLUMN_KEYWORDS.contains(word)) {
             return;
         }

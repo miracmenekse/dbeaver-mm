@@ -73,8 +73,7 @@ final class AutoConnectionSelector {
             @Override
             protected IStatus run(DBRProgressMonitor monitor) {
                 // dbeaver-mm K10: the editor's connections bar wins; empty means the tagged ones
-                List<DBPDataSourceContainer> pool = org.jkiss.dbeaver.ui.editors.sql.SqlConnectionsBar.candidates(
-                    editor instanceof SQLEditor sqlEditor ? sqlEditor.getMmAutoConnectionIds() : java.util.Set.of());
+                List<DBPDataSourceContainer> pool = candidateConnections(editor);
                 List<DBPDataSourceContainer> candidates = InlineFkService.findConnectionsWithTables(monitor, tables, pool);
                 UIUtils.asyncExec(() -> choose(editor, key, candidates, then));
                 return Status.OK_STATUS;
@@ -135,6 +134,21 @@ final class AutoConnectionSelector {
     @org.jkiss.code.Nullable
     private static DBPDataSourceContainer currentContainer(@NotNull SQLEditorBase editor) {
         return editor instanceof org.jkiss.dbeaver.model.DBPDataSourceContainerProvider p ? p.getDataSourceContainer() : null;
+    }
+
+    /** dbeaver-mm K11: connections this editor may use - the bar's selection, else the tagged ones. */
+    @NotNull
+    static List<DBPDataSourceContainer> candidateConnections(@NotNull SQLEditorBase editor) {
+        return org.jkiss.dbeaver.ui.editors.sql.SqlConnectionsBar.candidates(
+            editor instanceof SQLEditor sqlEditor ? sqlEditor.getMmAutoConnectionIds() : Set.of());
+    }
+
+    /** dbeaver-mm K11: switch the editor to {@code container} (no-op when it is already there). */
+    static void switchTo(@NotNull SQLEditorBase editor, @NotNull DBPDataSourceContainer container) {
+        if (container != currentContainer(editor) && editor instanceof SQLEditor sqlEditor) {
+            log.debug("SQL auto connection: " + container.getName());
+            sqlEditor.setDataSourceContainer(container);
+        }
     }
 
     private static void use(

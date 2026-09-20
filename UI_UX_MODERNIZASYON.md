@@ -405,7 +405,9 @@ seçilir (`service_spec` → `name`). Test verisi: `cross_connection_fk_setup.sq
   tablo adları (veri okunmaz), birden çok eşleşmede imleçte seçim menüsü.
 - **K10:** SQL editörünün üstünde "Connections: …" çubuğu; filtrelenebilir, çoklu seçimli bağlantı
   listesi (`SqlConnectionsBar`). Menü satırına konulamaz: GTK menü çubuğu kontrol barındırmaz.
-- **Açık:** Başka bağlantıdaki tablo adı henüz otomatik tamamlanmıyor (elle yazılmalı).
+- **K11:** `from ` / `join ` / `into ` / `update ` sonrası tablo seçici açılır: aday bağlantıların
+  tabloları "Tablo | Bağlantı" olarak listelenir, yazdıkça filtrelenir. Seçilen tablonun adı yazılır
+  ve editör o bağlantıya geçer. Yalnızca **bağlı** bağlantıların önbellekteki tablo listesi okunur.
 
 ---
 
