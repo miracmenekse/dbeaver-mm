@@ -18,6 +18,7 @@ package org.jkiss.dbeaver.ui.data.hints;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
@@ -101,9 +102,25 @@ class FkValuePickerPopup {
 
         search(null);
         shell.pack();
-        shell.setLocation(location);
+        placeOnScreen(parent, location);
         shell.open();
         searchText.setFocus();
+    }
+
+    /**
+     * dbeaver-mm: keep the whole popup on the monitor - shrink it when it is larger than the
+     * screen, flip it above the cell when it does not fit below, then clamp the corner. Without
+     * this the list opens half outside the screen near the bottom row and cannot be used.
+     */
+    private void placeOnScreen(@NotNull Control parent, @NotNull Point location) {
+        Rectangle screen = parent.getMonitor().getClientArea();
+        Point size = shell.getSize();
+        size.x = Math.min(size.x, screen.width);
+        size.y = Math.min(size.y, screen.height);
+        shell.setSize(size);
+        int x = Math.min(location.x, screen.x + screen.width - size.x);
+        int y = location.y + size.y > screen.y + screen.height ? location.y - size.y : location.y;
+        shell.setLocation(Math.max(screen.x, x), Math.max(screen.y, y));
     }
 
     private void onKey(Event e) {

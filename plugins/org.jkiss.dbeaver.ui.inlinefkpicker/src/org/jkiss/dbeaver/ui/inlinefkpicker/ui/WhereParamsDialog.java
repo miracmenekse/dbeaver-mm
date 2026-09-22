@@ -336,7 +336,7 @@ public class WhereParamsDialog extends BaseDialog {
                     InlineFkService.ResolvedColumn target = InlineFkService.resolveTarget(monitor, context, ref);
                     if (target != null) {
                         rows = InlineFkService.enumerate(
-                            monitor, context, target.getEntity(), target.getColumn(),
+                            monitor, target.getContext(), target.getEntity(), target.getColumn(),
                             filter, InlineFkService.DEFAULT_MAX_RESULTS);
                     }
                 } catch (Throwable e) {

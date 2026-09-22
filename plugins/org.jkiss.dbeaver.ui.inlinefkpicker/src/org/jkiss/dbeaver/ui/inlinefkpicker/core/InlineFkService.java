@@ -38,7 +38,10 @@ import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.sql.SQLUtils;
 import org.jkiss.dbeaver.model.struct.DBSDictionary;
 import org.jkiss.dbeaver.model.struct.DBSEntity;
+import org.jkiss.dbeaver.model.struct.DBSEntityAssociation;
 import org.jkiss.dbeaver.model.struct.DBSEntityAttribute;
+import org.jkiss.dbeaver.model.struct.DBSEntityConstraint;
+import org.jkiss.dbeaver.model.struct.DBSEntityReferrer;
 import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.model.struct.DBSObjectContainer;
 import org.jkiss.dbeaver.model.struct.rdb.DBSCatalog;
@@ -282,14 +285,19 @@ public final class InlineFkService {
         return DBUtils.getDefaultContext(container.getDataSource(), false);
     }
 
-    /** Resolved (table, column) pair for the value being edited. */
+    /**
+     * Resolved (table, column) pair the values are listed from, with the execution context they
+     * must be read through - for a cross-connection virtual FK that is another connection's.
+     */
     public static final class ResolvedColumn {
         private final DBSEntity entity;
         private final DBSEntityAttribute column;
+        private final DBCExecutionContext context;
 
-        public ResolvedColumn(DBSEntity entity, DBSEntityAttribute column) {
+        public ResolvedColumn(DBSEntity entity, DBSEntityAttribute column, DBCExecutionContext context) {
             this.entity = entity;
             this.column = column;
+            this.context = context;
         }
 
         public DBSEntity getEntity() {
@@ -298,6 +306,11 @@ public final class InlineFkService {
 
         public DBSEntityAttribute getColumn() {
             return column;
+        }
+
+        /** Context of {@link #getEntity()}'s connection - always use it to read the values. */
+        public DBCExecutionContext getContext() {
+            return context;
         }
     }
 
@@ -333,8 +346,48 @@ public final class InlineFkService {
             }
             DBSEntityAttribute column = findColumn(monitor, entity, ref.getColumnName());
             if (column != null) {
-                return new ResolvedColumn(entity, column);
+                ResolvedColumn referenced = followForeignKey(monitor, column);
+                return referenced != null ? referenced : new ResolvedColumn(entity, column, context);
             }
+        }
+        return null;
+    }
+
+    /**
+     * dbeaver-mm: if {@code column} is a foreign key (physical or virtual), the referenced table and
+     * its key column, read through the referenced connection's context. That is what the user wants
+     * to see behind {@code where t.service_id = }: the rows of the referenced table - including when
+     * a virtual FK points into another connection. Null when the column is not a foreign key.
+     */
+    @Nullable
+    private static ResolvedColumn followForeignKey(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBSEntityAttribute column
+    ) {
+        try {
+            for (DBSEntityReferrer referrer : DBUtils.getAttributeReferrers(monitor, column, true)) {
+                if (!(referrer instanceof DBSEntityAssociation association)) {
+                    continue;
+                }
+                DBSEntityConstraint refConstraint = association.getReferencedConstraint();
+                if (refConstraint == null || !(refConstraint.getParentObject() instanceof DBSEntity refEntity)) {
+                    continue;
+                }
+                DBSEntityAttribute refColumn = DBUtils.getReferenceAttribute(monitor, association, column, false);
+                if (refColumn == null) {
+                    continue;
+                }
+                DBPDataSource refDataSource = refEntity.getDataSource();
+                DBCExecutionContext refContext = refDataSource == null
+                    ? null : DBUtils.getDefaultContext(refDataSource, false);
+                if (refContext == null || !refContext.isConnected()) {
+                    // The referenced connection is closed - nothing to list, and we never open it here.
+                    return null;
+                }
+                return new ResolvedColumn(refEntity, refColumn, refContext);
+            }
+        } catch (Throwable e) {
+            log.debug("Failed to follow FK of column '" + column.getName() + "'", e);
         }
         return null;
     }

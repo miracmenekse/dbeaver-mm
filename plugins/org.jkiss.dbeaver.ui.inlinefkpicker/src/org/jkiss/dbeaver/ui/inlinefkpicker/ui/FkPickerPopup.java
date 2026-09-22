@@ -132,14 +132,16 @@ public final class FkPickerPopup {
                     }
                     final DBSEntity entity = target.getEntity();
                     final DBSEntityAttribute key = target.getColumn();
+                    // The values come from the referenced table, which may live in another connection
+                    final DBCExecutionContext valueContext = target.getContext();
                     List<FkRow> initialRows = InlineFkService.enumerate(
-                        monitor, context, entity, key, ref.getPrefix(), InlineFkService.DEFAULT_MAX_RESULTS);
+                        monitor, valueContext, entity, key, ref.getPrefix(), InlineFkService.DEFAULT_MAX_RESULTS);
                     UIUtils.asyncExec(() -> {
                         if (styledText.isDisposed()) {
                             return;
                         }
                         closeCurrent();
-                        new FkPickerPopup(viewer, context, entity, key, ref, initialRows).open();
+                        new FkPickerPopup(viewer, valueContext, entity, key, ref, initialRows).open();
                     });
                 } catch (Throwable e) {
                     log.debug("Inline FK picker trigger failed", e);
