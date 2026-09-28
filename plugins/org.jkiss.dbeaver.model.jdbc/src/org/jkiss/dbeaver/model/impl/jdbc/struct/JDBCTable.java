@@ -815,6 +815,10 @@ public abstract class JDBCTable<DATASOURCE extends DBPDataSource, CONTAINER exte
         final SQLExpressionFormatter caseInsensitiveFormatter = caseInsensitiveSearch
             ? dialect.getCaseInsensitiveExpressionFormatter(DBCLogicalOperator.LIKE)
             : null;
+        // dbeaver-mm: accent-blind description search ("sisman" finds "Şişman") where TRANSLATE exists
+        // ponytail: PostgreSQL and Oracle only; add other dialects with TRANSLATE when needed
+        String dialectId = CommonUtils.notEmpty(dialect.getDialectId()).toLowerCase(Locale.ROOT);
+        final boolean foldAccents = caseInsensitiveSearch && (dialectId.contains("postgre") || dialectId.contains("oracle"));
         if (keyValue != null) {
             if (hasCond) query.append(" AND (");
             {
@@ -846,7 +850,10 @@ public abstract class JDBCTable<DATASOURCE extends DBPDataSource, CONTAINER exte
                     if (hasCondition) {
                         query.append(" OR ");
                     }
-                    if (caseInsensitiveSearch && caseInsensitiveFormatter != null) {
+                    if (foldAccents) {
+                        query.append("TRANSLATE(LOWER(").append(identifier).append("), '")
+                            .append(DBVUtils.ACCENTED).append("', '").append(DBVUtils.UNACCENTED).append("') LIKE ?");
+                    } else if (caseInsensitiveSearch && caseInsensitiveFormatter != null) {
                         query.append(caseInsensitiveFormatter.format(identifier, "?"));
                     } else {
                         query.append(identifier).append(" LIKE ?");
@@ -898,7 +905,7 @@ public abstract class JDBCTable<DATASOURCE extends DBPDataSource, CONTAINER exte
                         if (descAttr.getDataKind() == DBPDataKind.STRING) {
                             final DBDValueHandler valueHandler = DBUtils.findValueHandler(session, descAttr);
                             valueHandler.bindValueObject(session, dbStat, descAttr, paramPos++,
-                                descAttr.getDataKind() == DBPDataKind.STRING ? "%" + searchText + "%" : keyValue);
+                                "%" + (foldAccents ? DBVUtils.foldForSearch(searchText) : searchText) + "%");
                         }
                     }
                 }

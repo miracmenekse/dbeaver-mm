@@ -207,6 +207,29 @@ public abstract class DBVUtils {
             .toList();
     }
 
+    /** dbeaver-mm: accented letters folded by {@link #foldForSearch}, and their plain counterparts */
+    public static final String ACCENTED = "âàäáçğıîöşûüñ";
+    public static final String UNACCENTED = "aaaacgiiosuun";
+
+    /**
+     * dbeaver-mm K12: fold a string for searching - lower case (Locale.ROOT, so no Turkish I
+     * surprise) and accented letters reduced to their base, so "sisman" finds "Şişman".
+     */
+    @NotNull
+    public static String foldForSearch(@Nullable String text) {
+        if (text == null) {
+            return "";
+        }
+        String lower = text.toLowerCase(Locale.ROOT);
+        StringBuilder sb = new StringBuilder(lower.length());
+        for (int i = 0; i < lower.length(); i++) {
+            char c = lower.charAt(i);
+            int idx = ACCENTED.indexOf(c);
+            sb.append(idx < 0 ? c : UNACCENTED.charAt(idx));
+        }
+        return sb.toString();
+    }
+
     @Nullable
     public static String getDictionaryDescriptionColumns(
         @NotNull DBRProgressMonitor monitor,
@@ -274,6 +297,10 @@ public abstract class DBVUtils {
                         // The last one column is the `count(*)`
                         keyCount = CommonUtils.toLong(descValue);
                         break;
+                    }
+                    // dbeaver-mm: an empty description column is left out, not shown as [NULL]
+                    if (DBUtils.isNullValue(descValue)) {
+                        continue;
                     }
                     if (!keyLabel2.isEmpty()) {
                         keyLabel2.append(columnDivider);

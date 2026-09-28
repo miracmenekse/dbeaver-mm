@@ -27,6 +27,8 @@ import org.jkiss.dbeaver.model.runtime.VoidProgressMonitor;
 import org.jkiss.dbeaver.model.struct.*;
 import org.jkiss.utils.CommonUtils;
 
+import org.jkiss.dbeaver.model.virtual.DBVUtils;
+
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -108,22 +110,11 @@ public final class FkDictionaryLabels {
     }
 
     /**
-     * dbeaver-mm K12: fold a string for searching - lower case (Locale.ROOT, so no Turkish I
-     * surprise) and accented letters reduced to their base, so "sisman" finds "Şişman".
+     * dbeaver-mm K12: see {@link DBVUtils#foldForSearch}.
      */
     @NotNull
     public static String foldForSearch(@Nullable String text) {
-        if (text == null) {
-            return "";
-        }
-        String lower = text.toLowerCase(Locale.ROOT);
-        StringBuilder sb = new StringBuilder(lower.length());
-        for (int i = 0; i < lower.length(); i++) {
-            char c = lower.charAt(i);
-            int idx = "âàäáçğıîöşûüñ".indexOf(c);
-            sb.append(idx < 0 ? c : "aaaacgiiosuun".charAt(idx));
-        }
-        return sb.toString();
+        return DBVUtils.foldForSearch(text);
     }
 
     /**
