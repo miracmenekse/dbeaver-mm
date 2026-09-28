@@ -99,8 +99,8 @@ import java.util.regex.Pattern;
  */
 class ResultSetFilterPanel extends Composite implements IContentProposalProvider, DBPAdaptable
 {
-    /** dbeaver-mm K2: {@code column =} (optionally a typed value prefix) right before the caret */
-    static final Pattern FK_VALUE_POSITION = Pattern.compile("([\\w.\"`]+)\\s*=\\s*([^\\s=]*)$");
+    /** dbeaver-mm K2: {@code column =} (optionally a typed value; spaces allowed after an open quote) right before the caret */
+    static final Pattern FK_VALUE_POSITION = Pattern.compile("([\\w.\"`]+)\\s*=\\s*('[^']*|[^\\s=']*)$");
 
     private static final Log log = Log.getLog(ResultSetFilterPanel.class);
 
@@ -313,7 +313,7 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
             // dbeaver-mm K2: '=' opens the FK value list
             filtersProposalAdapter.setAutoActivationCharacters(
                 (new String(filtersProposalAdapter.getAutoActivationCharacters()) + "=").toCharArray());
-            // dbeaver-mm K2: space closes proposals, but "column = " is still a value position
+            // dbeaver-mm K2: space closes proposals, but "column = " and "column = 'two words" are still a value position
             filtersText.addModifyListener(e -> UIUtils.asyncExec(() -> {
                 if (filtersText.isDisposed() || filtersProposalAdapter.isProposalPopupOpen()) {
                     return;
@@ -321,7 +321,7 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
                 String text = filtersText.getText();
                 int caret = filtersText.getCaretOffset();
                 if (caret > 1 && caret <= text.length() && text.charAt(caret - 1) == ' '
-                    && text.substring(0, caret).stripTrailing().endsWith("=")) {
+                    && FK_VALUE_POSITION.matcher(text.substring(0, caret)).find()) {
                     filtersProposalAdapter.openProposalPopup();
                 }
             }));
