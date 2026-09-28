@@ -205,7 +205,7 @@ public final class InlineFkService {
      * dbeaver-mm K13: short code of a connection, typed in SQL as {@code <code>.} to list only that
      * connection's tables. Stored with the connection (data-sources.json "tags").
      */
-    public static final String CODE_TAG = "mm.code";
+    public static final String CODE_TAG = org.jkiss.dbeaver.ui.editors.sql.SqlConnectionsBar.CODE_TAG;
 
     @Nullable
     public static String getShortCode(@NotNull DBPDataSourceContainer container) {

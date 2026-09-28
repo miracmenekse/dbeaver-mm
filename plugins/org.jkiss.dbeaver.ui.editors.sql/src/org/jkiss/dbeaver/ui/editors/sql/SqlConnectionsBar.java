@@ -47,6 +47,9 @@ public class SqlConnectionsBar {
     /** Same tag as the navigator's "Use for SQL auto connection" toggle. */
     public static final String AUTO_CONNECT_TAG = "mm.auto-connect";
 
+    /** dbeaver-mm K13: connection short code tag (set in the navigator, typed in SQL as {@code <code>.}). */
+    public static final String CODE_TAG = "mm.code";
+
     private static final int POPUP_WIDTH = 280;
     private static final int POPUP_HEIGHT = 240;
 
@@ -81,11 +84,18 @@ public class SqlConnectionsBar {
         List<String> names = new ArrayList<>();
         for (DBPDataSourceContainer container : projectConnections()) {
             if (selectedIds.contains(container.getId())) {
-                names.add(container.getName());
+                names.add(nameWithCode(container));
             }
         }
         button.setText(names.isEmpty() ? "Connections: tagged ▾" : "Connections: " + String.join(", ", names) + " ▾");
         button.getParent().getParent().layout(true, true);
+    }
+
+    /** dbeaver-mm: {@code Domain Config Tenant 3 [DC_T3]}, or just the name without a short code */
+    @NotNull
+    private static String nameWithCode(@NotNull DBPDataSourceContainer container) {
+        String code = container.getTags().get(CODE_TAG);
+        return CommonUtils.isEmpty(code) ? container.getName() : container.getName() + " [" + code + "]";
     }
 
     @NotNull
@@ -115,11 +125,11 @@ public class SqlConnectionsBar {
             String pattern = filter.getText().toLowerCase(Locale.ROOT);
             table.removeAll();
             for (DBPDataSourceContainer container : projectConnections()) {
-                if (!pattern.isEmpty() && !container.getName().toLowerCase(Locale.ROOT).contains(pattern)) {
+                if (!pattern.isEmpty() && !nameWithCode(container).toLowerCase(Locale.ROOT).contains(pattern)) {
                     continue;
                 }
                 TableItem item = new TableItem(table, SWT.NONE);
-                item.setText(container.getName()
+                item.setText(nameWithCode(container)
                     + ("true".equals(container.getTags().get(AUTO_CONNECT_TAG)) ? "  (tagged)" : ""));
                 item.setData(container);
                 item.setChecked(selectedIds.contains(container.getId()));
