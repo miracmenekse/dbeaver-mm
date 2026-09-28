@@ -898,16 +898,18 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
         List<IContentProposal> proposals = new ArrayList<>();
         SystemJob job = new SystemJob("Read FK values", monitor -> {
             try {
-                // ponytail: first 50 values, filtered by the typed value prefix; add a label search if dictionaries get big
-                String typedFolded = FkDictionaryLabels.foldForSearch(typed);
-                for (DBDLabelValuePair pair : FkDictionaryLabels.listValues(monitor, fkAttribute, null, 50)) {
+                // dbeaver-mm: search in the database, not in the first 50 rows ("deac" must find DEACTIVATION)
+                String search = typed.replaceAll("^['\"]|['\"]$", "");
+                String typedFolded = FkDictionaryLabels.foldForSearch(search);
+                for (DBDLabelValuePair pair : FkDictionaryLabels.listValues(
+                    monitor, fkAttribute, search.isEmpty() ? null : search, 50)) {
                     String literal = SQLUtils.convertValueToSQL(dataSource, fkAttribute, pair.getValue());
                     String label = CommonUtils.notEmpty(pair.getLabel());
                     // dbeaver-mm K12: a plain column's label is its own value - don't show it twice
                     boolean sameAsValue = label.isEmpty() || label.equals(CommonUtils.toString(pair.getValue()));
                     String text = sameAsValue ? literal : literal + "  " + label;
                     // dbeaver-mm K12: match the typed text against value and label, accent/case blind
-                    if (typed.isEmpty()
+                    if (search.isEmpty()
                         || FkDictionaryLabels.foldForSearch(literal).contains(typedFolded)
                         || FkDictionaryLabels.foldForSearch(label).contains(typedFolded)) {
                         proposals.add(new ContentProposal(literal, text, sameAsValue ? null : label));
