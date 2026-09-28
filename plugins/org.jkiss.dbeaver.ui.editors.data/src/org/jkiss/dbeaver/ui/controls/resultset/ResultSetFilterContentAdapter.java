@@ -23,6 +23,8 @@ import org.jkiss.dbeaver.model.DBPDataSource;
 import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.ui.contentassist.StyledTextContentAdapter;
 
+import java.util.regex.Matcher;
+
 public class ResultSetFilterContentAdapter extends StyledTextContentAdapter {
 
     private final ResultSetViewer viewer;
@@ -38,7 +40,12 @@ public class ResultSetFilterContentAdapter extends StyledTextContentAdapter {
         Point selection = text.getSelection();
         int wordStartingPosition = -1;
 
-        if (selection.x == selection.y) {
+        // dbeaver-mm: a value picked after "column =" replaces the typed search text, which need not be its prefix
+        Matcher valuePosition = ResultSetFilterPanel.FK_VALUE_POSITION.matcher(text.getText().substring(0, selection.x));
+        if (selection.x == selection.y && valuePosition.find()) {
+            wordStartingPosition = valuePosition.start(2);
+            text.setSelection(wordStartingPosition, selection.x);
+        } else if (selection.x == selection.y) {
             // Try to replace text under cursor contents starts with
             String contentsUC = contents.toUpperCase().trim();
             DBPDataSource dataSource = viewer.getDataSource();

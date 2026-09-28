@@ -100,7 +100,7 @@ import java.util.regex.Pattern;
 class ResultSetFilterPanel extends Composite implements IContentProposalProvider, DBPAdaptable
 {
     /** dbeaver-mm K2: {@code column =} (optionally a typed value prefix) right before the caret */
-    private static final Pattern FK_VALUE_POSITION = Pattern.compile("([\\w.\"`]+)\\s*=\\s*([^\\s=]*)$");
+    static final Pattern FK_VALUE_POSITION = Pattern.compile("([\\w.\"`]+)\\s*=\\s*([^\\s=]*)$");
 
     private static final Log log = Log.getLog(ResultSetFilterPanel.class);
 
