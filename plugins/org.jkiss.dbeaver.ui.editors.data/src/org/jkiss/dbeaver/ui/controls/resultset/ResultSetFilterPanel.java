@@ -89,6 +89,7 @@ import org.jkiss.utils.CommonUtils;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -144,6 +145,8 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
 
     private final ToolBar filterToolbar;
     private ToolItem filtersClearButton;
+    /** dbeaver-mm K20: {@code column =} lists only the values present in the result */
+    private boolean resultValuesOnly;
     private ToolItem historyBackButton;
     private ToolItem historyForwardButton;
     private ToolItem openFindReplaceButton;
@@ -355,6 +358,20 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
             ));
             filtersCustomButton.setEnabled(true);
             filtersCustomButton.addSelectionListener(new CustomFilterListener(compactMode));
+
+            // dbeaver-mm K20: toggle "column =" proposals between the whole dictionary and the result's values
+            ToolItem resultValuesButton = new ToolItem(filterToolbar, SWT.CHECK | SWT.NO_FOCUS);
+            resultValuesButton.setImage(DBeaverIcons.getImage(UIIcon.FILTER_VALUE));
+            resultValuesButton.setToolTipText("Value list: only values in the result");
+            resultValuesButton.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
+                resultValuesOnly = resultValuesButton.getSelection();
+                String text = filtersText.getText();
+                int caret = filtersText.getCaretOffset();
+                if (caret <= text.length() && FK_VALUE_POSITION.matcher(text.substring(0, caret)).find()) {
+                    filtersText.setFocus();
+                    filtersProposalAdapter.openProposalPopup();
+                }
+            }));
 
             //UIUtils.createToolBarSeparator(filterToolbar, SWT.VERTICAL);
 
@@ -901,8 +918,9 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
                 // dbeaver-mm: search in the database, not in the first 50 rows ("deac" must find DEACTIVATION)
                 String search = typed.replaceAll("^['\"]|['\"]$", "");
                 String typedFolded = FkDictionaryLabels.foldForSearch(search);
-                for (DBDLabelValuePair pair : FkDictionaryLabels.listValues(
-                    monitor, fkAttribute, search.isEmpty() ? null : search, 50)) {
+                for (DBDLabelValuePair pair : resultValuesOnly && fkAttribute != null
+                    ? listResultValues(fkAttribute)
+                    : FkDictionaryLabels.listValues(monitor, fkAttribute, search.isEmpty() ? null : search, 50)) {
                     String literal = SQLUtils.convertValueToSQL(dataSource, fkAttribute, pair.getValue());
                     String label = CommonUtils.notEmpty(pair.getLabel());
                     // dbeaver-mm K12: a plain column's label is its own value - don't show it twice
@@ -923,6 +941,26 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
         UIUtils.waitJobCompletion(job);
         // No values (not a dictionary column): fall back to the standard column/keyword proposals
         return proposals.isEmpty() ? null : proposals.toArray(new IContentProposal[0]);
+    }
+
+    /**
+     * dbeaver-mm K20: distinct values of {@code attribute} in the fetched rows, with their dictionary labels.
+     */
+    @NotNull
+    private List<DBDLabelValuePair> listResultValues(@NotNull DBDAttributeBinding attribute) {
+        ResultSetModel model = viewer.getModel();
+        LinkedHashSet<Object> values = new LinkedHashSet<>();
+        for (ResultSetRow row : model.getAllRows()) {
+            Object value = model.getCellValue(attribute, row);
+            if (!DBUtils.isNullValue(value)) {
+                values.add(value);
+            }
+        }
+        List<DBDLabelValuePair> pairs = new ArrayList<>();
+        for (Object value : values) {
+            pairs.add(new DBDLabelValuePair(FkDictionaryLabels.getLabel(attribute, value), value));
+        }
+        return pairs;
     }
 
     @Override
