@@ -1,138 +1,180 @@
-# dbeaver-mm (Türkçe)
+# dbeaver-mm
 
-🇬🇧 [English README](README.md)
+🇬🇧 **[English README](README.md)**
 
-**dbeaver-mm**, [DBeaver Community](https://github.com/dbeaver/dbeaver)'nin, gün boyu normalize veritabanlarında
-sorgu yazan ve veri okuyan analistler için geliştirilmiş bir fork'udur.
+![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.1-green.svg)
+![Java](https://img.shields.io/badge/Java-21-orange.svg)
+![Based on](https://img.shields.io/badge/based%20on-DBeaver%20Community-lightgrey.svg)
 
-## Amaç
-
-Normalize bir şemada tablolar çoğunlukla ID taşır: `order_type_id = 2`, `service_id = 14`. Bu ID'nin ne anlama
-geldiğini bulmak için ya join yazmak ya da başka bir sekmede sözlük tablosunu açıp bakmak gerekir. Veriler birden
-fazla veritabanına dağılmışsa (örneğin test verisi bir bağlantıda, konfigürasyon başka bir bağlantıda) iş daha da
-zorlaşır.
-
-dbeaver-mm'in amacı iki şeydir:
-1. **ID'nin anlamını olduğu yerde göstermek.** Tabloda, filtrede ve SQL'de ID'nin yanında açıklaması görünür.
-2. **Değeri aramak yerine seçtirmek.** Nerede bir ID yazılacaksa orada aranabilir bir liste açılır.
-
-Tümü istemci tarafında, DBeaver'ın kendi modeli üzerine kuruludur: fiziksel FK'lar, sanal (virtual) FK'lar ve sanal
-modeldeki "açıklama kolonu" ayarı. Sunucu bileşeni, PRO özelliği ya da ayrı bir kural motoru yoktur. Koddaki fork
-değişiklikleri `// dbeaver-mm` yorumuyla işaretlidir.
+> **dbeaver-mm: her ID'nin anlamını gör, değeri yazmak yerine seç.**
 
 ---
 
-## Özellikler
+## 📌 Proje Hakkında ve Problem
 
-### 1. Veri tablosunda FK açıklamaları
+Normalize bir veritabanında kolonların çoğu ID taşır: `order_type_id = 2`, `service_id = 14`. Bir ID'nin ne anlama
+geldiğini öğrenmek için analistin ya join yazması ya da sözlük tablosunu başka bir sekmede açması gerekir. Bir değere
+göre filtrelemek ya da sorgu yazmak için ID'yi başka bir yerde bulup elle yazar. Veri birden fazla bağlantıya
+dağılmışsa (örneğin test verisi bir veritabanında, konfigürasyon başka birinde) iş daha da zorlaşır. Standart DBeaver
+referans verilen değeri yalnızca ayrı editörlerde gösterebilir ve SQL editörü aynı anda tek bir bağlantıya bağlıdır.
 
-- **Amaç:** Sonuç tablosunda ID'nin ne olduğunu join yazmadan görmek.
-- **Arayüz:** FK kolonundaki hücrede değerin yanında açıklama çıkar: `2 | MAIN_ORDER`. Açıklama gri ipucu rengindedir.
-  Başka bir bağlantıdaki tabloya giden FK'larda ise **turkuaz** renktedir. FK kolonunun başlığında, sıralama ve
-  filtre oklarının solunda bir **"…" butonu** bulunur.
-- **Nasıl çalışır:** Kolonun FK'sı DBeaver metadata'sından bulunur. Referans verilen tablo bir sözlükse açıklamalar
-  DBeaver'ın sözlük sorgusuyla çekilir ve önbelleğe alınır. Metadata henüz yüklenmemişse boş sonuç önbelleğe
-  alınmaz, böylece metadata gelince etiketler kendiliğinden görünür. "…" butonu referans tablonun kolonlarını
-  listeler. Seçilen kolon, o tablonun açıklama kolonu olarak sanal modele kalıcı yazılır.
-- **Çıktı:** Her FK hücresi `id | açıklama` biçiminde görünür. Seçilen açıklama kolonu kalıcıdır ve filtre kutusu ile
-  SQL seçicisinde de aynı kolon kullanılır.
-- **Bilinen sınır:** Seçim referans tablo başına saklanır. Aynı tabloya giden iki FK kolonu aynı açıklamayı kullanır.
+dbeaver-mm, [DBeaver Community](https://github.com/dbeaver/dbeaver)'nin bir fork'udur. ID'nin anlamını ID'nin
+göründüğü yerde (tablo, filtre kutusu, SQL editörü) gösterir ve ID yazılması gereken her yerde aranabilir bir seçici
+açar. Bunların hepsi bağlantılar arasında da çalışır. Her şey istemci tarafında, DBeaver'ın kendi modeli üzerine
+kuruludur: fiziksel FK'lar, sanal (virtual) FK'lar ve sanal modeldeki açıklama kolonu. Sunucu bileşeni, PRO özelliği
+ya da ayrı bir kural motoru gerekmez. Böylece fork, upstream DBeaver'ın üzerinde ince bir katman olarak kalır.
 
-### 2. Bağlantılar arası FK
+## ✨ Temel Özellikler
 
-- **Amaç:** Veri bir bağlantıda, sözlük başka bir bağlantıda olduğunda da açıklamayı görmek.
-- **Nasıl çalışır:** DBeaver'ın bağlantılar arası sanal FK özelliği kullanılır
-  (ör. `mm_test_db.bsn_flow_spec.service_id → mm_config_db.service_spec`). Açıklama diğer bağlantı üzerinden okunur.
-- **Çıktı:** Turkuaz renkli etiket. Filtre kutusu ve SQL seçicisi de bu FK'ları izler.
+* **Tabloda FK açıklamaları:** FK hücresinde ID'nin yanında referans tablodaki açıklama görünür (`2 | Aktif`).
+  Kolon başlığındaki buton hangi kolonun açıklama olacağını seçer, seçim sanal modele kaydedilir. *Başka bir
+  bağlantıya* giden sanal FK üzerinden gelen açıklamalar turkuaz renktedir.
+* **Her yerde değer seçici:** Sözlük FK hücrelerinde aranabilir bir Değer / Açıklama penceresi açılır. Filtre
+  kutusuna `kolon =`, SQL editörüne `fk_kolon =` ya da `kolon IN (` yazınca değerler açıklamalarıyla listelenir.
+  Aramalar veritabanında yapılır, büyük/küçük harf ve Türkçe karakter farkı gözetilmez (`müşteri` araması
+  `Musteri` kaydını bulur).
+* **Çok bağlantılı SQL editörü:** Bağlantı çubuğu, betiğin hangi bağlantılarda çalışabileceğini seçer. Editör,
+  sorgudaki tabloların bulunduğu bağlantıya kendisi geçer. Tablo adları bağlantılar arasında tamamlanır
+  (`Tablo | Bağlantı`). Bağlantı kısa kodları (`<kod>.`) listeyi tek bir bağlantıyla sınırlar.
+* **Betik araçları:** Son SQL betikleri paneli son 10 betiği WHERE koşullarıyla birlikte kartlar halinde gösterir,
+  favoriler en üstte durur. Parametre formu (`Ctrl+Alt+P`) betikteki tüm `kolon = değer` koşullarını tek yerden
+  düzenletir.
+* **Daha kolay okuma:** Satırlar bir kolona göre iki renkle gruplanabilir. Gezgin tabloları doğrudan gösterir;
+  view, index ve diğer nesneler tek bir *Other objects* düğümünde toplanır.
 
-### 3. Hücre içi değer seçici
+## 🛠 Teknolojik Altyapı
 
-- **Amaç:** Tabloda veri düzenlerken ID'yi ezberden yazmamak.
-- **Arayüz:** Sözlük FK hücrelerinde bir açılır menü butonu bulunur. Tıklayınca küçük bir **Değer / Açıklama**
-  penceresi açılır ve bu pencerede arama yapılabilir.
-- **Nasıl çalışır:** Arama veritabanında yapılır (50 satır döner). Pencere ekrana sığmazsa küçülür, alt satırlarda
-  hücrenin üstüne açılır.
-- **Çıktı:** Seçilen değer normal bir hücre düzenlemesi olarak yazılır. Kaydetmek ve geri almak her zamanki gibi çalışır.
+* **Dil / platform:** Java 21 (`JavaSE-21`), Eclipse RCP / OSGi bundle'ları
+* **Arayüz:** SWT ve JFace. Veri tablosu DBeaver'ın `LightGrid` bileşenidir (`SpreadsheetPresentation`). SQL
+  düzenleme Eclipse metin altyapısını kullanır.
+* **Veri erişimi:** DBeaver modeli üzerinden JDBC (`DBSEntityAssociation`, sanal model `DBVEntity`, sözlük sorguları)
+* **Derleme:** Apache Maven + Eclipse Tycho. OSGi bağımlılıkları Eclipse P2 depolarından gelir.
+* **Temel:** DBeaver Community (`devel`) ve `project.deps` dosyasındaki repolar (`dbeaver-common`, `datadam-api`)
+* **AI / ML:** Fork'un özelliklerinde yok (upstream DBeaver'ın kendi AI özellikleri değişmeden duruyor)
 
-### 4. Satırları kolona göre gruplama
+## 🏗 Sistem Mimarisi ve Çalışma Mantığı
 
-- **Arayüz:** Sağ tık menüsündeki **"Group rows by &lt;kolon&gt;"** seçeneğiyle ya da kolon başlığındaki ikonla açılır.
-- **Nasıl çalışır:** Satırlar o kolona göre sıralanır. Her grup, iki mat rengin birbirini izlemesiyle boyanır.
-- **Çıktı:** Aynı değere sahip satırlar görsel bloklar halinde görünür.
+Fork, upstream'deki birkaç bundle'ı değiştirir ve iki yeni bundle ekler:
 
-### 5. Sonuç filtre kutusu
+| Bundle | Fork'taki rolü |
+|---|---|
+| `org.jkiss.dbeaver.ui.editors.data` | Tablodaki FK açıklamaları, başlık butonu, hücre içi seçici, filtre kutusu değerleri, satır gruplama |
+| `org.jkiss.dbeaver.ui.inlinefkpicker` (yeni) | SQL FK seçicisi, bağlantı çubuğu mantığı, otomatik bağlantı, tablo tamamlama, kısa kodlar, parametre formu |
+| `org.jkiss.dbeaver.ui.recentscripts` (yeni) | Son SQL betikleri paneli |
+| `org.jkiss.dbeaver.ui.editors.sql` | SQL editörünün üstündeki bağlantı çubuğu |
+| `org.jkiss.dbeaver.ui.navigator` | *Other objects* düğümü |
 
-- **Amaç:** `WHERE` filtresi yazarken değeri listeden seçmek.
-- **Arayüz:** Filtre kutusuna `kolon =` yazınca bir öneri listesi açılır. Listede değerler etiketleriyle birlikte yer
-  alır (`2 | MAIN_ORDER`). Filtre butonunun yanındaki bir onay butonu listeyi **sadece sonuçta geçen değerlerle**
-  sınırlar.
-- **Nasıl çalışır:** Sözlük FK'larında, bağlantılar arası FK'larda ve düz kolonlarda çalışır. Arama veritabanında
-  yapılır, yalnızca çekilen ilk satırlarda değil. Büyük/küçük harf ve Türkçe karakter farkı gözetilmez. Tırnak
-  içinde boşluk yazılsa da arama devam eder.
-- **Çıktı:** Seçilen değer, yazılan arama metninin yerine geçer ve filtre `kolon = değer` olarak tamamlanır.
+Upstream kodundaki fork değişiklikleri `// dbeaver-mm` yorumuyla işaretlidir.
 
-### 6. SQL editöründe satır içi FK seçici
+Bir FK açıklamasının hücreden ekrana yolu:
 
-- **Amaç:** SQL yazarken ID'yi başka yerden bakıp kopyalamamak.
-- **Arayüz:** `fk_kolon =` ya da `kolon IN (` yazınca imlecin altında küçük bir liste açılır. Listede referans
-  tablonun satırları ID ve etiketle birlikte görünür. Liste başlığındaki bir buton hangi kolonun etiket olarak
-  gösterileceğini seçer.
-- **Nasıl çalışır:** Hedef tablo, sorgunun `FROM` ve alias listesinden bulunur. Ardından kolonun fiziksel ya da sanal
-  FK'sı izlenir, gerekirse başka bir bağlantıya geçilir. Arama sunucu tarafında yapılır.
-- **Çıktı:** Seçilen ID imlecin olduğu yere yazılır.
+```mermaid
+flowchart LR
+    A[Hücre değeri] --> B{Kolonun fiziksel ya da<br/>sanal FK'sı var mı?}
+    B -- hayır --> Z[Düz değer]
+    B -- evet --> C[Referans tablo<br/>başka bağlantıda olabilir]
+    C --> D[Sanal modeldeki<br/>açıklama kolonu]
+    D --> E[O tablonun bağlantısında<br/>sözlük sorgusu]
+    E --> F[(Açıklama önbelleği)]
+    F --> G["2 | Aktif"<br/>bağlantılar arasıysa turkuaz]
+```
 
-### 7. Bağlantı çubuğu ve otomatik bağlantı
+Seçiciler aynı yolu kullanır. Filtre kutusu, hücre içi pencere ve SQL seçicisi, "referans tablonun bu metne uyan
+değerleri, açıklamalarıyla" isteğini ortak bir yardımcı üzerinden yapar (`FkDictionaryLabels`). Arama doğru
+bağlantıda bir veritabanı sorgusu olarak çalışır, sonuçlar harf ve aksan farkı gözetmeden eşleştirilir. SQL
+editöründe imleç çözümleyici (`SqlCaretAnalyzer`), kolonun tablosunu bulmak için sorgunun `FROM` listesini ve
+alias'larını okur. Bağlantı seçici sonra bu tabloyu aday bağlantılarda arar. Bunu yaparken yalnızca önbellekteki tablo
+listelerini okur, veriye dokunmaz.
 
-- **Amaç:** Tabloları farklı bağlantılara dağılmış bir ortamda doğru bağlantıyı elle seçmek zorunda kalmamak.
-- **Arayüz:** SQL editörünün üstünde bir **"Connections: …"** çubuğu bulunur. Çubuk filtrelenebilir ve birden fazla
-  bağlantı seçilebilir. Seçilen bağlantılar kısa kodlarıyla görünür. Gezginde bir bağlantıya
-  **"Use SQL auto connection"** etiketi de verilebilir.
-- **Nasıl çalışır:** Editör, yazılan sorgudaki tabloların hangi aday bağlantıda olduğuna bakar. Adaylar çubukta
-  seçilenlerdir, çubukta seçim yoksa etiketli bağlantılardır. Yalnızca açık bağlantıların önbellekteki tablo
-  adları okunur, veri okunmaz. Birden fazla eşleşme olursa imlecin yanında seçim sunulur. Seçim editör ve tablo
-  başına hatırlanır. Tablolar zaten mevcut bağlantıdaysa bağlantı değişmez.
-- **Çıktı:** Editör, sorgunun tablolarını içeren bağlantıya kendiliğinden geçer.
+Bulunamayan açıklama önbelleğe alınmaz. Metadata henüz yüklenmemişse hücre düz değeri gösterir, metadata gelince
+açıklama kendiliğinden görünür.
 
-### 8. Bağlantılar arası tablo tamamlama ve kısa kodlar
+## 🚀 Hızlı Başlangıç ve Kurulum
 
-- **Arayüz:** `from` / `join` / `into` / `update` yazınca aday bağlantıların tabloları `Tablo | Bağlantı` biçiminde
-  listelenir. Gezgindeki **"Set SQL short code…"** ile bir bağlantıya kısa kod verilebilir.
-- **Nasıl çalışır:** `<kod>.` yazınca yalnızca o bağlantının tabloları listelenir. Böylece tüm bağlantıları taramak
-  gerekmez. Bir tablo seçildiğinde yazılan önek silinir ve tablo adı yazılır. `WHERE` / `AND` / `OR` yazınca da o
-  tablonun kolonları önerilir, tablo başka bir bağlantıda olsa bile.
-- **Çıktı:** Tablo adı eklenir ve editör o tablonun bağlantısına geçer.
+**Gereksinimler:** JDK 21, Apache Maven 3.9+, Git, yaklaşık 4 GB boş disk. Derlemeden önce açık olan DBeaver'ı kapat.
 
-### 9. Son SQL betikleri paneli ve parametre formu
+```bash
+# Tüm repolar aynı üst klasörde olmalı
+mkdir -p ~/dbeaver-dev && cd ~/dbeaver-dev
+git clone https://github.com/dbeaver/dbeaver-common.git
+git clone https://github.com/dbeaver/datadam-api.git
+git clone https://github.com/miracmenekse/dbeaver-mm.git
 
-- **Amaç:** Sık kullanılan betikleri hızla bulmak ve farklı değerlerle yeniden çalıştırmak.
-- **Arayüz:** Sağa yerleşik bir panel bulunur. Panelde aktif projenin son kaydedilen 10 betiği kartlar halinde
-  listelenir. Her kartta dosya adı, betiğin ilk yorum satırı ve `WHERE` koşulları görünür. Favoriler listenin en
-  üstüne sabitlenir ve 10 sınırına dahil değildir. Bir karta tek tıklamak betiği açar. Ortada açılan
-  **parametre formu**, betikteki her `kolon = değer` koşulunu dolu ve düzenlenebilir olarak listeler.
-- **Nasıl çalışır:** Sıralama dosya değiştirilme zamanına göre yapılır. DBeaver'ın "Recent SQL Script" komutu da aynı
-  ölçütü kullanır. Parametre formu join koşullarını ve alt sorguları atlar. Form, betik panelden açıldığında
-  kendiliğinden gelir ya da herhangi bir SQL editöründe `Ctrl+Alt+P` ile açılır.
-- **Çıktı:** Form yalnızca betik metnini günceller, sorguyu çalıştırmaz.
+# Ürünün tamamını derle (Community sürümü)
+cd dbeaver-mm
+mvn package -f product/aggregate/pom.xml -T1C -Pproduct-dbeaver-ce
 
-### 10. Arama ve gezgin
+# Derlenen ürün (her platform için ayrı klasör) burada:
+ls product/community/target/products/
+```
 
-- **Aksan ve harf duyarsız arama:** Tüm seçicilerde ve filtre kutusunda geçerlidir. `müşteri` araması `Musteri`
-  kaydını da bulur. Veritabanı sonuç döndürmezse daha geniş bir dilim istemci tarafında aynı kuralla taranır.
-- **Sade gezgin:** Tablolar doğrudan bağlantının ya da şemanın altında görünür. View, index, sequence, trigger gibi
-  nesneler kapalı gelen tek bir **"Other objects"** düğümünde toplanır.
+Ortam değişkeni gerekmez. Linux'ta koyu GTK teması kullanıyorsan ve tablo bozuk görünüyorsa
+`GTK_THEME=Adwaita:light` ile başlat.
 
----
-
-## Deneme
-
-Repo kökünde, geliştirme sırasında kullanılan iki SQLite betiği var:
-- `bsn_flow_spec_setup.sql`: üç sözlük tablosuna (`flow_status`, `priority_level`, `department`) FK ile bağlı bir tablo kurar.
+**Demo verisi:** Repo kökünde iki SQLite betiği var. DBeaver'da `Alt+X` ile çalıştır, sonra bağlantıda `F5`'e bas.
+- `bsn_flow_spec_setup.sql`: üç sözlük tablosuna FK ile bağlı bir tablo kurar.
 - `cross_connection_fk_setup.sql`: bağlantılar arası sanal FK'yı denemek için ikinci bağlantının verisini kurar.
 
-DDL çalıştırdıktan sonra gezgini yenilemek için bağlantıda **F5**'e bas. Betiğin tamamını çalıştırmak için **Alt+X**
-kullan. Derleme upstream DBeaver ile aynıdır
-([Building from sources](https://github.com/dbeaver/dbeaver/wiki/Build-from-sources)). Derlemeden önce açık olan
-DBeaver'ı kapat.
+## 💡 Kullanım Senaryoları
+
+**1. Sonuç tablosunu okumak** (`bsn_flow_spec_setup.sql` demo verisi)
+
+```sql
+SELECT id, label, status_id, priority_id FROM bsn_flow_spec;
+```
+```text
+id  | label  | status_id      | priority_id
+----+--------+----------------+-------------
+100 | akis A | 2 | Aktif      | 3 | Yuksek
+101 | akis B | 1 | Yeni       | 1 | Dusuk
+102 | akis C | 3 | Tamamlandi | 2 | Orta
+```
+
+**2. ID yerine açıklamayla filtrelemek**
+
+```text
+Filtre kutusuna yazılan:  status_id = tamam
+Öneri:                    3 | Tamamlandi
+Seçince:                  status_id = 3
+```
+
+**3. Bağlantılar arası SQL yazmak** (`cross_connection_fk_setup.sql` demo verisi;
+`cfg`, `mm_config_db` bağlantısına verilen kısa kod)
+
+```text
+Yazılan:   select * from cfg.serv
+Öneri:     service_spec | mm_config_db
+Seçince:   select * from service_spec      (editör mm_config_db'ye geçer)
+
+Yazılan:   select * from bsn_flow_spec where service_id =
+Öneriler:  10 | Faturalama
+           20 | Musteri Yonetimi
+           30 | Siparis Yonetimi
+Seçince:   ... where service_id = 20       (açıklamalar mm_config_db'den okunur)
+```
+
+## 🗺 Yol Haritası
+
+- [x] v0.1: FK açıklamaları, son SQL betikleri paneli, satır içi FK seçici, parametre formu
+- [x] Bağlantılar arası FK açıklamaları ve seçiciler (K1–K14)
+- [x] Filtre kutusunda veritabanı tarafında, aksan duyarsız değer araması (K15–K20)
+- [ ] Her FK kolonu için bağımsız açıklama kolonu (şu an seçim referans tablo başına ortak)
+- [ ] `INSERT` / `UPDATE ... SET` konumlarında değer seçici
+- [ ] Ekran görüntüleri ve kısa bir demo videosu
+- [ ] Hazır derlenmiş sürümler
+
+## 📄 Lisans ve Katkıda Bulunma
+
+dbeaver-mm, DBeaver Community gibi [Apache License 2.0](LICENSE.md) ile lisanslıdır. Her Java dosyası
+`docs/license_header.txt` içindeki Apache 2.0 başlığıyla başlar.
+
+Issue ve pull request'ler açıktır. Lütfen:
+- Upstream dosyalardaki fork değişikliklerini `// dbeaver-mm` yorumuyla işaretle.
+- Paralel mekanizma eklemek yerine DBeaver'ın mevcut modelinin (FK'lar, sanal model) üzerine kur.
+- Commit'leri `K<n>: <ne değişti>` biçiminde numarala ve aşağıdaki gelişim geçmişine bir satır ekle.
+
+Upstream DBeaver dokümantasyonu, sürücüler ve indirmeler için: [dbeaver/dbeaver](https://github.com/dbeaver/dbeaver).
 
 ---
 

@@ -2,182 +2,181 @@
 
 🇹🇷 **[Türkçe dokümantasyon → README.tr.md](README.tr.md)**
 
-**dbeaver-mm** is a fork of [DBeaver Community](https://github.com/dbeaver/dbeaver) aimed at analysts who read and query
-normalized databases all day. Its goal is to show what an ID *means* without writing a join, and to let you pick
-values instead of looking them up in another tab.
+![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.1-green.svg)
+![Java](https://img.shields.io/badge/Java-21-orange.svg)
+![Based on](https://img.shields.io/badge/based%20on-DBeaver%20Community-lightgrey.svg)
 
-Everything runs on the client side on top of DBeaver's own model (foreign keys, virtual foreign keys, virtual model
-description columns). It needs no server component or PRO features and adds no new rule engine.
-
-> Working branch: [`dbeaver-mm-v0.1-on-devel`](https://github.com/miracmenekse/dbeaver-mm/tree/dbeaver-mm-v0.1-on-devel), rebased on upstream `devel`.
-> Fork changes in the code are marked with `// dbeaver-mm` comments.
-
-## Features
-
-### Data grid: IDs with meaning
-- **FK dictionary labels.** A foreign key cell shows the referenced row's description next to the ID: `2 | MAIN_ORDER`.
-- **Choose the label column.** A button in the FK column header picks which column of the referenced table is shown.
-  The choice is stored in DBeaver's virtual model, so the grid, filter box and SQL picker stay in sync.
-- **Cross-connection FKs.** Labels also resolve through virtual FKs into *another connection*
-  (e.g. `test_db.orders.service_id → config_db.service`). These labels are painted teal so you can tell them apart.
-- **In-cell value picker.** Dictionary FK cells get a dropdown. It opens a searchable Value / Description popup
-  (server-side search) and writes the pick as a normal edit. The popup stays on screen near the bottom edge.
-- **Group rows by column.** From the context menu or a header icon: rows are sorted by the column and each group is
-  shaded in two alternating matte colors.
-
-### Result filter box
-- Typing `column =` lists values to choose from, with their labels. This works for dictionary FKs, cross-connection
-  FKs and plain columns.
-- The search runs **in the database**, not only in the first rows you fetched.
-- An option restricts the list to the values present in the current result.
-- A picked value replaces the typed search text. Quoted values with spaces keep being searched.
-
-### SQL editor
-- **Inline FK picker.** After `fk_column =` or `column IN (`, a popup lists the referenced table's rows (ID + label). It follows the
-  real or virtual FK, also into another connection. A header button chooses the label column.
-- **Connections bar.** A filterable multi-select bar at the top of the editor chooses which connections this script
-  may run against.
-- **Automatic connection.** The editor switches to the connection that holds the tables of the statement you are
-  writing. Candidates are the connections in the bar, or the ones tagged *Use SQL auto connection*.
-- **Table completion across connections.** After `from` / `join` / `into` / `update`, tables of all candidate
-  connections are listed as `Table | Connection`. Accepting a table also switches the connection.
-- **Connection short codes.** Give a connection a short code (*Set SQL short code…* in the navigator). Typing `<code>.`
-  then lists only that connection's tables. The connections bar shows the codes.
-- **Columns after WHERE.** Typing `WHERE` / `AND` / `OR` opens column completion for the statement's table, even
-  when that table lives in another connection.
-
-### Script tools
-- **Recent SQL Scripts panel.** A docked view lists the 10 most recently saved scripts of the active project as cards:
-  file name, first comment line and the statement's WHERE conditions. Favorites are pinned on top. One click opens
-  the script.
-- **Script parameter form.** A form lists every `column = value` condition of the script, pre-filled and editable,
-  so a saved script can be re-parameterised in one place. It only rewrites the text and never runs the query.
-  It opens when a script is launched from the panel, or with `Ctrl+Alt+P` in any SQL editor.
-
-### Search and navigation
-- **Accent- and case-blind search** in all pickers and the filter box. Turkish letters are folded, so `müşteri` finds
-  `Musteri`.
-- **Simpler navigator.** Tables are shown directly under a connection or schema. Views, indexes, sequences, triggers
-  and other objects are collapsed into one *Other objects* node.
-
-## Try it
-The repository root has two SQLite scripts that set up the demo schemas used during development:
-- `bsn_flow_spec_setup.sql`: a table with FKs to three dictionary tables.
-- `cross_connection_fk_setup.sql`: data for a second connection, to test cross-connection virtual FKs.
-
-Build it like upstream DBeaver (see [Building from sources](https://github.com/dbeaver/dbeaver/wiki/Build-from-sources)).
-Close any running DBeaver before building.
+> **dbeaver-mm: see what every ID means, and pick values instead of typing them.**
 
 ---
 
-*The upstream DBeaver README follows.*
+## 📌 About the Project and Problem Statement
 
-[![Twitter URL](https://img.shields.io/twitter/url/https/twitter.com/dbeaver_news.svg?style=social&label=Follow%20%40dbeaver_news)](https://twitter.com/dbeaver_news)
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/fa0bb9cf5a904c7d87424f8f6351ba92)](https://app.codacy.com/gh/dbeaver/dbeaver/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
-[![Apache 2.0](https://img.shields.io/github/license/cronn-de/jira-sync.svg)](http://www.apache.org/licenses/LICENSE-2.0)
-[![Tickets in review](https://img.shields.io/github/issues/dbeaver/dbeaver/wait%20for%20review)](https://github.com/dbeaver/dbeaver/issues?q=is%3Aissue+is%3Aopen+label%3A"wait%20for%20review")
-<img src="https://github.com/dbeaver/dbeaver/wiki/images/dbeaver-icon-64x64.png" align="right"/>
+In a normalized database most columns hold IDs: `order_type_id = 2`, `service_id = 14`. To find out what an ID means,
+an analyst has to write a join or open the dictionary table in another tab. To filter or query by a value, they look
+the ID up somewhere else and type it in by hand. It gets worse when the data is spread over several connections, for
+example test data in one database and configuration in another. Stock DBeaver can show a referenced value only
+through separate editors, and its SQL editor is bound to one connection at a time.
 
-# DBeaver
+dbeaver-mm is a fork of [DBeaver Community](https://github.com/dbeaver/dbeaver) that shows the meaning of an ID where
+the ID appears (grid, filter box, SQL editor) and opens a searchable picker wherever an ID has to be written. It also
+works across connections. Everything runs on the client side on top of DBeaver's own model: physical foreign keys,
+virtual foreign keys and the virtual model's description column. It needs no server component, no PRO features and
+no separate rule engine, so it stays a thin layer over upstream DBeaver.
 
-Free multi-platform database tool for developers, SQL programmers, database administrators and analysts.  
+## ✨ Key Features
 
-* Has a lot of <a href="https://github.com/dbeaver/dbeaver/wiki">features</a> including schema editor, SQL editor, data editor, AI chat, ER diagrams, data export/import/migration, SQL execution plans, database administration tools, database dashboards, Spatial data viewer, proxy and SSH tunnelling, custom database drivers editor, etc.
-* Out of the box supports more than <a href="#supported-databases">100 database drivers</a>.
-* Supports any database which has JDBC or ODBC driver (basically - almost all existing databases).
-* Integrates AI tools for work with data, SQL and database structure
+* **FK dictionary labels in the grid:** A foreign key cell shows the referenced description next to the ID
+  (`2 | Aktif`). A header button chooses the label column and the choice is saved in the virtual model. Labels
+  reached through a virtual FK into *another connection* are painted teal.
+* **Value pickers everywhere:** A searchable Value / Description popup is available in dictionary FK cells. Typing
+  `column =` in the result filter box or `fk_column =` / `column IN (` in the SQL editor opens a list of values with
+  their labels. Searches run in the database and ignore case and accents (`müşteri` finds `Musteri`).
+* **Multi-connection SQL editor:** A connections bar chooses which connections a script may use. The editor switches
+  to the connection that holds the statement's tables. Table names are completed across connections
+  (`Table | Connection`), and connection short codes (`<code>.`) narrow the list to a single connection.
+* **Script tools:** A Recent SQL Scripts panel shows the last 10 scripts as cards with their WHERE conditions, with
+  favorites pinned on top. A parameter form (`Ctrl+Alt+P`) edits every `column = value` condition of a script in one
+  place.
+* **Easier reading:** Group rows by a column in two alternating colors. The navigator shows tables directly and puts
+  views, indexes and other objects into one *Other objects* node.
 
-<a href="https://dbeaver.io/product/dbeaver-sql-editor.png"><img src="https://dbeaver.io/product/dbeaver-sql-editor.png" width="400"/></a>
-<a href="https://dbeaver.io/product/dbeaver-gis-viewer.png"><img src="https://dbeaver.io/product/dbeaver-gis-viewer.png" width="400"/></a>
-<a href="https://dbeaver.io/product/dbeaver-data-editor.png"><img src="https://dbeaver.io/product/dbeaver-data-editor.png" width="400"/></a>
-<a href="https://dbeaver.io/product/dbeaver-erd.png"><img src="https://dbeaver.io/product/dbeaver-erd.png" width="400"/></a>
+## 🛠 Tech Stack
 
-## Download
+* **Language / platform:** Java 21 (`JavaSE-21`), Eclipse RCP / OSGi bundles
+* **UI:** SWT and JFace; the data grid is DBeaver's `LightGrid` (`SpreadsheetPresentation`); SQL editing uses the
+  Eclipse text framework
+* **Data access:** JDBC through DBeaver's model (`DBSEntityAssociation`, virtual model `DBVEntity`, dictionary queries)
+* **Build:** Apache Maven + Eclipse Tycho; OSGi dependencies come from Eclipse P2 repositories
+* **Base:** DBeaver Community (`devel`), plus the repositories listed in `project.deps` (`dbeaver-common`,
+  `datadam-api`)
+* **AI / ML:** None in the fork's features (upstream DBeaver's own AI features are unchanged)
 
-You can download prebuilt binaries from <a href="https://dbeaver.io/download" target="_blank">official website</a> or directly from <a href="https://github.com/dbeaver/dbeaver/releases">GitHub releases</a>.  
-You can also download <a href="https://dbeaver.io/files/ea" target="_blank">Early Access</a> version. We publish daily.  
+## 🏗 System Architecture and How It Works
 
-## Running
+The fork changes a few upstream bundles and adds two of its own:
 
-Just run an installer and then click on app icon. Or unzip an archive and run `dbeaver` from command line.  
+| Bundle | Role in the fork |
+|---|---|
+| `org.jkiss.dbeaver.ui.editors.data` | Grid FK labels, header label button, in-cell picker, filter box values, row grouping |
+| `org.jkiss.dbeaver.ui.inlinefkpicker` (new) | SQL FK picker, connections bar logic, auto connection, table completion, short codes, parameter form |
+| `org.jkiss.dbeaver.ui.recentscripts` (new) | Recent SQL Scripts panel |
+| `org.jkiss.dbeaver.ui.editors.sql` | Connections bar on top of the SQL editor |
+| `org.jkiss.dbeaver.ui.navigator` | *Other objects* node |
 
-Note: DBeaver needs Java to run. <a href="https://adoptium.net/temurin/releases/?package=jre" target="_blank">OpenJDK 25</a> is included in all DBeaver distributions.
-You can change default JDK version by replacing directory `jre` in dbeaver installation folder.
+Fork changes inside upstream code are marked with `// dbeaver-mm` comments.
 
-## Documentation
+Flow of an FK label, from a cell to the screen:
 
-* [Full product documentation](https://dbeaver.com/docs/dbeaver/)
-* [WIKI](https://github.com/dbeaver/dbeaver/wiki)
-* [Issue tracker](https://github.com/dbeaver/dbeaver/issues)
-* [Building from sources](https://github.com/dbeaver/dbeaver/wiki/Build-from-sources)
+```mermaid
+flowchart LR
+    A[Grid cell value] --> B{Column has a physical<br/>or virtual FK?}
+    B -- no --> Z[Plain value]
+    B -- yes --> C[Referenced table<br/>maybe in another connection]
+    C --> D[Description column<br/>from the virtual model]
+    D --> E[Dictionary query<br/>via that table's connection]
+    E --> F[(Label cache)]
+    F --> G["2 | Aktif"<br/>teal if cross-connection]
+```
 
-## Architecture
+The pickers reuse the same path. The filter box, the in-cell popup and the SQL picker all ask for "values of the
+referenced table with labels, matching this text" through one shared helper (`FkDictionaryLabels`). The search runs as
+a database query on the right connection, and its results are folded for case and accents. In the SQL editor, the
+caret analyzer (`SqlCaretAnalyzer`) reads the statement's `FROM` list and aliases to find the column's table. The
+connection selector then looks for that table among the candidate connections, reading only their cached table lists
+and never their data.
 
-- DBeaver is written mostly on Java. However, it also uses a set of native OS-specific components for desktop UI, high performance database drivers and networking.
-- Basic frameworks:
-  - [OSGI](https://en.wikipedia.org/wiki/OSGi) platform for plugins and dependency management. Community version consists of 130+ plugins.
-  - [Eclipse RCP](https://github.com/eclipse-platform/eclipse.platform.ui/blob/master/docs/Rich_Client_Platform.md) platform for rich user interface build.
-  - [JDBC](https://en.wikipedia.org/wiki/Java_Database_Connectivity) for basic database connectivity API.
-  - [JSQLParser](https://github.com/JSQLParser/JSqlParser) and [Antlr4](https://github.com/antlr/antlr4) for SQL grammar and semantic parser.
-- For networking and additional functionality we use wide range of open source libraries such as [SSHJ](https://github.com/hierynomus/sshj), [Apache POI](https://github.com/apache/poi), [JFreeChart](https://github.com/jfree/jfreechart), [JTS](https://github.com/locationtech/jts), [Apache JEXL](https://github.com/apache/commons-jexl) etc.
-- We separate model plugins from desktop UI plugins. This allows us to use the same set of "back-end" plugins in both DBeaver and [CloudBeaver](https://github.com/dbeaver/cloudbeaver).
-- Dependencies: being an OSGI application we use P2 repositories for third party dependencies. For additional Maven dependencies we use our own [DBeaver P2 repo](https://github.com/dbeaver/dbeaver-deps-ce).
+A missing label is never cached: if metadata is not loaded yet the cell shows the plain value, and the label appears
+once metadata arrives.
 
-## Supported databases
+## 🚀 Quick Start
 
-### Community version
+**Prerequisites:** JDK 21, Apache Maven 3.9+, Git, about 4 GB of free disk space. Close any running DBeaver before you
+build.
 
-Out of the box DBeaver supports following database drivers:
-- Altibase, Apache Calcite Avatica, Apache Doris, Apache Druid, Apache Hive, Apache Hive/Impala/Spark, Apache Ignite, Apache IoTDB, Apache Kylin, Apache Kyuubi, Apache Solr, Athena, Azure SQL, Babelfish, ClickHouse, Cloudberry, CockroachDB, CrateDB, CSV, CUBRID, Dameng, Data Virtuality, Databend, Databricks, DB2, DBF, Denodo, Derby, DolphinDB, Dremio, Drill, DuckDB, Elasticsearch, EnterpriseDB, Exasol, Firebird, Firebird, GaussDB, GBase 8s, GemFire XD, GizmoSQL, Google BigQuery, Google Cloud SQL for PostgreSQL, Google Spanner, Greengage, Greenplum, GreptimeDB, H2, H2GIS, HSQLDB, Informix, Ingres, InterSystems Caché, IRIS, JDBCX, Jennifer, Kingbase, LibSQL, Machbase, Manticore Search, MapD, MariaDB, Materialize, MaxDB, Mimer SQL, MonetDB, MS Access, MySQL, NDB Cluster, Netezza, NuoDB, OceanBase, Ocient, OmniSci, Open Distro Elasticsearch, OpenEdge, OpenSearch, Oracle, OrientDB, Pervasive SQL, Phoenix, PostgreSQL, Presto, Redshift, RisingWave, Salesforce, Salesforce Data 360, SAP HANA, SnappyData, Snowflake, SQL Server, SQLite, SQream DB, StarRocks, Sybase, TDEngine, Teiid, Teradata, TiDB, TiDBLake, TimechoDB, Timeplus, Timeplus Proton, TimescaleDB, Trino, Vertica, Virtuoso, WMI, Yellowbrick, Yugabyte.
+```bash
+# All repositories must sit in the same parent folder
+mkdir -p ~/dbeaver-dev && cd ~/dbeaver-dev
+git clone https://github.com/dbeaver/dbeaver-common.git
+git clone https://github.com/dbeaver/datadam-api.git
+git clone https://github.com/miracmenekse/dbeaver-mm.git
 
-### PRO versions
+# Full product build (Community edition)
+cd dbeaver-mm
+mvn package -f product/aggregate/pom.xml -T1C -Pproduct-dbeaver-ce
 
-<a href="https://dbeaver.com/download/">Commercial versions</a> extends functionality of community drivers, supports NoSQL databases and many more:
-- Amazon Aurora DSQL, Apache Arrow, AWS DocumentDB, AWS Keyspaces, AWS Neptune, AWS Timestream, Azure CosmosDB, BigTable, Cassandra, Couchbase, CouchDB, DynamoDB, etcd, FerretDB, Firestore, Fujitsu Enterprise Postgres, Google AlloyDB, Google Cloud SQL, InfluxDB, Kafka KSQL, Microsoft Fabric, MongoDB, Neo4j, NetSuite, ODBC, Raima, Redis, Salesforce, ScyllaDB, SingleStore, SQLite Crypt, Valkey, Yugabyte.
-- Files as databases: CSV, DDL, JSON, Parquet, XLSX, and XML.
-- Federated (multi-source) database based on Apache Calcite.
+# The built product (one folder per platform) is under:
+ls product/community/target/products/
+```
 
-You can find the list of all databases supported in commercial versions <a href="https://dbeaver.com/databases/">here</a>.
+No environment variables are required. On Linux with a dark GTK theme, start with `GTK_THEME=Adwaita:light` if the
+grid looks wrong.
 
-## AI integration
+**Demo data:** The repository root has two SQLite scripts. Run them in DBeaver with `Alt+X`, then press `F5` on the
+connection.
+- `bsn_flow_spec_setup.sql`: a table with FKs to three dictionary tables.
+- `cross_connection_fk_setup.sql`: data for a second connection, to try cross-connection virtual FKs.
 
-- All DBeaver products contain AI Chat view similar to classic LLM chats. 
-- You can generate/analyse/optimize your SQL queries, work with database structure or even work with databases with a very little knowledge of SQL.
-- We use smart chat context which provides LLMs details about database structure, SQL dialect, etc. 
-- LLM integration uses context-dependent dynamic tools and is very efficient from token consumption point of view.
-- AI providers in Community version:
-  - OpenAI (allows to configure most of existing LLMs with custom endpoint)
-  - Copilot
-- Pro versions provide additional AI tools + native support of Anthropic/Grok/Azure/Bedrock/Gemini/Ollama providers.
+## 💡 Usage & Examples
 
-## Feedback
+**1. Reading a result grid** (demo data from `bsn_flow_spec_setup.sql`)
 
-- For bug reports and feature requests - please <a href="https://github.com/dbeaver/dbeaver/issues">create a ticket</a>.
-- To promote <a href="https://github.com/dbeaver/dbeaver/issues?q=is%3Aissue+is%3Aopen+sort%3Areactions-%2B1-desc+label%3A%22wait+for+votes%22">a ticket</a> to a higher priority - please vote for it with 👍 under the ticket description.
-- If you have any questions, ideas, etc - please <a href="https://github.com/dbeaver/dbeaver/discussions">start a discussion</a>.
-- Pull requests are welcome. See our <a href="https://github.com/dbeaver/dbeaver/wiki/Contribute-your-code">guide for contributors</a>.
-- Visit https://dbeaver.com for more information.
-- Follow us on [X](https://x.com/dbeaver_news/) and watch educational video on [YouTube](https://www.youtube.com/@DBeaver_video)
-- Thanks for using DBeaver! Star if you like it.
+```sql
+SELECT id, label, status_id, priority_id FROM bsn_flow_spec;
+```
+```text
+id  | label  | status_id      | priority_id
+----+--------+----------------+-------------
+100 | akis A | 2 | Aktif      | 3 | Yuksek
+101 | akis B | 1 | Yeni       | 1 | Dusuk
+102 | akis C | 3 | Tamamlandi | 2 | Orta
+```
 
-## Contribution: help the Beaver!
+**2. Filtering by a label instead of an ID**
 
-Hooray, we have reached 50k+ stars on GitHub and continue to grow!  
-That's really cool, and we are glad that you like DBeaver.
+```text
+Filter box input:   status_id = tamam
+Proposals:          3 | Tamamlandi
+After picking:      status_id = 3
+```
 
-- We are actively looking for new source code contributors. We have added labels “Good first issue” and “Help wanted” to some tickets. If you want to be a part of our development team, just be brave and take a ticket. <a href="https://dbeaver.com/help-dbeaver/">We are happy to reward</a> our most active contributors every major sprint.
-- You can buy <a href="https://dbeaver.com/buy/">one of our commercial versions</a>. They include NoSQL databases support, additional extensions, and official online support. Also, licensed users have priorities in bug fixes and the development of new features.
+**3. Writing SQL across connections** (demo data from `cross_connection_fk_setup.sql`;
+`cfg` is the short code given to the `mm_config_db` connection)
 
-Thank you!  
+```text
+You type:           select * from cfg.serv
+Proposals:          service_spec | mm_config_db
+After picking:      select * from service_spec      (editor switched to mm_config_db)
 
-- <a href="https://github.com/dbeaver/dbeaver/graphs/contributors">DBeaver Team</a> (contributors)
+You type:           select * from bsn_flow_spec where service_id =
+Proposals:          10 | Faturalama
+                    20 | Musteri Yonetimi
+                    30 | Siparis Yonetimi
+After picking:      ... where service_id = 20       (labels read from mm_config_db)
+```
 
----------
+## 🗺 Roadmap
 
-## Our other open-source products:
+- [x] v0.1: FK dictionary labels, Recent SQL Scripts panel, inline FK picker, parameter form
+- [x] Cross-connection FK labels and pickers (K1–K14)
+- [x] Database-side, accent-blind value search in the filter box (K15–K20)
+- [ ] Independent label column per FK column (today the choice is shared per referenced table)
+- [ ] Value picker for `INSERT` / `UPDATE ... SET` positions
+- [ ] Screenshots and a short demo video
+- [ ] Prebuilt releases
 
-- <a href="https://github.com/dbeaver/cloudbeaver">CloudBeaver</a> - web-based database management tool built on the DBeaver platform.<br/>Runs as server (docker) and provides rich web interface (SPA).  
-- <a href="https://github.com/dbeaver/dbvr">dbvr</a> - CLI database management tool. Useful in CI/CD pipelines and all sort of automations. 
+## 📄 License & Contributing
+
+dbeaver-mm is licensed under the [Apache License 2.0](LICENSE.md), like DBeaver Community. Every Java file starts with
+the Apache 2.0 header in `docs/license_header.txt`.
+
+Issues and pull requests are welcome. Please:
+- Mark fork changes in upstream files with a `// dbeaver-mm` comment.
+- Build on DBeaver's existing model (FKs, virtual model) instead of adding parallel mechanisms.
+- Number commits `K<n>: <what changed>` and add a row to the development history below.
+
+For upstream DBeaver documentation, drivers and downloads, see [dbeaver/dbeaver](https://github.com/dbeaver/dbeaver).
 
 ---
 
