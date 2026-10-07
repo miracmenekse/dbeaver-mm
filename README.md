@@ -30,9 +30,10 @@ no separate rule engine, so it stays a thin layer over upstream DBeaver.
 * **FK dictionary labels in the grid:** A foreign key cell shows the referenced description next to the ID
   (`2 | Aktif`). A header button chooses the label column and the choice is saved in the virtual model. Labels
   reached through a virtual FK into *another connection* are painted teal.
-* **Value pickers everywhere:** A searchable Value / Description popup is available in dictionary FK cells. Typing
-  `column =` in the result filter box or `fk_column =` / `column IN (` in the SQL editor opens a list of values with
-  their labels. Searches run in the database and ignore case and accents (`müşteri` finds `Musteri`).
+* **Value pickers everywhere:** A searchable Value / Description popup is available in dictionary FK cells, empty
+  (`[NULL]`) ones included. Typing `column =` in the result filter box or `fk_column =` / `column IN (` in the SQL
+  editor opens a list of values with their labels. Searches run in the database and ignore case and accents
+  (`müşteri` finds `Musteri`).
 * **Multi-connection SQL editor:** A connections bar chooses which connections a script may use. The editor switches
   to the connection that holds the statement's tables. Table names are completed across connections
   (`Table | Connection`), and connection short codes (`<code>.`) narrow the list to a single connection.
@@ -199,3 +200,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K18 | 2026-09-28 | Value search keeps going after a space inside an open quote. |
 | K19 | 2026-09-28 | The connections bar shows each connection's short code. |
 | K20 | 2026-09-30 | Option to list **only the values present in the result** in the filter box, labels included. |
+| K23 | 2026-10-07 | The in-cell FK dropdown works on **empty (`[NULL]`) cells** too, so a missing value can be picked from the referenced table instead of showing *Can't navigate to NULL value*. |

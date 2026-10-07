@@ -30,10 +30,10 @@ ya da ayrı bir kural motoru gerekmez. Böylece fork, upstream DBeaver'ın üzer
 * **Tabloda FK açıklamaları:** FK hücresinde ID'nin yanında referans tablodaki açıklama görünür (`2 | Aktif`).
   Kolon başlığındaki buton hangi kolonun açıklama olacağını seçer, seçim sanal modele kaydedilir. *Başka bir
   bağlantıya* giden sanal FK üzerinden gelen açıklamalar turkuaz renktedir.
-* **Her yerde değer seçici:** Sözlük FK hücrelerinde aranabilir bir Değer / Açıklama penceresi açılır. Filtre
-  kutusuna `kolon =`, SQL editörüne `fk_kolon =` ya da `kolon IN (` yazınca değerler açıklamalarıyla listelenir.
-  Aramalar veritabanında yapılır, büyük/küçük harf ve Türkçe karakter farkı gözetilmez (`müşteri` araması
-  `Musteri` kaydını bulur).
+* **Her yerde değer seçici:** Sözlük FK hücrelerinde, boş (`[NULL]`) olanlar dahil, aranabilir bir Değer / Açıklama
+  penceresi açılır. Filtre kutusuna `kolon =`, SQL editörüne `fk_kolon =` ya da `kolon IN (` yazınca değerler
+  açıklamalarıyla listelenir. Aramalar veritabanında yapılır, büyük/küçük harf ve Türkçe karakter farkı
+  gözetilmez (`müşteri` araması `Musteri` kaydını bulur).
 * **Çok bağlantılı SQL editörü:** Bağlantı çubuğu, betiğin hangi bağlantılarda çalışabileceğini seçer. Editör,
   sorgudaki tabloların bulunduğu bağlantıya kendisi geçer. Tablo adları bağlantılar arasında tamamlanır
   (`Tablo | Bağlantı`). Bağlantı kısa kodları (`<kod>.`) listeyi tek bir bağlantıyla sınırlar.
@@ -197,3 +197,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K18 | 2026-09-28 | Açık tırnak içinde boşluk yazıldıktan sonra da değer araması sürer. |
 | K19 | 2026-09-28 | Bağlantı çubuğu her bağlantının kısa kodunu gösterir. |
 | K20 | 2026-09-30 | Filtre kutusunda listeyi **yalnızca sonuçta geçen değerlerle** sınırlama seçeneği (etiketleriyle). |
+| K23 | 2026-10-07 | Hücre içi FK açılır listesi **boş (`[NULL]`) hücrelerde** de çalışır; eksik değer, *Can't navigate to NULL value* hatası yerine referans tablodan seçilebilir. |

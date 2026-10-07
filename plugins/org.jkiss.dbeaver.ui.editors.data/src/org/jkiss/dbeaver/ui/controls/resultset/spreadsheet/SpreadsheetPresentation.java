@@ -1532,9 +1532,9 @@ public class SpreadsheetPresentation extends AbstractPresentation
             }
         } else if (isAttributeExpandable(cell.row, attr)) {
             spreadsheet.toggleCellValue(cell.col, cell.row);
-        } else if (DBUtils.isNullValue(value)) {
-            UIUtils.showMessageBox(getSpreadsheet().getShell(), "Wrong link", "Can't navigate to NULL value", SWT.ICON_ERROR);
         } else {
+            // dbeaver-mm: no "Can't navigate to NULL value" stop here - the in-cell FK picker (K5) is
+            // how a NULL FK cell gets its first value; the reference hint already skips NULL cells
             IGridContentProvider.CellInformation cellInfo = spreadsheet.getContentProvider().getCellInfo(cell.col, cell.row, false);
             if ((cellInfo.state & IGridContentProvider.STATE_HYPER_LINK) != 0) {
                 // Navigate hyperlink
