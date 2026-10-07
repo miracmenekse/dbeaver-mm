@@ -1,0 +1,5 @@
+# Ana makinedeki "DBeaver-mm güncelle" düğmesinin ayarı (guncelle.sh, adimadim reposundaki vm-ana-makine becerisinde)
+AD="DBeaver-mm"
+KUR="~/projects/build-dbeaver.sh"
+AC="GTK_THEME=Adwaita:light product/community/target/products/org.jkiss.dbeaver.core.product/linux/gtk/x86_64/dbeaver/dbeaver"
+SUREC="gtk/x86_64/dbeaver/"
