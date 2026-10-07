@@ -214,6 +214,11 @@ bağlantı filtresi olmadan kullanıyor (`SQLEditorUtils.getScriptsFromProject` 
   özelliklerini siliyor. v0.1'de bu oldu, güncel upstream'e taşırken geri alındı.
 - **Upstream dosyasına dokunulan her yeri `dbeaver-mm` etiketli bir yorumla işaretle**
   (ör. `// dbeaver-mm G1: ...`), upstream güncellemelerinde çakışmayı bulmak kolaylaşır.
+- **Her `K<n>` commit'i README'yi de günceller, aynı commit içinde.** PR açılmasa, doğrudan `main`'e
+  push edilse bile: `README.md` ve `README.tr.md` sonundaki geliştirme geçmişi tablosuna
+  `| K<n> | <YYYY-AA-GG> | <değişiklik> |` satırı eklenir; özellik kullanıcıya görünen davranışı
+  değiştiriyorsa ilgili Key Features / Temel Özellikler maddesi de düzeltilir. Biçim için
+  `readme-pr` becerisini yükle.
 
 ## Linux'ta CLI derleme / çalıştırma (2026-09)
 - Depolar: `~/projects/{dbeaver,dbeaver-common,datadam-api}`. Aktif dal: `dbeaver-mm-v0.1-on-devel`
