@@ -118,6 +118,57 @@ public final class FkDictionaryLabels {
     }
 
     /**
+     * dbeaver-mm K26: rows of the referenced table that exist only in conf packages (K25), so a new
+     * parent row can be picked before it reaches the database. Label = description column value
+     * plus the task id. {@code search} matches value or label, accent and case blind.
+     */
+    @NotNull
+    public static List<DBDLabelValuePair> listConfPackageValues(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBDAttributeBinding attr,
+        @Nullable String search
+    ) throws Exception {
+        DBSEntityAssociation association = getAssociation(attr);
+        DBSEntityAttribute keyColumn = association == null || attr.getEntityAttribute() == null
+            ? null
+            : DBUtils.getReferenceAttribute(monitor, association, attr.getEntityAttribute(), false);
+        if (keyColumn == null) {
+            return Collections.emptyList();
+        }
+        String key = keyColumn.getName().toLowerCase(Locale.ROOT);
+        String descColumns = DBVUtils.getDictionaryDescriptionColumns(monitor, keyColumn);
+        String desc = descColumns == null ? null : descColumns.split(",")[0].strip().toLowerCase(Locale.ROOT);
+        String folded = CommonUtils.isEmpty(search) ? null : foldForSearch(search);
+        List<DBDLabelValuePair> result = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (org.jkiss.dbeaver.ui.controls.resultset.conf.ConfPackages.InsertedRow row :
+            org.jkiss.dbeaver.ui.controls.resultset.conf.ConfPackages.findInserts(keyColumn.getParentObject().getName())) {
+            String value = row.values().get(key);
+            if (value == null || !seen.add(value)) {
+                continue;
+            }
+            String label = CommonUtils.notEmpty(desc == null ? null : row.values().get(desc)) + "  [conf " + row.task() + "]";
+            if (folded == null || foldForSearch(value).contains(folded) || foldForSearch(label).contains(folded)) {
+                result.add(new DBDLabelValuePair(label.strip(), toKeyValue(keyColumn, value)));
+            }
+        }
+        return result;
+    }
+
+    /** "40" -> 40 for numeric keys, so the picked value has the column's type like database values */
+    @NotNull
+    private static Object toKeyValue(@NotNull DBSEntityAttribute keyColumn, @NotNull String value) {
+        if (keyColumn.getDataKind() == org.jkiss.dbeaver.model.DBPDataKind.NUMERIC) {
+            try {
+                return value.contains(".") ? new BigDecimal(value) : (Object) Long.valueOf(value);
+            } catch (NumberFormatException ignored) {
+                // a function call or expression: keep the text
+            }
+        }
+        return value;
+    }
+
+    /**
      * dbeaver-mm K2/K5: the referenced dictionary's values with their labels (same description
      * column as the grid), first {@code maxResults} ordered by value. Used by the filter box
      * {@code column =} proposals and the in-cell value picker.

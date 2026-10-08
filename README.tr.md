@@ -43,6 +43,11 @@ ya da ayrı bir kural motoru gerekmez. Böylece fork, upstream DBeaver'ın üzer
 * **Yeni satırlara ID:** *Edit › Fetch IDs for new rows*, anahtarı boş yeni satırlar kadar ID'yi ID API'sinden
   alır ve kaydetmeden tabloya yazar. API, kullanıcının kendi `~/.dbeaver-mm/id-api.sh <sayı> <tablo> <domain>`
   betiğiyle çağrılır. Domain her bağlantı için bir kez seçilir.
+* **Conf paketleri:** *Edit › Add changes to conf package ...*, tablodaki kaydedilmemiş değişiklikleri SQL'e
+  çevirir (*Generate SQL* ile aynı betik) ve ilk satırı task açıklaması olan `Scripts/conf/<task id>.sql`
+  dosyasının sonuna ekler. Değişiklikler hemen atılabilir, böylece sekme veritabanına bir şey kaydetmeden
+  kapanır. Hücre içi FK seçicisi, yalnızca conf paketlerinde olan satırları `[conf <task id>]` işaretiyle en
+  üstte gösterir.
 * **Daha kolay okuma:** Satırlar bir kolona göre iki renkle gruplanabilir. Gezgin tabloları doğrudan gösterir;
   view, index ve diğer nesneler tek bir *Other objects* düğümünde toplanır.
 
@@ -202,3 +207,5 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K20 | 2026-09-30 | Filtre kutusunda listeyi **yalnızca sonuçta geçen değerlerle** sınırlama seçeneği (etiketleriyle). |
 | K23 | 2026-10-07 | Hücre içi FK açılır listesi **boş (`[NULL]`) hücrelerde** de çalışır; eksik değer, *Can't navigate to NULL value* hatası yerine referans tablodan seçilebilir. |
 | K24 | 2026-10-08 | *Fetch IDs for new rows*, tablodaki yeni satırların anahtarını `~/.dbeaver-mm/id-api.sh` üzerinden ID API'sinden doldurur; ID domain'i her bağlantı için bir kez sorulur. |
+| K25 | 2026-10-08 | *Add changes to conf package ...*, tablodaki kaydedilmemiş değişiklikleri SQL olarak `Scripts/conf/<task id>.sql` dosyasına ekler ve istenirse tablodan atar. |
+| K26 | 2026-10-08 | Hücre içi FK seçicisi conf paketlerine eklenen satırları en üstte gösterir; yeni üst kayıt veritabanında yokken seçilebilir. |

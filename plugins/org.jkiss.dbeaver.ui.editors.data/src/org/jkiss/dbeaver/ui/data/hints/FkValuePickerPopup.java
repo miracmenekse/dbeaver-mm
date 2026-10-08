@@ -32,7 +32,9 @@ import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.utils.CommonUtils;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -183,6 +185,16 @@ class FkValuePickerPopup {
                 }
             } catch (Exception e) {
                 log.debug("Error reading values for the cell picker", e);
+            }
+            // dbeaver-mm K26: rows waiting in conf packages come first; they are not in the database
+            try {
+                List<DBDLabelValuePair> packaged = FkDictionaryLabels.listConfPackageValues(monitor, attribute, CommonUtils.nullIfEmpty(filter));
+                Set<String> packagedValues = new HashSet<>();
+                packaged.forEach(p -> packagedValues.add(CommonUtils.toString(p.getValue())));
+                result.removeIf(p -> packagedValues.contains(CommonUtils.toString(p.getValue())));
+                result.addAll(0, packaged);
+            } catch (Exception e) {
+                log.debug("Error reading conf package values for the cell picker", e);
             }
         });
         job.schedule();

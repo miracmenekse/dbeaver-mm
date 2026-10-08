@@ -3277,6 +3277,8 @@ public class ResultSetViewer extends Viewer
                     // dbeaver-mm K24: ids for the new rows from the id API
                     editMenu.add(new Separator());
                     org.jkiss.dbeaver.ui.controls.resultset.ids.FetchIdsAction.contribute(editMenu, this);
+                    // dbeaver-mm K25: unsaved changes as SQL into a task's conf package
+                    editMenu.add(new org.jkiss.dbeaver.ui.controls.resultset.conf.AddToConfPackageAction(this));
                 }
 
                 manager.add(new Separator());

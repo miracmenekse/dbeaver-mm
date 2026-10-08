@@ -43,6 +43,10 @@ no separate rule engine, so it stays a thin layer over upstream DBeaver.
 * **IDs for new rows:** *Edit › Fetch IDs for new rows* asks the id API for as many ids as there are new rows
   with an empty key and writes them into the grid without saving. The API is called through the user's own
   `~/.dbeaver-mm/id-api.sh <count> <table> <domain>` script; the domain is chosen once per connection.
+* **Conf packages:** *Edit › Add changes to conf package ...* turns the grid's unsaved changes into SQL (the same
+  script as *Generate SQL*) and appends it to `Scripts/conf/<task id>.sql`, whose first line is the task
+  description. The grid changes can be discarded right away, so the tab closes without saving to the database.
+  The in-cell FK picker lists rows that exist only in conf packages first, marked `[conf <task id>]`.
 * **Easier reading:** Group rows by a column in two alternating colors. The navigator shows tables directly and puts
   views, indexes and other objects into one *Other objects* node.
 
@@ -205,3 +209,5 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K20 | 2026-09-30 | Option to list **only the values present in the result** in the filter box, labels included. |
 | K23 | 2026-10-07 | The in-cell FK dropdown works on **empty (`[NULL]`) cells** too, so a missing value can be picked from the referenced table instead of showing *Can't navigate to NULL value*. |
 | K24 | 2026-10-08 | *Fetch IDs for new rows* fills the key of the grid's new rows from the id API through `~/.dbeaver-mm/id-api.sh`; the id domain is asked once per connection. |
+| K25 | 2026-10-08 | *Add changes to conf package ...* appends the grid's unsaved changes as SQL to `Scripts/conf/<task id>.sql` and can discard them from the grid. |
+| K26 | 2026-10-08 | The in-cell FK picker shows rows inserted in conf packages first, so a new parent row can be picked before it is in the database. |
