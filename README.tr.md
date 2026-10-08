@@ -40,6 +40,9 @@ ya da ayrı bir kural motoru gerekmez. Böylece fork, upstream DBeaver'ın üzer
 * **Betik araçları:** Son SQL betikleri paneli son 10 betiği WHERE koşullarıyla birlikte kartlar halinde gösterir,
   favoriler en üstte durur. Parametre formu (`Ctrl+Alt+P`) betikteki tüm `kolon = değer` koşullarını tek yerden
   düzenletir.
+* **Yeni satırlara ID:** *Edit › Fetch IDs for new rows*, anahtarı boş yeni satırlar kadar ID'yi ID API'sinden
+  alır ve kaydetmeden tabloya yazar. API, kullanıcının kendi `~/.dbeaver-mm/id-api.sh <sayı> <tablo> <domain>`
+  betiğiyle çağrılır. Domain her bağlantı için bir kez seçilir.
 * **Daha kolay okuma:** Satırlar bir kolona göre iki renkle gruplanabilir. Gezgin tabloları doğrudan gösterir;
   view, index ve diğer nesneler tek bir *Other objects* düğümünde toplanır.
 
@@ -198,3 +201,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K19 | 2026-09-28 | Bağlantı çubuğu her bağlantının kısa kodunu gösterir. |
 | K20 | 2026-09-30 | Filtre kutusunda listeyi **yalnızca sonuçta geçen değerlerle** sınırlama seçeneği (etiketleriyle). |
 | K23 | 2026-10-07 | Hücre içi FK açılır listesi **boş (`[NULL]`) hücrelerde** de çalışır; eksik değer, *Can't navigate to NULL value* hatası yerine referans tablodan seçilebilir. |
+| K24 | 2026-10-08 | *Fetch IDs for new rows*, tablodaki yeni satırların anahtarını `~/.dbeaver-mm/id-api.sh` üzerinden ID API'sinden doldurur; ID domain'i her bağlantı için bir kez sorulur. |

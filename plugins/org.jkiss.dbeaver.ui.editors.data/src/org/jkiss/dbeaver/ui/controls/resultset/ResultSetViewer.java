@@ -3274,6 +3274,9 @@ public class ResultSetViewer extends Viewer
                     editMenu.add(new Separator());
                     editMenu.add(ActionUtils.makeCommandContribution(site, IResultSetCommands.CMD_ROW_COPY_FROM_ABOVE));
                     editMenu.add(ActionUtils.makeCommandContribution(site, IResultSetCommands.CMD_ROW_COPY_FROM_BELOW));
+                    // dbeaver-mm K24: ids for the new rows from the id API
+                    editMenu.add(new Separator());
+                    org.jkiss.dbeaver.ui.controls.resultset.ids.FetchIdsAction.contribute(editMenu, this);
                 }
 
                 manager.add(new Separator());

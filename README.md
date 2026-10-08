@@ -40,6 +40,9 @@ no separate rule engine, so it stays a thin layer over upstream DBeaver.
 * **Script tools:** A Recent SQL Scripts panel shows the last 10 scripts as cards with their WHERE conditions, with
   favorites pinned on top. A parameter form (`Ctrl+Alt+P`) edits every `column = value` condition of a script in one
   place.
+* **IDs for new rows:** *Edit › Fetch IDs for new rows* asks the id API for as many ids as there are new rows
+  with an empty key and writes them into the grid without saving. The API is called through the user's own
+  `~/.dbeaver-mm/id-api.sh <count> <table> <domain>` script; the domain is chosen once per connection.
 * **Easier reading:** Group rows by a column in two alternating colors. The navigator shows tables directly and puts
   views, indexes and other objects into one *Other objects* node.
 
@@ -201,3 +204,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K19 | 2026-09-28 | The connections bar shows each connection's short code. |
 | K20 | 2026-09-30 | Option to list **only the values present in the result** in the filter box, labels included. |
 | K23 | 2026-10-07 | The in-cell FK dropdown works on **empty (`[NULL]`) cells** too, so a missing value can be picked from the referenced table instead of showing *Can't navigate to NULL value*. |
+| K24 | 2026-10-08 | *Fetch IDs for new rows* fills the key of the grid's new rows from the id API through `~/.dbeaver-mm/id-api.sh`; the id domain is asked once per connection. |
