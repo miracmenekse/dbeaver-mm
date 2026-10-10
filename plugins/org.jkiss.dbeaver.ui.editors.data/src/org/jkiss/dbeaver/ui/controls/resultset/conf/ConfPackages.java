@@ -49,9 +49,13 @@ public final class ConfPackages {
     public record InsertedRow(@NotNull String task, @NotNull Map<String, String> values) {
     }
 
+    /** One parsed INSERT: bare table name as written and its column -> value map. */
+    public record Insert(@NotNull String table, @NotNull Map<String, String> values) {
+    }
+
     // ponytail: fixed Scripts/conf below the project; a custom scripts root setting is ignored
     @Nullable
-    static Path folder() {
+    public static Path folder() {
         DBPProject project = DBWorkbench.getPlatform().getWorkspace().getActiveProject();
         return project == null ? null : project.getAbsolutePath().resolve("Scripts").resolve("conf");
     }
@@ -89,6 +93,17 @@ public final class ConfPackages {
         }
     }
 
+    /** The package's whole text, empty when it can't be read. */
+    @NotNull
+    public static String read(@NotNull String task) {
+        Path file = file(task);
+        try {
+            return file == null ? "" : Files.readString(file, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
     /** Appends {@code sql} to the task's package, creating it or updating its description. */
     @NotNull
     public static Path append(@NotNull String task, @NotNull String description, @NotNull String sql) throws IOException {
@@ -117,8 +132,8 @@ public final class ConfPackages {
         for (String task : listTasks()) {
             Path file = file(task);
             try {
-                for (Map<String, String> values : parseInserts(Files.readString(file, StandardCharsets.UTF_8), table)) {
-                    rows.add(new InsertedRow(task, values));
+                for (Insert insert : parseInserts(Files.readString(file, StandardCharsets.UTF_8), table)) {
+                    rows.add(new InsertedRow(task, insert.values()));
                 }
             } catch (IOException e) {
                 log.debug("Can't read conf package " + file, e);
@@ -162,12 +177,12 @@ public final class ConfPackages {
 
     /**
      * {@code INSERT INTO [schema.]table (a, b) VALUES (1, 'x');} statements of {@code table}
-     * (matched without schema and quotes, ignoring case) as column -> value maps. Quoted values
+     * (matched without schema and quotes, ignoring case; null = every table) as column -> value maps. Quoted values
      * are unquoted, NULL becomes null, anything else (numbers, function calls) is kept as written.
      */
     @NotNull
-    static List<Map<String, String>> parseInserts(@NotNull String sql, @NotNull String table) {
-        List<Map<String, String>> rows = new ArrayList<>();
+    public static List<Insert> parseInserts(@NotNull String sql, @Nullable String table) {
+        List<Insert> rows = new ArrayList<>();
         String upper = sql.toUpperCase(Locale.ROOT);
         int pos = 0;
         while ((pos = upper.indexOf("INSERT", pos)) >= 0) {
@@ -190,7 +205,7 @@ public final class ConfPackages {
                 break;
             }
             pos = valuesClose;
-            if (!bareName(name).equalsIgnoreCase(table)) {
+            if (table != null && !bareName(name).equalsIgnoreCase(table)) {
                 continue;
             }
             List<String> columns = splitTopLevel(sql.substring(open + 1, close));
@@ -202,7 +217,7 @@ public final class ConfPackages {
             for (int i = 0; i < columns.size(); i++) {
                 row.put(bareName(columns.get(i)).toLowerCase(Locale.ROOT), unquote(values.get(i)));
             }
-            rows.add(row);
+            rows.add(new Insert(bareName(name), row));
         }
         return rows;
     }

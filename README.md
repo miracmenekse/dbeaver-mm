@@ -47,6 +47,8 @@ no separate rule engine, so it stays a thin layer over upstream DBeaver.
   script as *Generate SQL*) and appends it to `Scripts/conf/<task id>.sql`, whose first line is the task
   description. The grid changes can be discarded right away, so the tab closes without saving to the database.
   The in-cell FK picker lists rows that exist only in conf packages first, marked `[conf <task id>]`.
+  *Window › Conf Packages* opens a bottom panel: packages newest first, the selected one's INSERTs as a row
+  grid per table and its whole SQL on a second tab. It refreshes itself when a package changes.
 * **Easier reading:** Group rows by a column in two alternating colors. The navigator shows tables directly and puts
   views, indexes and other objects into one *Other objects* node.
 
@@ -211,3 +213,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K24 | 2026-10-08 | *Fetch IDs for new rows* fills the key of the grid's new rows from the id API through `~/.dbeaver-mm/id-api.sh`; the id domain is asked once per connection. |
 | K25 | 2026-10-08 | *Add changes to conf package ...* appends the grid's unsaved changes as SQL to `Scripts/conf/<task id>.sql` and can discard them from the grid. |
 | K26 | 2026-10-08 | The in-cell FK picker shows rows inserted in conf packages first, so a new parent row can be picked before it is in the database. |
+| K27 | 2026-10-10 | *Conf Packages* bottom panel lists the packages and shows the selected one's inserted rows per table and its SQL; it refreshes as packages change. |

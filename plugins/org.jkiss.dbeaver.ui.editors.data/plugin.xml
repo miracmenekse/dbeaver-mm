@@ -1630,4 +1630,33 @@
                     description="%page.org.jkiss.dbeaver.preferences.main.resultset.plain.text.description"/>
     </extension>
 
+    <!-- dbeaver-mm K27: conf packages panel, stacked with Progress in the bottom folder -->
+    <extension point="org.eclipse.ui.views">
+        <view
+            id="org.jkiss.dbeaver.ui.conf.packages.view"
+            name="Conf Packages"
+            category="org.jkiss.dbeaver.core.category"
+            class="org.jkiss.dbeaver.ui.controls.resultset.conf.ConfPackagesView"
+            icon="icons/panel_metadata.svg"
+            allowMultiple="false"
+            restorable="true"/>
+    </extension>
+    <extension point="org.eclipse.ui.perspectiveExtensions">
+        <perspectiveExtension targetID="org.jkiss.dbeaver.core.perspective">
+            <view
+                id="org.jkiss.dbeaver.ui.conf.packages.view"
+                relative="org.eclipse.ui.views.ProgressView"
+                relationship="stack"
+                visible="false"/>
+            <viewShortcut id="org.jkiss.dbeaver.ui.conf.packages.view"/>
+        </perspectiveExtension>
+    </extension>
+    <extension point="org.eclipse.ui.menus">
+        <menuContribution allPopups="false" locationURI="menu:window?before=primary.views">
+            <command commandId="org.jkiss.dbeaver.core.view.toggle" style="toggle">
+                <parameter name="viewId" value="org.jkiss.dbeaver.ui.conf.packages.view"/>
+            </command>
+        </menuContribution>
+    </extension>
+
 </plugin>
