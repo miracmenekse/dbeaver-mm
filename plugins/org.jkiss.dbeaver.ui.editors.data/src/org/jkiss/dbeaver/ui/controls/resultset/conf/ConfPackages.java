@@ -49,8 +49,11 @@ public final class ConfPackages {
     public record InsertedRow(@NotNull String task, @NotNull Map<String, String> values) {
     }
 
-    /** One parsed INSERT: bare table name as written and its column -> value map. */
-    public record Insert(@NotNull String table, @NotNull Map<String, String> values) {
+    /**
+     * One parsed INSERT: bare table name as written, its column -> value map and where the statement
+     * (with its ';' and line end) sits in the package text.
+     */
+    public record Insert(@NotNull String table, @NotNull Map<String, String> values, int start, int end) {
     }
 
     // ponytail: fixed Scripts/conf below the project; a custom scripts root setting is ignored
@@ -125,6 +128,22 @@ public final class ConfPackages {
         return file;
     }
 
+    /**
+     * dbeaver-mm K30: removes the {@code inserts} (parsed from the task's current text) from the
+     * package. Fails instead of guessing when the file changed since it was parsed.
+     */
+    public static void remove(@NotNull String task, @NotNull String parsedText, @NotNull Collection<Insert> inserts) throws IOException {
+        Path file = file(task);
+        if (file == null || !Files.readString(file, StandardCharsets.UTF_8).equals(parsedText)) {
+            throw new IOException("Package " + task + " changed meanwhile, nothing deleted");
+        }
+        StringBuilder text = new StringBuilder(parsedText);
+        inserts.stream().sorted(Comparator.comparingInt(Insert::start).reversed())
+            .forEach(insert -> text.delete(insert.start(), insert.end()));
+        Files.writeString(file, text.toString().replaceAll("\n{3,}", "\n\n"), StandardCharsets.UTF_8);
+        refresh(file.getParent());
+    }
+
     /** Rows inserted into {@code table} by any package. */
     @NotNull
     public static List<InsertedRow> findInserts(@NotNull String table) {
@@ -186,6 +205,7 @@ public final class ConfPackages {
         String upper = sql.toUpperCase(Locale.ROOT);
         int pos = 0;
         while ((pos = upper.indexOf("INSERT", pos)) >= 0) {
+            int start = pos;
             int into = skipSpaces(upper, pos + 6);
             pos += 6;
             if (!upper.startsWith("INTO", into)) {
@@ -217,7 +237,12 @@ public final class ConfPackages {
             for (int i = 0; i < columns.size(); i++) {
                 row.put(bareName(columns.get(i)).toLowerCase(Locale.ROOT), unquote(values.get(i)));
             }
-            rows.add(new Insert(bareName(name), row));
+            int end = skipSpaces(sql, valuesClose + 1);
+            if (end < sql.length() && sql.charAt(end) == ';') {
+                end++;
+            }
+            end = sql.indexOf('\n', end) < 0 ? sql.length() : sql.indexOf('\n', end) + 1;
+            rows.add(new Insert(bareName(name), row, start, end));
         }
         return rows;
     }

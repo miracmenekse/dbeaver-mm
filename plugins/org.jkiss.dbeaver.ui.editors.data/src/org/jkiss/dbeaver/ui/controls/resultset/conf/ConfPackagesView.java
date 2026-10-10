@@ -77,6 +77,13 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
     private ScrolledComposite rowsScroll;
     private Composite rowsArea;
     private Text sqlText;
+    private static final String INSERT_KEY = "insert";
+
+    // The shown package: its text and rows as parsed, FK links once loaded (K30 delete)
+    private String currentTask;
+    private String currentSql = "";
+    private List<ConfPackages.Insert> currentInserts = List.of();
+    private Map<String, String> currentLinks = Map.of();
     // Bumped on every package switch so a slow label lookup can't paint over a newer package
     private int labelGeneration;
     // timerExec reschedules the same instance, which debounces bursts of resource deltas
@@ -210,9 +217,15 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
             child.dispose();
         }
         // Group rows by table in order of first appearance, columns = union of their keys
+        currentTask = task;
+        currentSql = sql;
+        currentInserts = ConfPackages.parseInserts(sql, null);
+        currentLinks = Map.of();
         Map<String, List<Map<String, String>>> byTable = new LinkedHashMap<>();
-        for (ConfPackages.Insert insert : ConfPackages.parseInserts(sql, null)) {
+        Map<Map<String, String>, ConfPackages.Insert> insertOf = new IdentityHashMap<>();
+        for (ConfPackages.Insert insert : currentInserts) {
             byTable.computeIfAbsent(insert.table().toLowerCase(Locale.ROOT), t -> new ArrayList<>()).add(insert.values());
+            insertOf.put(insert.values(), insert);
         }
         if (byTable.isEmpty() && task != null) {
             new Label(rowsArea, SWT.NONE).setText("No INSERT in this package, see the SQL tab.");
@@ -243,6 +256,7 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
                     i++;
                 }
                 item.setData(raw);
+                item.setData(INSERT_KEY, insertOf.get(row));
             }
             for (TableColumn column : rows.getColumns()) {
                 column.pack();
@@ -374,6 +388,7 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         if (generation != labelGeneration || rowsArea.isDisposed() || links.isEmpty()) {
             return;
         }
+        currentLinks = links;
         // "table.column=value" of every referenced key cell in this package -> its cells
         Set<String> targets = new HashSet<>(links.values());
         Map<String, List<Object[]>> keyCells = new HashMap<>();
@@ -484,7 +499,30 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         MenuItem copyRowItem = new MenuItem(menu, SWT.PUSH);
         copyRowItem.setText("Copy row");
         copyRowItem.addListener(SWT.Selection, e -> copy(rows, -1));
+        new MenuItem(menu, SWT.SEPARATOR);
+        MenuItem deleteItem = new MenuItem(menu, SWT.PUSH);
+        deleteItem.setText("Delete row ...");
+        deleteItem.addListener(SWT.Selection, e -> {
+            TableItem[] selection = rows.getSelection();
+            if (selection.length > 0 && selection[0].getData(INSERT_KEY) instanceof ConfPackages.Insert insert) {
+                deleteRow(insert);
+            }
+        });
         rows.setMenu(menu);
+    }
+
+    /** K30: asks how deep to delete, then removes the chosen INSERTs from the package file. */
+    private void deleteRow(@NotNull ConfPackages.Insert insert) {
+        ConfDeleteDialog dialog = new ConfDeleteDialog(getSite().getShell(), insert, currentInserts, currentLinks);
+        if (dialog.open() != ConfDeleteDialog.OK || dialog.getToDelete().isEmpty()) {
+            return;
+        }
+        try {
+            ConfPackages.remove(currentTask, currentSql, dialog.getToDelete());
+        } catch (Exception e) {
+            DBWorkbench.getPlatformUI().showError("Delete from conf package", e.getMessage(), e);
+        }
+        refresh();
     }
 
     /** {@code column} < 0 = whole rows, tab separated; one line per selected row */
