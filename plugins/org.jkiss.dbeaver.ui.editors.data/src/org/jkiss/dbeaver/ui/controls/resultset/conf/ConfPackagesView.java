@@ -221,7 +221,6 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         String task = selectedTask();
         String sql = task == null ? "" : ConfPackages.read(task);
         sqlText.setText(sql);
-        fillCopyBar(sql);
 
         for (Control child : rowsArea.getChildren()) {
             child.dispose();
@@ -231,6 +230,7 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         currentSql = sql;
         currentInserts = ConfPackages.parseInserts(sql, null);
         currentLinks = Map.of();
+        fillCopyBar();
         Map<String, List<Map<String, String>>> byTable = new LinkedHashMap<>();
         Map<Map<String, String>, ConfPackages.Insert> insertOf = new IdentityHashMap<>();
         for (ConfPackages.Insert insert : currentInserts) {
@@ -280,11 +280,12 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
      * K31: one copy button per schema the package writes to (pcm, domain_config, ... are pasted into
      * the site separately), plus "Copy all" when there is more than one. Description line left out.
      */
-    private void fillCopyBar(@NotNull String sql) {
+    private void fillCopyBar() {
         for (Control child : copyBar.getChildren()) {
             child.dispose();
         }
-        Map<String, String> scripts = ConfPackages.scriptsBySchema(sql);
+        // Rebuilt once FK links are loaded, so the buttons copy in FK-safe order
+        Map<String, String> scripts = ConfPackages.scriptsBySchema(currentSql, currentLinks);
         if (scripts.size() > 1) {
             addCopyButton("Copy all", String.join("\n", scripts.values()));
         }
@@ -298,7 +299,8 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         Button button = new Button(copyBar, SWT.PUSH);
         button.setText(text);
         long count = ConfPackages.splitStatements(script).size();
-        button.setToolTipText(count + " statement(s) to the clipboard");
+        button.setToolTipText(count + " statement(s) to the clipboard"
+            + (currentLinks.isEmpty() ? ", file order (FK info not loaded yet)" : ", in FK order"));
         button.addListener(SWT.Selection, e ->
             UIUtils.setClipboardContents(copyBar.getDisplay(), TextTransfer.getInstance(), script));
     }
@@ -426,6 +428,7 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
             return;
         }
         currentLinks = links;
+        fillCopyBar();
         // "table.column=value" of every referenced key cell in this package -> its cells
         Set<String> targets = new HashSet<>(links.values());
         Map<String, List<Object[]>> keyCells = new HashMap<>();

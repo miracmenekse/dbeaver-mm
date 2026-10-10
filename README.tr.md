@@ -54,6 +54,7 @@ ya da ayrı bir kural motoru gerekmez. Böylece fork, upstream DBeaver'ın üzer
   *Delete row ...* satırı paketten tek başına ya da seçilen seviyeye kadar altındaki satırlarla siler; silinen
   satıra bağlı kalan satırlar uyarı olarak listelenir. Kopyala butonları paketin betiğini panoya alır: yazdığı her
   şema için bir buton (ör. *Copy pcm*, *Copy domain_config*) ve *Copy all*; açıklama satırı hariç.
+  Kopyalanan betik FK hatası vermeden çalışır: DELETE'ler önce alt tablolar, INSERT'ler önce üst satırlar, sonra UPDATE'ler.
 * **Daha kolay okuma:** Satırlar bir kolona göre iki renkle gruplanabilir. Gezgin tabloları doğrudan gösterir;
   view, index ve diğer nesneler tek bir *Other objects* düğümünde toplanır.
 
@@ -220,3 +221,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K29 | 2026-10-10 | Conf Packages paneli ilişkili satırları renklendirir: FK değeri ile aynı paketteki gösterdiği anahtar, ilişki başına tek renk paylaşır. |
 | K30 | 2026-10-10 | Conf Packages panelinde *Delete row ...* satırı paketten tek başına ya da seçilen seviyeye kadar bağlı satırlarıyla siler, ona bağlı kalan satırlar için uyarır. |
 | K31 | 2026-10-10 | Conf Packages paneline kopyala butonları: tüm betik ya da tek bir şemanın (pcm, domain_config, ...) ifadeleri; her şema ayrı gönderildiği için. |
+| K32 | 2026-10-10 | Kopyalanan conf betikleri FK'ya uygun sırada: DELETE'ler önce alt tablolar, INSERT'ler önce gösterilen satırlar (aynı tablo içinde de), sonra diğerleri; üst satırları tutan şema önce gelir. |

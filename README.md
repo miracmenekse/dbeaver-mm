@@ -54,6 +54,7 @@ no separate rule engine, so it stays a thin layer over upstream DBeaver.
   *Delete row ...* removes a row from the package, alone or with the rows below it down to a chosen level; rows
   left pointing at a deleted row are listed as a warning. Copy buttons put the package's script on the clipboard,
   one per schema it writes to (e.g. *Copy pcm*, *Copy domain_config*) plus *Copy all*, without the description line.
+  Copied scripts run without FK errors: DELETEs child tables first, INSERTs parent rows first, then UPDATEs.
 * **Easier reading:** Group rows by a column in two alternating colors. The navigator shows tables directly and puts
   views, indexes and other objects into one *Other objects* node.
 
@@ -223,3 +224,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K29 | 2026-10-10 | Conf Packages panel colors related rows: an FK value and the referenced key in the same package share one color per relation. |
 | K30 | 2026-10-10 | *Delete row ...* in the Conf Packages panel removes a row from the package alone or with its dependent rows down to a chosen level, and warns about rows left referencing it. |
 | K31 | 2026-10-10 | Conf Packages panel copy buttons: the whole script or the statements of one schema (pcm, domain_config, ...), since each schema is sent separately. |
+| K32 | 2026-10-10 | Copied conf scripts are in FK-safe order: DELETEs child tables first, INSERTs referenced rows first (also within one table), then the rest; the schema with parent rows comes first. |

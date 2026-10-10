@@ -195,33 +195,121 @@ public final class ConfPackages {
     }
 
     private static final java.util.regex.Pattern TARGET = java.util.regex.Pattern.compile(
-        "(?is)^(?:\\s*--[^\n]*\n)*\\s*(?:INSERT\\s+INTO|UPDATE|DELETE\\s+FROM|MERGE\\s+INTO)\\s+([^\\s(]+)");
+        "(?is)^(?:\\s*--[^\n]*\n)*\\s*(INSERT\\s+INTO|UPDATE|DELETE\\s+FROM|MERGE\\s+INTO)\\s+([^\\s(]+)");
+
+    /** One statement of a package: its kind (INSERT, UPDATE, DELETE, MERGE or ""), target and INSERT values */
+    private record Statement(@NotNull String text, @NotNull String kind, @NotNull String table,
+                             @NotNull String schema, @NotNull Map<String, String> values) {
+    }
 
     /**
-     * dbeaver-mm K31: the package's statements grouped by the schema of the table they write to
-     * ({@code pcm.x} -> "pcm", unqualified -> ""), each group as a script to paste: statements in
-     * file order, one per line block, ';' terminated. The description line is left out.
+     * dbeaver-mm K31/K32: the package's statements grouped by the schema of the table they write to
+     * ({@code pcm.x} -> "pcm", unqualified -> ""), each group a script that runs without FK errors:
+     * DELETEs first, child tables before parents; then INSERTs, a referenced row before the rows
+     * pointing at it; then the rest in file order. Groups come in the order of their first statement,
+     * so the schema holding parent rows is first. {@code links}: "table.column" of an FK column ->
+     * "table.column" it references; empty = file order. The description line is left out.
      */
     // ponytail: schema read from the statement text only; unqualified names aren't resolved via the connection
     @NotNull
-    public static Map<String, String> scriptsBySchema(@NotNull String sql) {
+    public static Map<String, String> scriptsBySchema(@NotNull String sql, @NotNull Map<String, String> links) {
         if (sql.startsWith("--")) {
             int eol = sql.indexOf('\n');
             sql = eol < 0 ? "" : sql.substring(eol + 1);
         }
+        List<Statement> statements = new ArrayList<>();
+        for (String text : splitStatements(sql)) {
+            java.util.regex.Matcher m = TARGET.matcher(text);
+            String kind = m.find() ? m.group(1).toUpperCase(Locale.ROOT).split("\\s+")[0] : "";
+            String name = kind.isEmpty() ? "" : m.group(2);
+            String schema = name.contains(".") ? bareName(name.substring(0, name.lastIndexOf('.'))).toLowerCase(Locale.ROOT) : "";
+            List<Insert> insert = kind.equals("INSERT") ? parseInserts(text, null) : List.of();
+            statements.add(new Statement(text, kind, bareName(name).toLowerCase(Locale.ROOT), schema,
+                insert.isEmpty() ? Map.of() : insert.getFirst().values()));
+        }
+        Map<String, Integer> depths = new HashMap<>();
+        List<Statement> ordered = new ArrayList<>();
+        statements.stream().filter(st -> st.kind().equals("DELETE"))
+            .sorted(Comparator.comparingInt((Statement st) -> -tableDepth(st.table(), links, depths, new HashSet<>())))
+            .forEach(ordered::add);
+        ordered.addAll(parentsFirst(statements.stream().filter(st -> st.kind().equals("INSERT")).toList(), links));
+        statements.stream().filter(st -> !st.kind().equals("DELETE") && !st.kind().equals("INSERT")).forEach(ordered::add);
+
         Map<String, StringBuilder> groups = new LinkedHashMap<>();
-        for (String statement : splitStatements(sql)) {
-            java.util.regex.Matcher m = TARGET.matcher(statement);
-            String schema = "";
-            if (m.find() && m.group(1).contains(".")) {
-                String name = m.group(1);
-                schema = bareName(name.substring(0, name.lastIndexOf('.'))).toLowerCase(Locale.ROOT);
-            }
-            groups.computeIfAbsent(schema, k -> new StringBuilder()).append(statement).append(";\n");
+        for (Statement st : ordered) {
+            groups.computeIfAbsent(st.schema(), k -> new StringBuilder()).append(st.text()).append(";\n");
         }
         Map<String, String> result = new LinkedHashMap<>();
         groups.forEach((schema, text) -> result.put(schema, text.toString()));
         return result;
+    }
+
+    /** 0 for a table without FKs, else 1 + the deepest table it references (cycles cut). */
+    private static int tableDepth(@NotNull String table, @NotNull Map<String, String> links,
+                                  @NotNull Map<String, Integer> depths, @NotNull Set<String> visiting) {
+        Integer known = depths.get(table);
+        if (known != null) {
+            return known;
+        }
+        if (!visiting.add(table)) {
+            return 0;
+        }
+        int depth = 0;
+        for (Map.Entry<String, String> link : links.entrySet()) {
+            String fkTable = link.getKey().substring(0, link.getKey().lastIndexOf('.'));
+            String refTable = link.getValue().substring(0, link.getValue().lastIndexOf('.'));
+            if (fkTable.equals(table) && !refTable.equals(table)) {
+                depth = Math.max(depth, 1 + tableDepth(refTable, links, depths, visiting));
+            }
+        }
+        depths.put(table, depth);
+        return depth;
+    }
+
+    // ponytail: O(n^3) on the package's INSERT count, fine for hand-made packages of tens of rows
+    /** INSERTs reordered so a row comes after the package rows it references; a cycle keeps file order. */
+    @NotNull
+    private static List<Statement> parentsFirst(@NotNull List<Statement> inserts, @NotNull Map<String, String> links) {
+        List<Statement> left = new ArrayList<>(inserts);
+        List<Statement> result = new ArrayList<>();
+        while (!left.isEmpty()) {
+            int next = 0;
+            for (int i = 0; i < left.size(); i++) {
+                Statement candidate = left.get(i);
+                if (left.stream().noneMatch(other -> other != candidate && references(candidate, other, links))) {
+                    next = i;
+                    break;
+                }
+            }
+            result.add(left.remove(next));
+        }
+        return result;
+    }
+
+    private static boolean references(@NotNull Statement child, @NotNull Statement parent, @NotNull Map<String, String> links) {
+        for (Map.Entry<String, String> link : links.entrySet()) {
+            int fkDot = link.getKey().lastIndexOf('.');
+            int refDot = link.getValue().lastIndexOf('.');
+            if (child.table().equals(link.getKey().substring(0, fkDot))
+                && parent.table().equals(link.getValue().substring(0, refDot))) {
+                String value = child.values().get(link.getKey().substring(fkDot + 1));
+                String key = parent.values().get(link.getValue().substring(refDot + 1));
+                if (value != null && key != null && plainNumber(value).equals(plainNumber(key))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** "40.0" and "40" are the same key */
+    @NotNull
+    private static String plainNumber(@NotNull String value) {
+        try {
+            return new java.math.BigDecimal(value).stripTrailingZeros().toPlainString();
+        } catch (NumberFormatException e) {
+            return value;
+        }
     }
 
     /** Statements split on ';' outside quotes, stripped; blank and comment-only pieces dropped. */
