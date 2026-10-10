@@ -302,6 +302,48 @@ public final class ConfPackages {
         return false;
     }
 
+    /** dbeaver-mm K30: rows of {@code all} whose FK value points to {@code row} (see {@link #scriptsBySchema} for links). */
+    @NotNull
+    public static List<Insert> referencing(@NotNull Insert row, @NotNull List<Insert> all, @NotNull Map<String, String> links) {
+        List<Insert> result = new ArrayList<>();
+        String table = row.table().toLowerCase(Locale.ROOT);
+        for (Map.Entry<String, String> link : links.entrySet()) {
+            int refDot = link.getValue().lastIndexOf('.');
+            String key = link.getValue().substring(0, refDot).equals(table)
+                ? row.values().get(link.getValue().substring(refDot + 1)) : null;
+            if (key == null) {
+                continue;
+            }
+            int fkDot = link.getKey().lastIndexOf('.');
+            for (Insert other : all) {
+                String value = other.values().get(link.getKey().substring(fkDot + 1));
+                if (other != row && value != null && other.table().equalsIgnoreCase(link.getKey().substring(0, fkDot))
+                    && plainNumber(value).equals(plainNumber(key)) && !result.contains(other)) {
+                    result.add(other);
+                }
+            }
+        }
+        return result;
+    }
+
+    /** dbeaver-mm K33: {@code root} (level 0) and the rows below it, each at its nearest level. */
+    @NotNull
+    public static Map<Insert, Integer> levelsBelow(@NotNull Insert root, @NotNull List<Insert> all, @NotNull Map<String, String> links) {
+        Map<Insert, Integer> levels = new LinkedHashMap<>();
+        levels.put(root, 0);
+        Deque<Insert> todo = new ArrayDeque<>(List.of(root));
+        while (!todo.isEmpty()) {
+            Insert row = todo.poll();
+            for (Insert child : referencing(row, all, links)) {
+                if (!levels.containsKey(child)) {
+                    levels.put(child, levels.get(row) + 1);
+                    todo.add(child);
+                }
+            }
+        }
+        return levels;
+    }
+
     /** "40.0" and "40" are the same key */
     @NotNull
     private static String plainNumber(@NotNull String value) {

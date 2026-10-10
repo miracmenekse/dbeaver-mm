@@ -78,6 +78,23 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
     private Composite rowsArea;
     private Text sqlText;
     private Composite copyBar;
+    private CTabFolder tabs;
+    private CTabItem rowsTab;
+
+    // K33 delete mode: chosen in the panel, rows to delete painted red, rows left behind amber
+    private static final RGB DELETE_RGB = new RGB(239, 154, 154);
+    private static final RGB ORPHAN_RGB = new RGB(255, 236, 179);
+    private static final String CELL_COLORS_KEY = "cellColors";
+    private static final int MAX_LISTED = 10;
+    private Composite deleteBar;
+    private Label deleteTitle;
+    private Combo deleteDepth;
+    private Label deleteSummary;
+    private Button deleteButton;
+    private Text deleteWarning;
+    private ConfPackages.Insert deleteRoot;
+    private Map<ConfPackages.Insert, Integer> deleteLevels = Map.of();
+    private final Set<ConfPackages.Insert> toDelete = new LinkedHashSet<>();
     private static final String INSERT_KEY = "insert";
 
     // The shown package: its text and rows as parsed, FK links once loaded (K30 delete)
@@ -108,7 +125,8 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         copyBar = new Composite(right, SWT.NONE);
         copyBar.setLayout(new org.eclipse.swt.layout.RowLayout(SWT.HORIZONTAL));
         copyBar.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
-        CTabFolder tabs = new CTabFolder(right, SWT.BORDER | SWT.BOTTOM);
+        createDeleteBar(right);
+        tabs = new CTabFolder(right, SWT.BORDER | SWT.BOTTOM);
         tabs.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         rowsScroll = new ScrolledComposite(tabs, SWT.V_SCROLL | SWT.H_SCROLL);
         rowsScroll.setExpandHorizontal(true);
@@ -116,7 +134,7 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         rowsArea = new Composite(rowsScroll, SWT.NONE);
         rowsArea.setLayout(new GridLayout(1, false));
         rowsScroll.setContent(rowsArea);
-        CTabItem rowsTab = new CTabItem(tabs, SWT.NONE);
+        rowsTab = new CTabItem(tabs, SWT.NONE);
         rowsTab.setText("Rows");
         rowsTab.setControl(rowsScroll);
 
@@ -218,6 +236,7 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
     }
 
     private void showSelected() {
+        hideDeleteBar();
         String task = selectedTask();
         String sql = task == null ? "" : ConfPackages.read(task);
         sqlText.setText(sql);
@@ -471,6 +490,17 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
                 item.setForeground((Integer) cell[1], item.getDisplay().getSystemColor(SWT.COLOR_BLACK));
             }
         }
+        // Delete mode opened before the links were known: find the rows below now, keep the marks on top
+        if (deleteRoot != null) {
+            for (Control control : rowsArea.getChildren()) {
+                if (control instanceof Table rows) {
+                    for (TableItem item : rows.getItems()) {
+                        item.setData(CELL_COLORS_KEY, null);
+                    }
+                }
+            }
+            startDelete(deleteRoot);
+        }
     }
 
     /** "40.0" and "40" are the same key, like the labels' keys */
@@ -543,26 +573,169 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         MenuItem deleteItem = new MenuItem(menu, SWT.PUSH);
         deleteItem.setText("Delete row ...");
         deleteItem.addListener(SWT.Selection, e -> {
-            TableItem[] selection = rows.getSelection();
-            if (selection.length > 0 && selection[0].getData(INSERT_KEY) instanceof ConfPackages.Insert insert) {
-                deleteRow(insert);
+            if (selectedInsert(rows) != null) {
+                startDelete(selectedInsert(rows));
             }
         });
+        MenuItem toggleItem = new MenuItem(menu, SWT.PUSH);
+        toggleItem.setText("Include / exclude in delete\tDouble click");
+        toggleItem.addListener(SWT.Selection, e -> toggleDelete(selectedInsert(rows)));
+        menu.addListener(SWT.Show, e -> toggleItem.setEnabled(deleteRoot != null));
+        rows.addListener(SWT.MouseDoubleClick, e -> toggleDelete(selectedInsert(rows)));
         rows.setMenu(menu);
     }
 
-    /** K30: asks how deep to delete, then removes the chosen INSERTs from the package file. */
-    private void deleteRow(@NotNull ConfPackages.Insert insert) {
-        ConfDeleteDialog dialog = new ConfDeleteDialog(getSite().getShell(), insert, currentInserts, currentLinks);
-        if (dialog.open() != ConfDeleteDialog.OK || dialog.getToDelete().isEmpty()) {
+    @Nullable
+    private static ConfPackages.Insert selectedInsert(@NotNull Table rows) {
+        TableItem[] selection = rows.getSelection();
+        return selection.length > 0 && selection[0].getData(INSERT_KEY) instanceof ConfPackages.Insert insert ? insert : null;
+    }
+
+    private void createDeleteBar(@NotNull Composite parent) {
+        deleteBar = new Composite(parent, SWT.BORDER);
+        deleteBar.setLayout(new GridLayout(5, false));
+        GridData data = new GridData(SWT.FILL, SWT.TOP, true, false);
+        data.exclude = true;
+        deleteBar.setLayoutData(data);
+        deleteBar.setVisible(false);
+        deleteTitle = new Label(deleteBar, SWT.NONE);
+        deleteTitle.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 5, 1));
+        new Label(deleteBar, SWT.NONE).setText("Delete:");
+        deleteDepth = new Combo(deleteBar, SWT.READ_ONLY | SWT.DROP_DOWN);
+        deleteDepth.addListener(SWT.Selection, e -> selectDeleteDepth(deleteDepth.getSelectionIndex()));
+        deleteSummary = new Label(deleteBar, SWT.NONE);
+        deleteSummary.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        deleteButton = new Button(deleteBar, SWT.PUSH);
+        deleteButton.addListener(SWT.Selection, e -> confirmDelete());
+        Button cancel = new Button(deleteBar, SWT.PUSH);
+        cancel.setText("Cancel");
+        cancel.addListener(SWT.Selection, e -> showSelected());
+        deleteWarning = new Text(deleteBar, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP);
+        deleteWarning.setForeground(parent.getDisplay().getSystemColor(SWT.COLOR_DARK_RED));
+        deleteWarning.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 5, 1));
+    }
+
+    /**
+     * K33: delete mode for {@code root}: the bar above the tabs picks how many levels below it go
+     * too (rows of the package whose FK points to it), double click adds or drops a single row.
+     */
+    private void startDelete(@NotNull ConfPackages.Insert root) {
+        deleteRoot = root;
+        deleteLevels = ConfPackages.levelsBelow(root, currentInserts, currentLinks);
+        int maxLevel = Collections.max(deleteLevels.values());
+        deleteTitle.setText("Delete from " + currentTask + ":  " + describe(root)
+            + (currentLinks.isEmpty() ? "   (FK info not loaded, rows below unknown)" : ""));
+        deleteDepth.removeAll();
+        deleteDepth.add("Only this row");
+        for (int level = 1; level <= maxLevel; level++) {
+            deleteDepth.add(level == maxLevel ? "With all rows below (" + level + " levels)" : "Down to level " + level);
+        }
+        deleteDepth.select(0);
+        ((GridData) deleteBar.getLayoutData()).exclude = false;
+        deleteBar.setVisible(true);
+        tabs.setSelection(rowsTab);
+        selectDeleteDepth(0);
+    }
+
+    private void hideDeleteBar() {
+        deleteRoot = null;
+        toDelete.clear();
+        ((GridData) deleteBar.getLayoutData()).exclude = true;
+        deleteBar.setVisible(false);
+        deleteBar.getParent().layout(true, true);
+    }
+
+    private void selectDeleteDepth(int depth) {
+        toDelete.clear();
+        deleteLevels.forEach((row, level) -> {
+            if (level <= depth) {
+                toDelete.add(row);
+            }
+        });
+        markDeleteRows();
+    }
+
+    private void toggleDelete(@Nullable ConfPackages.Insert row) {
+        if (deleteRoot == null || row == null || row == deleteRoot) {
+            return;
+        }
+        if (!toDelete.remove(row)) {
+            toDelete.add(row);
+        }
+        markDeleteRows();
+    }
+
+    /** Paints rows to delete red and rows that would point at a deleted row amber, lists the latter. */
+    private void markDeleteRows() {
+        Set<ConfPackages.Insert> orphans = new LinkedHashSet<>();
+        for (ConfPackages.Insert deleted : toDelete) {
+            for (ConfPackages.Insert child : ConfPackages.referencing(deleted, currentInserts, currentLinks)) {
+                if (!toDelete.contains(child)) {
+                    orphans.add(child);
+                }
+            }
+        }
+        Color black = deleteBar.getDisplay().getSystemColor(SWT.COLOR_BLACK);
+        for (Control control : rowsArea.getChildren()) {
+            if (!(control instanceof Table rows)) {
+                continue;
+            }
+            for (TableItem item : rows.getItems()) {
+                if (!(item.getData(INSERT_KEY) instanceof ConfPackages.Insert row)) {
+                    continue;
+                }
+                // Remember the cell's own colors (FK link colors) to put back when it's unmarked
+                if (item.getData(CELL_COLORS_KEY) == null) {
+                    Color[] saved = new Color[rows.getColumnCount() * 2];
+                    for (int i = 0; i < rows.getColumnCount(); i++) {
+                        saved[i * 2] = item.getBackground(i);
+                        saved[i * 2 + 1] = item.getForeground(i);
+                    }
+                    item.setData(CELL_COLORS_KEY, saved);
+                }
+                Color[] saved = (Color[]) item.getData(CELL_COLORS_KEY);
+                Color mark = toDelete.contains(row) ? UIUtils.getSharedColor(DELETE_RGB)
+                    : orphans.contains(row) ? UIUtils.getSharedColor(ORPHAN_RGB) : null;
+                for (int i = 0; i < rows.getColumnCount(); i++) {
+                    item.setBackground(i, mark != null ? mark : saved[i * 2]);
+                    item.setForeground(i, mark != null ? black : saved[i * 2 + 1]);
+                }
+            }
+        }
+        deleteSummary.setText(toDelete.size() + " row(s) in red will be removed from the package");
+        deleteButton.setText("Delete " + toDelete.size() + " row(s)");
+        if (orphans.isEmpty()) {
+            deleteWarning.setText("");
+        } else {
+            StringBuilder text = new StringBuilder("Warning: " + orphans.size()
+                + " row(s) in amber use a deleted row and stay in the package:");
+            orphans.stream().limit(MAX_LISTED).forEach(o -> text.append("\n  ").append(describe(o)));
+            if (orphans.size() > MAX_LISTED) {
+                text.append("\n  ... +").append(orphans.size() - MAX_LISTED);
+            }
+            deleteWarning.setText(text.toString());
+        }
+        deleteBar.getParent().layout(true, true);
+    }
+
+    private void confirmDelete() {
+        if (toDelete.isEmpty()) {
             return;
         }
         try {
-            ConfPackages.remove(currentTask, currentSql, dialog.getToDelete());
+            ConfPackages.remove(currentTask, currentSql, toDelete);
         } catch (Exception e) {
             DBWorkbench.getPlatformUI().showError("Delete from conf package", e.getMessage(), e);
         }
         refresh();
+    }
+
+    @NotNull
+    private static String describe(@NotNull ConfPackages.Insert row) {
+        StringJoiner text = new StringJoiner(", ", row.table() + "  ", "");
+        row.values().entrySet().stream().limit(4)
+            .forEach(e -> text.add(e.getKey() + "=" + (e.getValue() == null ? "NULL" : e.getValue())));
+        return row.values().size() > 4 ? text + ", ..." : text.toString();
     }
 
     /** {@code column} < 0 = whole rows, tab separated; one line per selected row */
