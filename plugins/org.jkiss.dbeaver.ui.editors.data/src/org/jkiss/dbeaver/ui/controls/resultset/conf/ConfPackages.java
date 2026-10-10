@@ -145,6 +145,57 @@ public final class ConfPackages {
         refresh(file.getParent());
     }
 
+    /**
+     * dbeaver-mm K36: sets {@code column} of one INSERT (parsed from the task's current text) to
+     * {@code value} in the package file. Only that value is rewritten: "NULL" (any case) gives NULL,
+     * a value that was quoted stays quoted, otherwise a number is written bare and text quoted.
+     * Fails instead of guessing when the file changed since it was parsed.
+     */
+    public static void updateValue(@NotNull String task, @NotNull String parsedText, @NotNull Insert insert,
+                                   @NotNull String column, @NotNull String value) throws IOException {
+        Path file = file(task);
+        if (file == null || !Files.readString(file, StandardCharsets.UTF_8).equals(parsedText)) {
+            throw new IOException("Package " + task + " changed meanwhile, nothing saved");
+        }
+        String updated = replaceValue(parsedText, insert, column, value);
+        if (updated == null) {
+            throw new IOException("Can't find column " + column + " in the INSERT");
+        }
+        Files.writeString(file, updated, StandardCharsets.UTF_8);
+        refresh(file.getParent());
+    }
+
+    /** {@code text} with the value of {@code column} in {@code insert} replaced, null when not found. */
+    @Nullable
+    static String replaceValue(@NotNull String text, @NotNull Insert insert, @NotNull String column, @NotNull String value) {
+        String upper = text.toUpperCase(Locale.ROOT);
+        int open = text.indexOf('(', insert.start());
+        int close = open < 0 ? -1 : closingParen(text, open);
+        int valuesKw = close < 0 ? -1 : upper.indexOf("VALUES", close);
+        int valuesOpen = valuesKw < 0 ? -1 : text.indexOf('(', valuesKw);
+        int valuesClose = valuesOpen < 0 ? -1 : closingParen(text, valuesOpen);
+        if (valuesClose < 0 || valuesClose > insert.end()) {
+            return null;
+        }
+        List<String> columns = splitTopLevel(text.substring(open + 1, close));
+        List<String> values = new ArrayList<>(splitTopLevel(text.substring(valuesOpen + 1, valuesClose)));
+        int index = -1;
+        for (int i = 0; i < columns.size(); i++) {
+            if (bareName(columns.get(i)).equalsIgnoreCase(column)) {
+                index = i;
+            }
+        }
+        if (index < 0 || columns.size() != values.size()) {
+            return null;
+        }
+        boolean wasQuoted = values.get(index).startsWith("'");
+        String literal = value.equalsIgnoreCase("NULL") ? "NULL"
+            : !wasQuoted && value.strip().matches("-?\\d+(\\.\\d+)?") ? value.strip()
+            : "'" + value.replace("'", "''") + "'";
+        values.set(index, literal);
+        return text.substring(0, valuesOpen + 1) + String.join(", ", values) + text.substring(valuesClose);
+    }
+
     /** Rows inserted into {@code table} by any package. */
     @NotNull
     public static List<InsertedRow> findInserts(@NotNull String table) {

@@ -226,3 +226,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K33 | 2026-10-10 | Conf paketinden silme pencere yerine panelde yapılır: silinecek satırlar kırmızı, geride kalanlar turuncu boyanır, seviye satırların üstündeki çubuktan seçilir. |
 | K34 | 2026-10-10 | Silme yeniden sade, tablolu pencerede; üstteki satırlar da (işaretsiz) listelenir. Conf paketi penceresi son 2 task id'yi buton olarak sunar; panel şemaları çizgi ve başlıkla ayırır. |
 | K35 | 2026-10-10 | Conf Packages panelinde tek seçim kalır: bir tablodaki satıra tıklamak diğer tablolardaki seçimi kaldırır. |
+| K36 | 2026-10-10 | Conf Packages panelinde hücreye çift tıklayınca yerinde düzenlenir; Enter değeri paketteki INSERT'e yazar (`NULL` = null), Esc vazgeçer. |

@@ -229,3 +229,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K33 | 2026-10-10 | Deleting from a conf package happens in the panel instead of a dialog: rows to delete are painted red, rows left behind amber, the level is picked in a bar above the rows. |
 | K34 | 2026-10-10 | Delete is a light table dialog again and also lists the rows above (unchecked); the conf package dialog offers the 2 most recent task ids as buttons; the panel separates schemas with a line and title. |
 | K35 | 2026-10-10 | Conf Packages panel keeps one row selection: clicking a row in one table clears the selection in the others. |
+| K36 | 2026-10-10 | Double click a cell in the Conf Packages panel to edit it in place; Enter writes the value into the package's INSERT (`NULL` for null), Esc cancels. |

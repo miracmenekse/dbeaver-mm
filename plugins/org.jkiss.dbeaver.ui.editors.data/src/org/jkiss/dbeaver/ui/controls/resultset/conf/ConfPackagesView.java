@@ -559,6 +559,12 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
                 }
             }
         });
+        rows.addListener(SWT.MouseDoubleClick, e -> {
+            TableItem item = rows.getItem(new Point(e.x, e.y));
+            if (item != null) {
+                editCell(rows, item, column[0]);
+            }
+        });
         Runnable copyValue = () -> copy(rows, column[0]);
         rows.addListener(SWT.KeyDown, e -> {
             if ((e.stateMask & SWT.MOD1) != 0 && (e.keyCode == 'c' || e.keyCode == 'C')) {
@@ -651,6 +657,55 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         row.values().entrySet().stream().limit(4)
             .forEach(e -> text.add(e.getKey() + "=" + (e.getValue() == null ? "NULL" : e.getValue())));
         return row.values().size() > 4 ? text + ", ..." : text.toString();
+    }
+
+    /**
+     * K36: double click edits a cell in place; Enter or leaving the cell writes the value into the
+     * package's INSERT ("NULL" = NULL), Esc cancels. The panel then reloads from the file.
+     */
+    private void editCell(@NotNull Table rows, @NotNull TableItem item, int column) {
+        String columnName = rows.getColumn(column).getText();
+        if (!(item.getData(INSERT_KEY) instanceof ConfPackages.Insert insert) || !insert.values().containsKey(columnName)) {
+            return;
+        }
+        String old = insert.values().get(columnName);
+        org.eclipse.swt.custom.TableEditor editor = new org.eclipse.swt.custom.TableEditor(rows);
+        editor.grabHorizontal = true;
+        editor.grabVertical = true;
+        Text text = new Text(rows, SWT.SINGLE);
+        text.setText(old == null ? "NULL" : old);
+        text.selectAll();
+        boolean[] done = {false};
+        Runnable finish = () -> {
+            if (done[0]) {
+                return;
+            }
+            done[0] = true;
+            String value = text.getText();
+            text.dispose();
+            editor.dispose();
+            if (value.equals(old == null ? "NULL" : old)) {
+                return;
+            }
+            try {
+                ConfPackages.updateValue(currentTask, currentSql, insert, columnName, value);
+            } catch (Exception ex) {
+                DBWorkbench.getPlatformUI().showError("Edit conf package", ex.getMessage(), ex);
+            }
+            refresh();
+        };
+        text.addListener(SWT.DefaultSelection, e -> finish.run());
+        text.addListener(SWT.FocusOut, e -> finish.run());
+        text.addListener(SWT.Traverse, e -> {
+            if (e.detail == SWT.TRAVERSE_ESCAPE) {
+                e.doit = false;
+                done[0] = true;
+                text.dispose();
+                editor.dispose();
+            }
+        });
+        editor.setEditor(text, item, column);
+        text.setFocus();
     }
 
     /** {@code column} < 0 = whole rows, tab separated; one line per selected row */
