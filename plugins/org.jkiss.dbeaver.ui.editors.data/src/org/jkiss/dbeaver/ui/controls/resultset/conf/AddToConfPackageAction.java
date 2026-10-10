@@ -106,8 +106,25 @@ public class AddToConfPackageAction extends Action {
             UIUtils.createControlLabel(area, "Task ID");
             taskCombo = new Combo(area, SWT.DROP_DOWN);
             taskCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-            taskCombo.setItems(ConfPackages.listTasks().toArray(new String[0]));
+            List<String> tasks = ConfPackages.listTasks();
+            taskCombo.setItems(tasks.toArray(new String[0]));
             taskCombo.setText(lastTask);
+
+            // dbeaver-mm K34: the 2 most recently changed packages one click away, the rest in the list
+            if (!tasks.isEmpty()) {
+                UIUtils.createControlLabel(area, "Recent");
+                Composite recent = new Composite(area, SWT.NONE);
+                recent.setLayout(new org.eclipse.swt.layout.RowLayout(SWT.HORIZONTAL));
+                for (String recentTask : tasks.subList(0, Math.min(2, tasks.size()))) {
+                    Button pick = new Button(recent, SWT.PUSH | SWT.FLAT);
+                    pick.setText(recentTask);
+                    pick.setToolTipText(ConfPackages.readDescription(recentTask));
+                    pick.addListener(SWT.Selection, e -> taskCombo.setText(recentTask));
+                }
+                if (tasks.size() > 2) {
+                    new Label(recent, SWT.NONE).setText("+" + (tasks.size() - 2) + " more in the Task ID list");
+                }
+            }
 
             UIUtils.createControlLabel(area, "Description");
             descText = new Text(area, SWT.BORDER);

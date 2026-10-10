@@ -50,10 +50,11 @@ public final class ConfPackages {
     }
 
     /**
-     * One parsed INSERT: bare table name as written, its column -> value map and where the statement
+     * One parsed INSERT: bare table name as written, its schema (lower case, "" when unqualified),
+     * its column -> value map and where the statement
      * (with its ';' and line end) sits in the package text.
      */
-    public record Insert(@NotNull String table, @NotNull Map<String, String> values, int start, int end) {
+    public record Insert(@NotNull String table, @NotNull String schema, @NotNull Map<String, String> values, int start, int end) {
     }
 
     // ponytail: fixed Scripts/conf below the project; a custom scripts root setting is ignored
@@ -344,6 +345,25 @@ public final class ConfPackages {
         return levels;
     }
 
+    /** dbeaver-mm K34: rows above {@code root} - the package rows it points to, recursively - at levels -1, -2, ... */
+    @NotNull
+    public static Map<Insert, Integer> levelsAbove(@NotNull Insert root, @NotNull List<Insert> all, @NotNull Map<String, String> links) {
+        Map<Insert, Integer> levels = new LinkedHashMap<>();
+        levels.put(root, 0);
+        Deque<Insert> todo = new ArrayDeque<>(List.of(root));
+        while (!todo.isEmpty()) {
+            Insert row = todo.poll();
+            for (Insert parent : all) {
+                if (!levels.containsKey(parent) && referencing(parent, all, links).contains(row)) {
+                    levels.put(parent, levels.get(row) - 1);
+                    todo.add(parent);
+                }
+            }
+        }
+        levels.remove(root);
+        return levels;
+    }
+
     /** "40.0" and "40" are the same key */
     @NotNull
     private static String plainNumber(@NotNull String value) {
@@ -438,7 +458,8 @@ public final class ConfPackages {
                 end++;
             }
             end = sql.indexOf('\n', end) < 0 ? sql.length() : sql.indexOf('\n', end) + 1;
-            rows.add(new Insert(bareName(name), row, start, end));
+            String schema = name.contains(".") ? bareName(name.substring(0, name.lastIndexOf('.'))).toLowerCase(Locale.ROOT) : "";
+            rows.add(new Insert(bareName(name), schema, row, start, end));
         }
         return rows;
     }

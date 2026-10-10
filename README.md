@@ -51,8 +51,9 @@ no separate rule engine, so it stays a thin layer over upstream DBeaver.
   grid per table and its whole SQL on a second tab. It refreshes itself when a package changes. FK columns show
   `value | label` like the grid; right click or Ctrl+C copies a cell's value, *Copy row* the whole row.
   A row's FK value and the row it references in the same package share a background color. Right click ›
-  *Delete row ...* opens a delete bar in the panel: pick how many levels below the row go too, double click adds or
-  drops a single row; rows to delete are red, rows left pointing at a deleted row amber and listed as a warning. Copy buttons put the package's script on the clipboard,
+  *Delete row ...* opens a table of the row, the rows below it (checked down to the chosen level) and the rows above
+  it (unchecked); while it is open the panel shows rows to delete in red, rows left pointing at them amber. With
+  several schemas the panel separates them with a line and a title (e.g. *PCM confs*). Copy buttons put the package's script on the clipboard,
   one per schema it writes to (e.g. *Copy pcm*, *Copy domain_config*) plus *Copy all*, without the description line.
   Copied scripts run without FK errors: DELETEs child tables first, INSERTs parent rows first, then UPDATEs.
 * **Easier reading:** Group rows by a column in two alternating colors. The navigator shows tables directly and puts
@@ -226,3 +227,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K31 | 2026-10-10 | Conf Packages panel copy buttons: the whole script or the statements of one schema (pcm, domain_config, ...), since each schema is sent separately. |
 | K32 | 2026-10-10 | Copied conf scripts are in FK-safe order: DELETEs child tables first, INSERTs referenced rows first (also within one table), then the rest; the schema with parent rows comes first. |
 | K33 | 2026-10-10 | Deleting from a conf package happens in the panel instead of a dialog: rows to delete are painted red, rows left behind amber, the level is picked in a bar above the rows. |
+| K34 | 2026-10-10 | Delete is a light table dialog again and also lists the rows above (unchecked); the conf package dialog offers the 2 most recent task ids as buttons; the panel separates schemas with a line and title. |

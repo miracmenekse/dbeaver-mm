@@ -51,8 +51,9 @@ ya da ayrı bir kural motoru gerekmez. Böylece fork, upstream DBeaver'ın üzer
   tablo başına satır ızgarası, tüm SQL'i ikinci sekmede. Paket değişince kendini yeniler. FK kolonları
   grid'deki gibi `değer | etiket` gösterir; sağ tık ya da Ctrl+C hücre değerini, *Copy row* tüm satırı kopyalar.
   Bir satırın FK değeri ile aynı paketteki gösterdiği satır aynı arka plan rengini alır. Sağ tık ›
-  *Delete row ...* panelde silme çubuğunu açar: satırın altındaki kaç seviyenin de silineceği seçilir, çift tık tek
-  satırı ekler ya da çıkarır; silinecekler kırmızı, silinen satıra bağlı kalanlar turuncu ve uyarıda listelenir. Kopyala butonları paketin betiğini panoya alır: yazdığı her
+  *Delete row ...* satırı, altındaki satırları (seçilen seviyeye kadar işaretli) ve üstündeki satırları (işaretsiz)
+  tabloda gösterir; pencere açıkken panel silinecekleri kırmızı, onlara bağlı kalanları turuncu gösterir. Birden
+  fazla şema varsa panel bunları çizgi ve başlıkla ayırır (ör. *PCM confs*). Kopyala butonları paketin betiğini panoya alır: yazdığı her
   şema için bir buton (ör. *Copy pcm*, *Copy domain_config*) ve *Copy all*; açıklama satırı hariç.
   Kopyalanan betik FK hatası vermeden çalışır: DELETE'ler önce alt tablolar, INSERT'ler önce üst satırlar, sonra UPDATE'ler.
 * **Daha kolay okuma:** Satırlar bir kolona göre iki renkle gruplanabilir. Gezgin tabloları doğrudan gösterir;
@@ -223,3 +224,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K31 | 2026-10-10 | Conf Packages paneline kopyala butonları: tüm betik ya da tek bir şemanın (pcm, domain_config, ...) ifadeleri; her şema ayrı gönderildiği için. |
 | K32 | 2026-10-10 | Kopyalanan conf betikleri FK'ya uygun sırada: DELETE'ler önce alt tablolar, INSERT'ler önce gösterilen satırlar (aynı tablo içinde de), sonra diğerleri; üst satırları tutan şema önce gelir. |
 | K33 | 2026-10-10 | Conf paketinden silme pencere yerine panelde yapılır: silinecek satırlar kırmızı, geride kalanlar turuncu boyanır, seviye satırların üstündeki çubuktan seçilir. |
+| K34 | 2026-10-10 | Silme yeniden sade, tablolu pencerede; üstteki satırlar da (işaretsiz) listelenir. Conf paketi penceresi son 2 task id'yi buton olarak sunar; panel şemaları çizgi ve başlıkla ayırır. |
