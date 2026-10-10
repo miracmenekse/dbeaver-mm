@@ -543,6 +543,14 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
      */
     private void addCopySupport(@NotNull Table rows) {
         int[] column = {0};
+        // K35: one selection in the whole panel - each table keeps its own, so clear the others
+        rows.addListener(SWT.Selection, e -> {
+            for (Control other : rowsArea.getChildren()) {
+                if (other != rows && other instanceof Table table) {
+                    table.deselectAll();
+                }
+            }
+        });
         rows.addListener(SWT.MouseDown, e -> {
             TableItem item = rows.getItem(new Point(e.x, e.y));
             for (int i = 0; item != null && i < rows.getColumnCount(); i++) {

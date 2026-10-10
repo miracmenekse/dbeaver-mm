@@ -228,3 +228,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K32 | 2026-10-10 | Copied conf scripts are in FK-safe order: DELETEs child tables first, INSERTs referenced rows first (also within one table), then the rest; the schema with parent rows comes first. |
 | K33 | 2026-10-10 | Deleting from a conf package happens in the panel instead of a dialog: rows to delete are painted red, rows left behind amber, the level is picked in a bar above the rows. |
 | K34 | 2026-10-10 | Delete is a light table dialog again and also lists the rows above (unchecked); the conf package dialog offers the 2 most recent task ids as buttons; the panel separates schemas with a line and title. |
+| K35 | 2026-10-10 | Conf Packages panel keeps one row selection: clicking a row in one table clears the selection in the others. |
