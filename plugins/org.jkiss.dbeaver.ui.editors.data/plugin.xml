@@ -1659,4 +1659,24 @@
         </menuContribution>
     </extension>
 
+    <!-- dbeaver-mm K37: Fetch IDs / Add to conf package as buttons next to the table editor's tabs -->
+    <extension point="org.eclipse.ui.commands">
+        <command id="org.jkiss.dbeaver.mm.grid.fetchIds" categoryId="org.jkiss.dbeaver.core.util"
+            name="Fetch IDs" description="Fetch IDs for the grid's new rows from the id API"/>
+        <command id="org.jkiss.dbeaver.mm.grid.addToConfPackage" categoryId="org.jkiss.dbeaver.core.util"
+            name="Add to conf package" description="Add the grid's unsaved changes to a conf package"/>
+    </extension>
+    <extension point="org.eclipse.ui.handlers">
+        <handler commandId="org.jkiss.dbeaver.mm.grid.fetchIds"
+            class="org.jkiss.dbeaver.ui.controls.resultset.conf.GridToolsHandler"/>
+        <handler commandId="org.jkiss.dbeaver.mm.grid.addToConfPackage"
+            class="org.jkiss.dbeaver.ui.controls.resultset.conf.GridToolsHandler"/>
+    </extension>
+    <extension point="org.eclipse.ui.menus">
+        <menuContribution allPopups="false" locationURI="toolbar:org.jkiss.dbeaver.mm.entityTabs">
+            <command commandId="org.jkiss.dbeaver.mm.grid.fetchIds" mode="FORCE_TEXT" style="push"/>
+            <command commandId="org.jkiss.dbeaver.mm.grid.addToConfPackage" mode="FORCE_TEXT" style="push"/>
+        </menuContribution>
+    </extension>
+
 </plugin>

@@ -94,12 +94,33 @@ public class FetchIdsAction extends Action {
 
     /** Adds "Fetch IDs" and "Change ID domain" when the grid shows a table with a one-column key. */
     public static void contribute(@NotNull IMenuManager menu, @NotNull ResultSetViewer viewer) {
+        FetchIdsAction fetch = create(viewer);
+        if (fetch == null) {
+            return;
+        }
+        menu.add(fetch);
+        DBPDataSourceContainer container = fetch.container;
+        String domain = getDomain(container);
+        menu.add(new Action("Change ID domain (" + (domain == null ? "not set" : domain) + ") ...") {
+            @Override
+            public void run() {
+                askDomain(container);
+            }
+        });
+    }
+
+    /**
+     * dbeaver-mm K37: the action for the grid's new rows with an empty key, null when the grid
+     * doesn't show a table with a one-column key. Disabled when there are no such rows.
+     */
+    @Nullable
+    public static FetchIdsAction create(@NotNull ResultSetViewer viewer) {
         DBSDataContainer dataContainer = viewer.getDataContainer();
         ResultSetModel model = viewer.getModel();
         DBDRowIdentifier identifier = model.getDefaultRowIdentifier();
         if (dataContainer == null || dataContainer.getDataSource() == null || identifier == null
             || identifier.getAttributes().size() != 1) {
-            return;
+            return null;
         }
         DBPDataSourceContainer container = dataContainer.getDataSource().getContainer();
         DBDAttributeBinding keyAttr = identifier.getAttributes().get(0);
@@ -110,14 +131,7 @@ public class FetchIdsAction extends Action {
             }
         }
         String table = identifier.getEntity().getName().toLowerCase(Locale.ROOT);
-        menu.add(new FetchIdsAction(viewer, container, keyAttr, table, rows));
-        String domain = getDomain(container);
-        menu.add(new Action("Change ID domain (" + (domain == null ? "not set" : domain) + ") ...") {
-            @Override
-            public void run() {
-                askDomain(container);
-            }
-        });
+        return new FetchIdsAction(viewer, container, keyAttr, table, rows);
     }
 
     @Override

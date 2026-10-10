@@ -227,3 +227,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K34 | 2026-10-10 | Silme yeniden sade, tablolu pencerede; üstteki satırlar da (işaretsiz) listelenir. Conf paketi penceresi son 2 task id'yi buton olarak sunar; panel şemaları çizgi ve başlıkla ayırır. |
 | K35 | 2026-10-10 | Conf Packages panelinde tek seçim kalır: bir tablodaki satıra tıklamak diğer tablolardaki seçimi kaldırır. |
 | K36 | 2026-10-10 | Conf Packages panelinde hücreye çift tıklayınca yerinde düzenlenir; Enter değeri paketteki INSERT'e yazar (`NULL` = null), Esc vazgeçer. |
+| K37 | 2026-10-10 | Window ile Help arasında **Plus** ana menüsü (Conf Packages, Recent SQL Scripts, Focus Mode); tablo editöründe Properties / Data / Diagram sekmelerinin yanında *Fetch IDs* ve *Add to conf package* butonları. |

@@ -40,6 +40,19 @@
         <menuContribution allPopups="false" locationURI="menu:window?before=primary.views">
             <command commandId="org.jkiss.dbeaver.ui.mm.workbench.focusMode"/>
         </menuContribution>
+        <!-- dbeaver-mm K37: "Plus" top-level menu between Window and Help with the fork's panels -->
+        <menuContribution allPopups="false" locationURI="menu:org.eclipse.ui.main.menu?after=window">
+            <menu id="org.jkiss.dbeaver.mm.plus" label="Plus">
+                <command commandId="org.jkiss.dbeaver.core.view.toggle" style="toggle">
+                    <parameter name="viewId" value="org.jkiss.dbeaver.ui.conf.packages.view"/>
+                </command>
+                <command commandId="org.jkiss.dbeaver.core.view.toggle" style="toggle">
+                    <parameter name="viewId" value="org.jkiss.dbeaver.ui.recentscripts.view"/>
+                </command>
+                <separator name="modes" visible="true"/>
+                <command commandId="org.jkiss.dbeaver.ui.mm.workbench.focusMode"/>
+            </menu>
+        </menuContribution>
     </extension>
 
     <!--

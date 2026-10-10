@@ -1078,7 +1078,21 @@ public class EntityEditor extends MultiPageDatabaseEditor
 
     @Override
     protected Control createTopRightControl(Composite parent) {
-        Composite composite = new Composite(parent, SWT.NONE);
+        // dbeaver-mm K37: buttons next to the tabs, contributed to "toolbar:org.jkiss.dbeaver.mm.entityTabs"
+        // (the data editor plugin adds Fetch IDs / Add to conf package); the breadcrumb sits right of them
+        Composite outer = new Composite(parent, SWT.NONE);
+        outer.setLayout(GridLayoutFactory.fillDefaults().numColumns(2).create());
+        org.eclipse.jface.action.ToolBarManager tabTools = new org.eclipse.jface.action.ToolBarManager(SWT.FLAT | SWT.RIGHT);
+        tabTools.createControl(outer).setLayoutData(GridDataFactory.swtDefaults().align(SWT.BEGINNING, SWT.CENTER).create());
+        org.eclipse.ui.menus.IMenuService menuService = getSite().getService(org.eclipse.ui.menus.IMenuService.class);
+        if (menuService != null) {
+            menuService.populateContributionManager(tabTools, "toolbar:org.jkiss.dbeaver.mm.entityTabs");
+            tabTools.update(true);
+            outer.addDisposeListener(e -> menuService.releaseContributions(tabTools));
+        }
+        outer.addDisposeListener(e -> tabTools.dispose());
+
+        Composite composite = new Composite(outer, SWT.NONE);
         composite.setLayoutData(GridDataFactory.swtDefaults().grab(false, true).create());
         composite.setLayout(GridLayoutFactory.fillDefaults().create());
 
@@ -1102,7 +1116,7 @@ public class EntityEditor extends MultiPageDatabaseEditor
         composite.addDisposeListener(e -> store.removePropertyChangeListener(listener));
         this.applyBreadcrumbsVisibility(store, composite);
 
-        return composite;
+        return outer;
     }
 
     private void applyBreadcrumbsVisibility(@NotNull DBPPreferenceStore store, @NotNull Composite composite) {
