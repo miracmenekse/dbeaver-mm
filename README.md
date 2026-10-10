@@ -50,6 +50,7 @@ no separate rule engine, so it stays a thin layer over upstream DBeaver.
   *Window › Conf Packages* opens a bottom panel: packages newest first, the selected one's INSERTs as a row
   grid per table and its whole SQL on a second tab. It refreshes itself when a package changes. FK columns show
   `value | label` like the grid; right click or Ctrl+C copies a cell's value, *Copy row* the whole row.
+  A row's FK value and the row it references in the same package share a background color.
 * **Easier reading:** Group rows by a column in two alternating colors. The navigator shows tables directly and puts
   views, indexes and other objects into one *Other objects* node.
 
@@ -216,3 +217,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K26 | 2026-10-08 | The in-cell FK picker shows rows inserted in conf packages first, so a new parent row can be picked before it is in the database. |
 | K27 | 2026-10-10 | *Conf Packages* bottom panel lists the packages and shows the selected one's inserted rows per table and its SQL; it refreshes as packages change. |
 | K28 | 2026-10-10 | Conf Packages panel shows FK labels next to values (physical or virtual FK, also rows only in packages) and copies a cell or row with right click / Ctrl+C. |
+| K29 | 2026-10-10 | Conf Packages panel colors related rows: an FK value and the referenced key in the same package share one color per relation. |

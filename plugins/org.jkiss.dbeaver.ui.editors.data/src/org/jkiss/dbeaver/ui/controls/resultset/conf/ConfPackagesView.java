@@ -32,7 +32,9 @@ import org.eclipse.swt.custom.CTabItem;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.custom.ScrolledComposite;
 import org.eclipse.swt.dnd.TextTransfer;
+import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
@@ -269,6 +271,8 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
             DBRProgressMonitor monitor = new DefaultProgressMonitor(progress);
             // table -> column -> value -> label
             Map<String, Map<String, Map<String, String>>> labels = new HashMap<>();
+            // "table.column" of an FK column -> "table.column" it references
+            Map<String, String> links = new HashMap<>();
             for (Map.Entry<String, List<Map<String, String>>> entry : byTable.entrySet()) {
                 DBSEntity entity = findTable(monitor, entry.getKey());
                 if (entity == null) {
@@ -284,6 +288,10 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
                     try {
                         DBSEntityAttribute attribute = DBUtils.findObject(entity.getAttributes(monitor), column.getKey(), true);
                         if (attribute != null) {
+                            String target = referencedColumn(monitor, attribute);
+                            if (target != null) {
+                                links.put(entry.getKey() + "." + column.getKey(), target);
+                            }
                             Map<String, String> found = FkDictionaryLabels.labelsOf(monitor, attribute, column.getValue());
                             if (!found.isEmpty()) {
                                 labels.computeIfAbsent(entry.getKey(), t -> new HashMap<>()).put(column.getKey(), found);
@@ -294,8 +302,11 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
                     }
                 }
             }
-            if (!labels.isEmpty()) {
-                UIUtils.asyncExec(() -> applyLabels(generation, labels));
+            if (!labels.isEmpty() || !links.isEmpty()) {
+                UIUtils.asyncExec(() -> {
+                    applyLabels(generation, labels);
+                    applyLinkColors(generation, links);
+                });
             }
             return Status.OK_STATUS;
         });
@@ -329,6 +340,82 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
             }
         }
         relayoutRows();
+    }
+
+    /** "table.column" (lower case) the FK column {@code attribute} references, physical or virtual FK */
+    @Nullable
+    private static String referencedColumn(@NotNull DBRProgressMonitor monitor, @NotNull DBSEntityAttribute attribute) {
+        try {
+            for (DBSEntityReferrer ref : DBUtils.getAttributeReferrers(monitor, attribute, true)) {
+                if (ref instanceof DBSEntityAssociation association && association.getReferencedConstraint() != null) {
+                    DBSEntityAttribute key = DBUtils.getReferenceAttribute(monitor, association, attribute, false);
+                    if (key != null) {
+                        return (key.getParentObject().getName() + "." + key.getName()).toLowerCase(Locale.ROOT);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Can't read FK of " + attribute.getName(), e);
+        }
+        return null;
+    }
+
+    // Light enough for dark text, distinct enough to tell apart; repeats after 8 relations
+    private static final RGB[] LINK_COLORS = {
+        new RGB(255, 224, 178), new RGB(200, 230, 201), new RGB(187, 222, 251), new RGB(248, 187, 208),
+        new RGB(225, 190, 231), new RGB(255, 245, 157), new RGB(178, 235, 242), new RGB(215, 204, 200),
+    };
+
+    /**
+     * A row's FK value and the row it points to in the same package get the same background, one
+     * color per referenced key value, so which rows belong together can be seen at a glance.
+     */
+    private void applyLinkColors(int generation, @NotNull Map<String, String> links) {
+        if (generation != labelGeneration || rowsArea.isDisposed() || links.isEmpty()) {
+            return;
+        }
+        // "table.column=value" of every referenced key cell in this package -> its cells
+        Set<String> targets = new HashSet<>(links.values());
+        Map<String, List<Object[]>> keyCells = new HashMap<>();
+        List<Object[]> fkCells = new ArrayList<>();
+        for (Control control : rowsArea.getChildren()) {
+            if (!(control instanceof Table rows)) {
+                continue;
+            }
+            TableColumn[] columns = rows.getColumns();
+            for (int i = 0; i < columns.length; i++) {
+                String column = rows.getData() + "." + columns[i].getText();
+                for (TableItem item : rows.getItems()) {
+                    String value = ((String[]) item.getData())[i];
+                    if (value == null || value.isEmpty()) {
+                        continue;
+                    }
+                    if (targets.contains(column)) {
+                        keyCells.computeIfAbsent(column + "=" + plainNumber(value), k -> new ArrayList<>()).add(new Object[]{item, i});
+                    }
+                    if (links.containsKey(column)) {
+                        fkCells.add(new Object[]{item, i, links.get(column) + "=" + plainNumber(value)});
+                    }
+                }
+            }
+        }
+        Map<String, Color> colors = new HashMap<>();
+        for (Object[] fk : fkCells) {
+            List<Object[]> keys = keyCells.get((String) fk[2]);
+            if (keys == null) {
+                continue;
+            }
+            Color color = colors.computeIfAbsent((String) fk[2],
+                k -> UIUtils.getSharedColor(LINK_COLORS[colors.size() % LINK_COLORS.length]));
+            List<Object[]> cells = new ArrayList<>(keys);
+            cells.add(fk);
+            for (Object[] cell : cells) {
+                TableItem item = (TableItem) cell[0];
+                item.setBackground((Integer) cell[1], color);
+                // dark theme: light text on a light background would be unreadable
+                item.setForeground((Integer) cell[1], item.getDisplay().getSystemColor(SWT.COLOR_BLACK));
+            }
+        }
     }
 
     /** "40.0" and "40" are the same key, like the labels' keys */
