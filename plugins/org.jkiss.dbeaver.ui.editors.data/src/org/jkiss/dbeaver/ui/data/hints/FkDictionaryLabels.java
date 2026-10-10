@@ -155,6 +155,52 @@ public final class FkDictionaryLabels {
         return result;
     }
 
+    /**
+     * dbeaver-mm K28: dictionary labels of {@code values} (as written in a conf package) of a table
+     * column that is a dictionary FK, physical or virtual. Rows that exist only in conf packages are
+     * labelled from there, marked with the task id. Key = value as text, numbers in plain form.
+     */
+    @NotNull
+    public static Map<String, String> labelsOf(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBSEntityAttribute column,
+        @NotNull Collection<String> values
+    ) throws Exception {
+        Map<String, String> result = new HashMap<>();
+        for (DBSEntityReferrer ref : DBUtils.getAttributeReferrers(monitor, column, true)) {
+            if (!(ref instanceof DBSEntityAssociation association)
+                || !(association.getReferencedConstraint() != null
+                    && association.getReferencedConstraint().getParentObject() instanceof DBSDictionary dictionary)) {
+                continue;
+            }
+            DBSEntityAttribute keyColumn = DBUtils.getReferenceAttribute(monitor, association, column, false);
+            if (keyColumn == null) {
+                continue;
+            }
+            List<Object[]> keys = new ArrayList<>();
+            values.forEach(v -> keys.add(new Object[]{toKeyValue(keyColumn, v)}));
+            for (DBDLabelValuePair pair : dictionary.getDictionaryValues(
+                monitor, Collections.singletonList(keyColumn), keys, null, false, true, false)) {
+                if (pair.getLabel() != null && pair.getValue() != null) {
+                    result.put(String.valueOf(keyOf(pair.getValue())), pair.getLabel());
+                }
+            }
+            String key = keyColumn.getName().toLowerCase(Locale.ROOT);
+            String descColumns = DBVUtils.getDictionaryDescriptionColumns(monitor, keyColumn);
+            String desc = descColumns == null ? null : descColumns.split(",")[0].strip().toLowerCase(Locale.ROOT);
+            for (org.jkiss.dbeaver.ui.controls.resultset.conf.ConfPackages.InsertedRow row :
+                org.jkiss.dbeaver.ui.controls.resultset.conf.ConfPackages.findInserts(keyColumn.getParentObject().getName())) {
+                String value = row.values().get(key);
+                if (value != null) {
+                    String label = CommonUtils.notEmpty(desc == null ? null : row.values().get(desc));
+                    result.putIfAbsent(String.valueOf(keyOf(toKeyValue(keyColumn, value))), (label + "  [conf " + row.task() + "]").strip());
+                }
+            }
+            break;
+        }
+        return result;
+    }
+
     /** "40" -> 40 for numeric keys, so the picked value has the column's type like database values */
     @NotNull
     private static Object toKeyValue(@NotNull DBSEntityAttribute keyColumn, @NotNull String value) {

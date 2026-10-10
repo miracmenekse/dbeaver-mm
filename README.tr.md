@@ -48,7 +48,8 @@ ya da ayrı bir kural motoru gerekmez. Böylece fork, upstream DBeaver'ın üzer
   dosyasının sonuna ekler. Değişiklikler hemen atılabilir, böylece sekme veritabanına bir şey kaydetmeden
   kapanır. Hücre içi FK seçicisi, yalnızca conf paketlerinde olan satırları `[conf <task id>]` işaretiyle en
   üstte gösterir. *Window › Conf Packages* alt paneli açar: paketler en yeni üstte; seçilenin INSERT'leri
-  tablo başına satır ızgarası, tüm SQL'i ikinci sekmede. Paket değişince kendini yeniler.
+  tablo başına satır ızgarası, tüm SQL'i ikinci sekmede. Paket değişince kendini yeniler. FK kolonları
+  grid'deki gibi `değer | etiket` gösterir; sağ tık ya da Ctrl+C hücre değerini, *Copy row* tüm satırı kopyalar.
 * **Daha kolay okuma:** Satırlar bir kolona göre iki renkle gruplanabilir. Gezgin tabloları doğrudan gösterir;
   view, index ve diğer nesneler tek bir *Other objects* düğümünde toplanır.
 
@@ -211,3 +212,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K25 | 2026-10-08 | *Add changes to conf package ...*, tablodaki kaydedilmemiş değişiklikleri SQL olarak `Scripts/conf/<task id>.sql` dosyasına ekler ve istenirse tablodan atar. |
 | K26 | 2026-10-08 | Hücre içi FK seçicisi conf paketlerine eklenen satırları en üstte gösterir; yeni üst kayıt veritabanında yokken seçilebilir. |
 | K27 | 2026-10-10 | *Conf Packages* alt paneli paketleri listeler; seçilenin eklenen satırlarını tablo başına ve SQL'ini gösterir, paketler değiştikçe yenilenir. |
+| K28 | 2026-10-10 | Conf Packages paneli değerlerin yanında FK etiketlerini gösterir (fiziksel ya da sanal FK, yalnızca pakette olan satırlar dahil); sağ tık / Ctrl+C ile hücre ya da satır kopyalanır. |
