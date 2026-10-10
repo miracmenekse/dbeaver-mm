@@ -77,6 +77,7 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
     private ScrolledComposite rowsScroll;
     private Composite rowsArea;
     private Text sqlText;
+    private Composite copyBar;
     private static final String INSERT_KEY = "insert";
 
     // The shown package: its text and rows as parsed, FK links once loaded (K30 delete)
@@ -100,7 +101,15 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         }
         taskTable.addListener(SWT.Selection, e -> showSelected());
 
-        CTabFolder tabs = new CTabFolder(sash, SWT.BORDER | SWT.BOTTOM);
+        Composite right = new Composite(sash, SWT.NONE);
+        GridLayout rightLayout = new GridLayout(1, false);
+        rightLayout.marginWidth = rightLayout.marginHeight = 0;
+        right.setLayout(rightLayout);
+        copyBar = new Composite(right, SWT.NONE);
+        copyBar.setLayout(new org.eclipse.swt.layout.RowLayout(SWT.HORIZONTAL));
+        copyBar.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+        CTabFolder tabs = new CTabFolder(right, SWT.BORDER | SWT.BOTTOM);
+        tabs.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         rowsScroll = new ScrolledComposite(tabs, SWT.V_SCROLL | SWT.H_SCROLL);
         rowsScroll.setExpandHorizontal(true);
         rowsScroll.setExpandVertical(true);
@@ -212,6 +221,7 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         String task = selectedTask();
         String sql = task == null ? "" : ConfPackages.read(task);
         sqlText.setText(sql);
+        fillCopyBar(sql);
 
         for (Control child : rowsArea.getChildren()) {
             child.dispose();
@@ -264,6 +274,33 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         }
         relayoutRows();
         loadLabels(byTable);
+    }
+
+    /**
+     * K31: one copy button per schema the package writes to (pcm, domain_config, ... are pasted into
+     * the site separately), plus "Copy all" when there is more than one. Description line left out.
+     */
+    private void fillCopyBar(@NotNull String sql) {
+        for (Control child : copyBar.getChildren()) {
+            child.dispose();
+        }
+        Map<String, String> scripts = ConfPackages.scriptsBySchema(sql);
+        if (scripts.size() > 1) {
+            addCopyButton("Copy all", String.join("\n", scripts.values()));
+        }
+        scripts.forEach((schema, script) -> addCopyButton(
+            schema.isEmpty() ? (scripts.size() > 1 ? "Copy (no schema)" : "Copy script") : "Copy " + schema,
+            script));
+        copyBar.getParent().layout(true, true);
+    }
+
+    private void addCopyButton(@NotNull String text, @NotNull String script) {
+        Button button = new Button(copyBar, SWT.PUSH);
+        button.setText(text);
+        long count = ConfPackages.splitStatements(script).size();
+        button.setToolTipText(count + " statement(s) to the clipboard");
+        button.addListener(SWT.Selection, e ->
+            UIUtils.setClipboardContents(copyBar.getDisplay(), TextTransfer.getInstance(), script));
     }
 
     private void relayoutRows() {

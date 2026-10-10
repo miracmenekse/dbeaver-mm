@@ -52,7 +52,8 @@ no separate rule engine, so it stays a thin layer over upstream DBeaver.
   `value | label` like the grid; right click or Ctrl+C copies a cell's value, *Copy row* the whole row.
   A row's FK value and the row it references in the same package share a background color. Right click ›
   *Delete row ...* removes a row from the package, alone or with the rows below it down to a chosen level; rows
-  left pointing at a deleted row are listed as a warning.
+  left pointing at a deleted row are listed as a warning. Copy buttons put the package's script on the clipboard,
+  one per schema it writes to (e.g. *Copy pcm*, *Copy domain_config*) plus *Copy all*, without the description line.
 * **Easier reading:** Group rows by a column in two alternating colors. The navigator shows tables directly and puts
   views, indexes and other objects into one *Other objects* node.
 
@@ -221,3 +222,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K28 | 2026-10-10 | Conf Packages panel shows FK labels next to values (physical or virtual FK, also rows only in packages) and copies a cell or row with right click / Ctrl+C. |
 | K29 | 2026-10-10 | Conf Packages panel colors related rows: an FK value and the referenced key in the same package share one color per relation. |
 | K30 | 2026-10-10 | *Delete row ...* in the Conf Packages panel removes a row from the package alone or with its dependent rows down to a chosen level, and warns about rows left referencing it. |
+| K31 | 2026-10-10 | Conf Packages panel copy buttons: the whole script or the statements of one schema (pcm, domain_config, ...), since each schema is sent separately. |

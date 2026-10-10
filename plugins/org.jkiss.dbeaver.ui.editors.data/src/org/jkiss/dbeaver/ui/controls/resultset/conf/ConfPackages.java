@@ -194,6 +194,72 @@ public final class ConfPackages {
         }
     }
 
+    private static final java.util.regex.Pattern TARGET = java.util.regex.Pattern.compile(
+        "(?is)^(?:\\s*--[^\n]*\n)*\\s*(?:INSERT\\s+INTO|UPDATE|DELETE\\s+FROM|MERGE\\s+INTO)\\s+([^\\s(]+)");
+
+    /**
+     * dbeaver-mm K31: the package's statements grouped by the schema of the table they write to
+     * ({@code pcm.x} -> "pcm", unqualified -> ""), each group as a script to paste: statements in
+     * file order, one per line block, ';' terminated. The description line is left out.
+     */
+    // ponytail: schema read from the statement text only; unqualified names aren't resolved via the connection
+    @NotNull
+    public static Map<String, String> scriptsBySchema(@NotNull String sql) {
+        if (sql.startsWith("--")) {
+            int eol = sql.indexOf('\n');
+            sql = eol < 0 ? "" : sql.substring(eol + 1);
+        }
+        Map<String, StringBuilder> groups = new LinkedHashMap<>();
+        for (String statement : splitStatements(sql)) {
+            java.util.regex.Matcher m = TARGET.matcher(statement);
+            String schema = "";
+            if (m.find() && m.group(1).contains(".")) {
+                String name = m.group(1);
+                schema = bareName(name.substring(0, name.lastIndexOf('.'))).toLowerCase(Locale.ROOT);
+            }
+            groups.computeIfAbsent(schema, k -> new StringBuilder()).append(statement).append(";\n");
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        groups.forEach((schema, text) -> result.put(schema, text.toString()));
+        return result;
+    }
+
+    /** Statements split on ';' outside quotes, stripped; blank and comment-only pieces dropped. */
+    @NotNull
+    public static List<String> splitStatements(@NotNull String sql) {
+        List<String> result = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        char quote = 0;
+        for (int i = 0; i < sql.length(); i++) {
+            char c = sql.charAt(i);
+            if (quote != 0) {
+                quote = c == quote ? 0 : quote;
+            } else if (c == '\'' || c == '"') {
+                quote = c;
+            } else if (c == '-' && i + 1 < sql.length() && sql.charAt(i + 1) == '-') {
+                int eol = sql.indexOf('\n', i);
+                eol = eol < 0 ? sql.length() : eol;
+                current.append(sql, i, eol);
+                i = eol - 1;
+                continue;
+            } else if (c == ';') {
+                addStatement(result, current);
+                continue;
+            }
+            current.append(c);
+        }
+        addStatement(result, current);
+        return result;
+    }
+
+    private static void addStatement(@NotNull List<String> result, @NotNull StringBuilder current) {
+        String statement = current.toString().strip();
+        current.setLength(0);
+        if (!statement.replaceAll("(?m)^\\s*--.*$", "").isBlank()) {
+            result.add(statement);
+        }
+    }
+
     /**
      * {@code INSERT INTO [schema.]table (a, b) VALUES (1, 'x');} statements of {@code table}
      * (matched without schema and quotes, ignoring case; null = every table) as column -> value maps. Quoted values
