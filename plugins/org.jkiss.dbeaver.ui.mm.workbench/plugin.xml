@@ -22,9 +22,18 @@
             categoryId="org.jkiss.dbeaver.core.util"
             name="%command.focusMode.name"
             description="%command.focusMode.description"/>
+        <!-- dbeaver-mm K45 -->
+        <command
+            id="org.jkiss.dbeaver.ui.mm.workbench.problemReport"
+            categoryId="org.jkiss.dbeaver.core.util"
+            name="%command.problemReport.name"
+            description="%command.problemReport.description"/>
     </extension>
 
     <extension point="org.eclipse.ui.handlers">
+        <handler
+            commandId="org.jkiss.dbeaver.ui.mm.workbench.problemReport"
+            class="org.jkiss.dbeaver.ui.mm.workbench.ProblemReportHandler"/>
         <handler
             commandId="org.jkiss.dbeaver.ui.mm.workbench.focusMode"
             class="org.jkiss.dbeaver.ui.mm.workbench.FocusModeHandler">
@@ -59,6 +68,8 @@
                 </command>
                 <separator name="modes" visible="true"/>
                 <command commandId="org.jkiss.dbeaver.ui.mm.workbench.focusMode"/>
+                <separator name="support" visible="true"/>
+                <command commandId="org.jkiss.dbeaver.ui.mm.workbench.problemReport"/>
             </menu>
         </menuContribution>
     </extension>
