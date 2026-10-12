@@ -45,9 +45,9 @@ jobs:
 
       - name: Add JRE to Windows zip
         run: |
-          ZIP=$(ls dbeaver/product/community/target/products/*win32.win32.x86_64.zip | head -1)
           mkdir pack && cd pack
-          unzip -q "../$ZIP"
+          cp -r ../dbeaver/product/community/target/products/org.jkiss.dbeaver.core.product/win32/win32/x86_64/dbeaver .
+          test -f dbeaver/dbeaver.exe
           curl -sL -o jre.zip "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse"
           unzip -q jre.zip && rm jre.zip
           mv jdk-*-jre dbeaver/jre
