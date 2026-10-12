@@ -298,7 +298,7 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
             }
         }
         relayoutRows();
-        loadLabels(byTable);
+        loadLabels(byTable, schemaOf);
     }
 
     /**
@@ -340,7 +340,7 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
      * is looked up in the connected connections of the active project, the first one that has it.
      */
     // ponytail: first connected connection with the table wins; a package doesn't record its connection
-    private void loadLabels(@NotNull Map<String, List<Map<String, String>>> byTable) {
+    private void loadLabels(@NotNull Map<String, List<Map<String, String>>> byTable, @NotNull Map<String, String> schemaOf) {
         int generation = ++labelGeneration;
         if (byTable.isEmpty()) {
             return;
@@ -352,7 +352,7 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
             // "table.column" of an FK column -> "table.column" it references
             Map<String, String> links = new HashMap<>();
             for (Map.Entry<String, List<Map<String, String>>> entry : byTable.entrySet()) {
-                DBSEntity entity = findTable(monitor, entry.getKey());
+                DBSEntity entity = findTable(monitor, schemaOf.getOrDefault(entry.getKey(), ""), entry.getKey());
                 if (entity == null) {
                     continue;
                 }
@@ -508,31 +508,80 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         }
     }
 
+    /**
+     * The package's table in a connected connection of the active project. dbeaver-mm K46: a
+     * schema-qualified INSERT ({@code pcm.dict_3}) is looked up in that schema; an unqualified one in the
+     * connection's default schema, then in every schema (it used to stop at the default schema, so
+     * tables of other schemas got no labels, colors or FK-safe copy order).
+     */
     @Nullable
-    private static DBSEntity findTable(@NotNull DBRProgressMonitor monitor, @NotNull String table) {
+    private static DBSEntity findTable(@NotNull DBRProgressMonitor monitor, @NotNull String schemaName, @NotNull String table) {
         DBPProject project = DBWorkbench.getPlatform().getWorkspace().getActiveProject();
         if (project == null) {
             return null;
         }
+        List<DBSObjectContainer> roots = new ArrayList<>();
         for (DBPDataSourceContainer container : project.getDataSourceRegistry().getDataSources()) {
             if (!container.isConnected() || container.getDataSource() == null) {
                 continue;
             }
             try {
                 DBCExecutionContext context = DBUtils.getDefaultContext(container.getDataSource(), true);
+                DBSObjectContainer root = DBUtils.getAdapter(DBSObjectContainer.class, container.getDataSource());
+                if (!schemaName.isEmpty()) {
+                    if (context != null && root != null
+                        && DBUtils.getObjectByPath(monitor, context, root, null, schemaName, table) instanceof DBSEntity entity) {
+                        return entity;
+                    }
+                    continue;
+                }
                 DBCExecutionContextDefaults<?, ?> defaults = context == null ? null : context.getContextDefaults();
                 DBSObjectContainer schema = defaults == null ? null
                     : defaults.getDefaultSchema() instanceof DBSObjectContainer s ? s
                     : defaults.getDefaultCatalog() instanceof DBSObjectContainer c ? c : null;
                 if (schema == null) {
-                    schema = DBUtils.getAdapter(DBSObjectContainer.class, container.getDataSource());
+                    schema = root;
                 }
                 if (schema != null && DBUtils.findObject(schema.getChildren(monitor), table, true) instanceof DBSEntity entity) {
                     return entity;
                 }
+                if (root != null) {
+                    roots.add(root);
+                }
             } catch (Exception e) {
                 log.debug("Can't look up " + table + " in " + container.getName(), e);
             }
+        }
+        // ponytail: first schema that has the table wins; packages don't record their connection either
+        for (DBSObjectContainer root : roots) {
+            DBSEntity entity = findInChildren(monitor, root, table, 2);
+            if (entity != null) {
+                return entity;
+            }
+        }
+        return null;
+    }
+
+    /** {@code table} in {@code container} or its sub-containers (catalog > schema), {@code depth} levels down. */
+    @Nullable
+    private static DBSEntity findInChildren(@NotNull DBRProgressMonitor monitor, @NotNull DBSObjectContainer container, @NotNull String table, int depth) {
+        try {
+            Collection<? extends DBSObject> children = container.getChildren(monitor);
+            if (DBUtils.findObject(children, table, true) instanceof DBSEntity entity) {
+                return entity;
+            }
+            if (depth > 0 && children != null) {
+                for (DBSObject child : children) {
+                    if (child instanceof DBSObjectContainer sub && !(child instanceof DBSEntity)) {
+                        DBSEntity entity = findInChildren(monitor, sub, table, depth - 1);
+                        if (entity != null) {
+                            return entity;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Can't look up " + table + " in " + container.getName(), e);
         }
         return null;
     }

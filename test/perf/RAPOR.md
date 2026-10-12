@@ -181,3 +181,13 @@ Kalan (CPU, DB'ye gitmiyor): upstream `ReferenceCellHintProvider:61` her hücred
 Plus › Create Problem Report: masaüstüne (yoksa ev klasörüne) `dbeaver-mm-report-<tarih>.zip`
 (info.txt: sürüm, OS, Java, bellek; `donma.log`; Eclipse `.log`; son 4 oturumun `dbeaver-debug*.log`).
 Hiçbir şey kendiliğinden gönderilmez; kullanıcı dosyayı iletir. Log'larda SQL metni / tablo adı olabilir, uyarı gösterilir.
+
+## K46 — Conf Packages tabloyu doğru şemada arıyor (B5)
+- Önce: `ConfPackagesView.findTable` paketteki şemayı yok sayıp yalnızca bağlantının **varsayılan şemasında**
+  arıyordu. Varsayılan şema `public` iken `pcm.*` paketinde FK etiketi, ilişki rengi ve FK sırası hiç
+  gelmiyordu; kopyalama sessizce "file order" yapıyordu.
+- Sonra: şemalı INSERT (`pcm.dict_3`) o şemada; şemasız INSERT önce varsayılan şemada, sonra bağlı
+  bağlantıların tüm şemalarında aranıyor (hepsi arka plan işinde).
+- Doğrulandı: varsayılan şema `public` iken `pcm.*` paketi etiket + renk aldı; şemasız `crm` paketi
+  (`customer_order` dosyada önce) "in FK order" kopyalandı, `city_district` önce geldi.
+- B6 (panel açılınca grid etiketlerinin kaybolması) K44 sonrası tekrar üretilemedi.
