@@ -58,6 +58,7 @@ ya da ayrı bir kural motoru gerekmez. Böylece fork, upstream DBeaver'ın üzer
   Kopyalanan betik FK hatası vermeden çalışır: DELETE'ler önce alt tablolar, INSERT'ler önce üst satırlar, sonra UPDATE'ler.
 * **Daha kolay okuma:** Satırlar bir kolona göre iki renkle gruplanabilir. Gezgin tabloları doğrudan gösterir;
   view, index ve diğer nesneler tek bir *Other objects* düğümünde toplanır.
+* **Donma kaydedici:** Pencere bir saniye ya da daha uzun cevap vermezse ne kadar ve nerede takıldığı `~/.dbeaver-mm/donma.log` dosyasına yazılır; 2 sn ve üstü donmalar ardından bildirim de gösterir (*Preferences › User Interface › Notifications › UI freeze* ile kapanır). Bir saniyeden uzun süren arka plan işi sağ altta küçük bir *Working: …* etiketiyle görünür; bekleme artık donma sanılmaz.
 
 ## 🛠 Teknolojik Altyapı
 
@@ -236,3 +237,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K39 | 2026-10-12 | **Windows'ta ID'leri getir**: herkes kendi giriş bilgileriyle `%USERPROFILE%\.dbeaver-mm\id-api.ps1` (PowerShell) betiğini kullanır; şablon `docs/id-api.ps1`, Windows zip'inde `id-api-sablon.ps1`. |
 | K40 | 2026-10-12 | **Betiksiz ID'leri getir**: `~/.dbeaver-mm/id-api.properties` varsa (Windows: `%USERPROFILE%\.dbeaver-mm\`) DBeaver ID API'sini herkesin kendi girişiyle doğrudan çağırır, bash ya da PowerShell gerekmez; şablon `docs/id-api.properties`, Windows zip'inde de var. K39'daki PowerShell betiğinin yerini alır. |
 | K41 | 2026-10-12 | İlk Windows indirmesi yayında: [v0.2.3](https://github.com/miracmenekse/dbeaver-mm/releases/tag/v0.2.3) (sürüm derlemesi ürün klasörünü paketler, yan repoları fork'un upstream tabanına sabitler). |
+| K43 | 2026-10-12 | **Donma kaydedici**: 1 sn ve üstü arayüz donmaları nedeniyle birlikte `~/.dbeaver-mm/donma.log`'a yazılır, 2 sn ve üstü bildirim de verir; yavaş arka plan işleri *Working: …* etiketiyle görünür. Donma test düzeni `test/perf/` altında (1 GB PostgreSQL test verisi, SSH benzeri gecikme aracı, JFR özeti, rapor `RAPOR.md`). |

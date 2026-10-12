@@ -8,6 +8,14 @@
         CTRL+ALT+F is free in DBeaver, the Eclipse platform and GNOME (CTRL+SHIFT+F, the
         roadmap's suggestion, is already "Format SQL").
     -->
+    <!-- dbeaver-mm K43: UI freeze recorder (~/.dbeaver-mm/donma.log) and background job label -->
+    <extension point="org.eclipse.ui.startup">
+        <startup class="org.jkiss.dbeaver.ui.mm.workbench.UiFreezeWatchdog"/>
+    </extension>
+    <extension point="org.jkiss.dbeaver.notifications">
+        <notification id="mm.ui.freeze" name="UI freeze" description="Shown after the window did not respond for 2 seconds or more.&#10;Every freeze of 1 second or more is written to ~/.dbeaver-mm/donma.log."/>
+    </extension>
+
     <extension point="org.eclipse.ui.commands">
         <command
             id="org.jkiss.dbeaver.ui.mm.workbench.focusMode"
