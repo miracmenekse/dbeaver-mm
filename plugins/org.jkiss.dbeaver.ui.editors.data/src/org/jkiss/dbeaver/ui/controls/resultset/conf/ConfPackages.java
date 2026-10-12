@@ -24,6 +24,7 @@ import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.app.DBPProject;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
+import org.jkiss.dbeaver.ui.controls.resultset.session.SessionRecorder;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -125,6 +126,7 @@ public final class ConfPackages {
         text.append(body.stripTrailing().isEmpty() ? "\n" : body.stripTrailing() + "\n\n");
         text.append(sql.strip()).append('\n');
         Files.writeString(file, text, StandardCharsets.UTF_8);
+        SessionRecorder.light("conf", null, task, "append: " + sql.strip()); // dbeaver-mm K47
         refresh(file.getParent());
         return file;
     }
@@ -142,6 +144,7 @@ public final class ConfPackages {
         inserts.stream().sorted(Comparator.comparingInt(Insert::start).reversed())
             .forEach(insert -> text.delete(insert.start(), insert.end()));
         Files.writeString(file, text.toString().replaceAll("\n{3,}", "\n\n"), StandardCharsets.UTF_8);
+        SessionRecorder.light("conf", null, task, "remove: " + inserts.stream().map(Insert::table).toList()); // dbeaver-mm K47
         refresh(file.getParent());
     }
 
@@ -162,6 +165,7 @@ public final class ConfPackages {
             throw new IOException("Can't find column " + column + " in the INSERT");
         }
         Files.writeString(file, updated, StandardCharsets.UTF_8);
+        SessionRecorder.light("conf", null, task, "update: " + insert.table() + "." + column + " = " + value); // dbeaver-mm K47
         refresh(file.getParent());
     }
 

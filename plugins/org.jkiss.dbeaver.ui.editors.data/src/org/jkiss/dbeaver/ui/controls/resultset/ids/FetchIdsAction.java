@@ -178,6 +178,8 @@ public class FetchIdsAction extends Action {
         } else {
             viewer.setStatus(filled + " IDs filled: " + ids, DBPMessageType.INFORMATION);
         }
+        // dbeaver-mm K47: session recording
+        org.jkiss.dbeaver.ui.controls.resultset.session.SessionRecorder.light("id_getir", null, table, filled + " filled: " + ids);
     }
 
     @Nullable

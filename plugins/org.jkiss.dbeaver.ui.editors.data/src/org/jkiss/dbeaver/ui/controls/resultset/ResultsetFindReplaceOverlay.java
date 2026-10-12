@@ -249,6 +249,10 @@ public class ResultsetFindReplaceOverlay extends FindReplaceOverlay {
 
         @Override
         protected void onClose() {
+            // dbeaver-mm K47: session recording (Ctrl+F in the grid), the last searched text once per close
+            if (!CommonUtils.isEmpty(this.searchBar.getText())) {
+                org.jkiss.dbeaver.ui.controls.resultset.session.SessionSteps.found(resultsetPresentation.getController(), this.searchBar.getText());
+            }
             if (this.isInteractiveFilterEnabled) {
                 this.interactiveFilterJob.cancel();
                 this.selectAllButton.setSelection(false);

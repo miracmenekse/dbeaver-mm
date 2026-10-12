@@ -2,6 +2,7 @@
 """UI (main) thread freeze summary from a JFR file (streams `jfr print` text, low memory).
 usage: olc.py rec.jfr
 - socket ops: DB round trips (jdk.SocketRead/Write, threshold 0), UI thread vs all, top UI call chains
+- file writes: jdk.FileWrite (threshold 0 via kayit.sh), UI thread vs all, top UI call sites
 - busy runs: consecutive non-idle main-thread samples (Execution + NativeMethod) >= 100 ms
 """
 import collections, os, re, shutil, subprocess, sys
@@ -54,9 +55,15 @@ def run(path):
     io_all = io_ui = 0
     ui_ms = 0.0
     chains = collections.Counter()
+    file_all = 0
+    file_ui = collections.Counter()
     samples = []
-    for e in parse(path, ['jdk.SocketRead', 'jdk.SocketWrite', 'jdk.ExecutionSample', 'jdk.NativeMethodSample']):
-        if e['type'].startswith('jdk.Socket'):
+    for e in parse(path, ['jdk.SocketRead', 'jdk.SocketWrite', 'jdk.FileWrite', 'jdk.ExecutionSample', 'jdk.NativeMethodSample']):
+        if e['type'] == 'jdk.FileWrite':
+            file_all += 1
+            if e['main']:
+                file_ui[site(e['frames'])] += 1
+        elif e['type'].startswith('jdk.Socket'):
             io_all += 1
             if e['main']:
                 io_ui += 1
@@ -69,6 +76,9 @@ def run(path):
             samples.append((e['t'], busy, fr))
     print(f"socket ops: all threads {io_all}, UI thread {io_ui} ({ui_ms:.0f} ms blocked in socket)")
     for s, n in chains.most_common(6):
+        print(f"  {n:6d}  {s}")
+    print(f"file writes: all threads {file_all}, UI thread {sum(file_ui.values())}")
+    for s, n in file_ui.most_common(4):
         print(f"  {n:6d}  {s}")
     samples.sort(key=lambda x: x[0])
     runs, cur = [], []

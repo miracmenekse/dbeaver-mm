@@ -5737,6 +5737,10 @@ public class ResultSetViewer extends Viewer
                         updateStatusMessage();
                     }
                     try {
+                        if (!scroll) {
+                            // dbeaver-mm K47: session recording (search / filter in a table)
+                            org.jkiss.dbeaver.ui.controls.resultset.session.SessionSteps.dataLoaded(ResultSetViewer.this);
+                        }
                         fireResultSetLoad();
                     } catch (Throwable e) {
                         log.debug("Error handling resulset load", e);
