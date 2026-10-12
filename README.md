@@ -236,3 +236,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K36 | 2026-10-10 | Double click a cell in the Conf Packages panel to edit it in place; Enter writes the value into the package's INSERT (`NULL` for null), Esc cancels. |
 | K37 | 2026-10-10 | **Plus** main menu (between Window and Help) with Conf Packages, Recent SQL Scripts and Focus Mode; *Fetch IDs* and *Add to conf package* buttons next to the table editor's Properties / Data / Diagram tabs. |
 | K38 | 2026-10-12 | **Windows download**: every `v*` tag builds a ready-to-run Windows zip with bundled Java on GitHub Releases. |
+| K39 | 2026-10-12 | **Fetch IDs on Windows**: runs `%USERPROFILE%\.dbeaver-mm\id-api.ps1` (PowerShell) with each user's own login; template `docs/id-api.ps1`, also in the Windows zip as `id-api-sablon.ps1`. |

@@ -17,11 +17,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: dbeaver
+          fetch-depth: 0
+          filter: blob:none
 
+      # Sibling repos must match the upstream dbeaver commit the fork is based on, their devel moves on
       - name: Clone sibling repos
         run: |
-          git clone --depth 1 -b devel https://github.com/dbeaver/dbeaver-common.git
-          git clone --depth 1 -b devel https://github.com/dbeaver/datadam-api.git
+          git -C dbeaver fetch -q --filter=blob:none https://github.com/dbeaver/dbeaver.git devel
+          BASE_DATE=$(git -C dbeaver log -1 --format=%cI $(git -C dbeaver merge-base HEAD FETCH_HEAD))
+          for repo in dbeaver-common datadam-api; do
+            git clone -q --filter=blob:none -b devel https://github.com/dbeaver/$repo.git
+            git -C $repo checkout -q $(git -C $repo rev-list -1 --before="$BASE_DATE" devel)
+          done
 
       - uses: actions/setup-java@v4
         with:
@@ -44,6 +51,7 @@ jobs:
           curl -sL -o jre.zip "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse"
           unzip -q jre.zip && rm jre.zip
           mv jdk-*-jre dbeaver/jre
+          cp ../dbeaver/docs/id-api.ps1 dbeaver/id-api-sablon.ps1
           zip -qr ../dbeaver-mm-windows-x64.zip dbeaver
 
       - name: Publish release
@@ -55,4 +63,4 @@ jobs:
           gh release create "$TAG" dbeaver-mm-windows-x64.zip \
             -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "dbeaver-mm $TAG" \
-            --notes "Windows: zip'i cikar, dbeaver klasorundeki dbeaver.exe'ye cift tikla. Java gerekmez."
+            --notes "Windows: zip'i cikar, dbeaver klasorundeki dbeaver.exe'ye cift tikla. Java gerekmez. Fetch IDs icin dbeaver\\id-api-sablon.ps1 dosyasini doldurup %USERPROFILE%\\.dbeaver-mm\\id-api.ps1 olarak kaydet."

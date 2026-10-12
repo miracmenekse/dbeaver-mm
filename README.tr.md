@@ -233,3 +233,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K36 | 2026-10-10 | Conf Packages panelinde hücreye çift tıklayınca yerinde düzenlenir; Enter değeri paketteki INSERT'e yazar (`NULL` = null), Esc vazgeçer. |
 | K37 | 2026-10-10 | Window ile Help arasında **Plus** ana menüsü (Conf Packages, Recent SQL Scripts, Focus Mode); tablo editöründe Properties / Data / Diagram sekmelerinin yanında *Fetch IDs* ve *Add to conf package* butonları. |
 | K38 | 2026-10-12 | **Windows indirmesi**: her `v*` etiketi, Java'sı içinde hazır bir Windows zip'ini GitHub Releases'e koyar. |
+| K39 | 2026-10-12 | **Windows'ta ID'leri getir**: herkes kendi giriş bilgileriyle `%USERPROFILE%\.dbeaver-mm\id-api.ps1` (PowerShell) betiğini kullanır; şablon `docs/id-api.ps1`, Windows zip'inde `id-api-sablon.ps1`. |

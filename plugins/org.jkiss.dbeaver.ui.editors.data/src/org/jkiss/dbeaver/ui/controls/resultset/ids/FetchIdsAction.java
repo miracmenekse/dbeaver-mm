@@ -53,7 +53,8 @@ import java.util.regex.Pattern;
 
 /**
  * dbeaver-mm K24: fills the key column of the grid's new rows with ids from the id API.
- * The API is called through the user's own script {@code ~/.dbeaver-mm/id-api.sh <count> <table> <domain>},
+ * The API is called through the user's own script {@code ~/.dbeaver-mm/id-api.sh <count> <table> <domain>}
+ * ({@code id-api.ps1} on Windows, template in docs/id-api.ps1),
  * so its URL, headers and token never live in DBeaver. The domain is asked once per connection and
  * kept as a connection tag. Rows are not saved; the user copies the ids into related tables.
  */
@@ -61,7 +62,9 @@ public class FetchIdsAction extends Action {
 
     static final String[] DOMAINS = {"domain_config", "pcm", "ntf_engine", "crm_customer_information"};
     private static final String DOMAIN_TAG = "mm.idDomain";
-    private static final Path SCRIPT = Path.of(System.getProperty("user.home"), ".dbeaver-mm", "id-api.sh");
+    // dbeaver-mm K39: Windows has no bash, the same script is written in PowerShell there
+    private static final boolean WINDOWS = System.getProperty("os.name", "").startsWith("Windows");
+    private static final Path SCRIPT = Path.of(System.getProperty("user.home"), ".dbeaver-mm", WINDOWS ? "id-api.ps1" : "id-api.sh");
     private static final Pattern IDS = Pattern.compile("\"ids\"\\s*:\\s*\\[([^\\]]*)]");
     private static final long TIMEOUT_SEC = 45; // the script may log in and retry, each curl call has 15s
 
@@ -212,19 +215,23 @@ public class FetchIdsAction extends Action {
         if (!Files.isRegularFile(SCRIPT)) {
             throw new IOException(SCRIPT + " not found");
         }
-        Process process = new ProcessBuilder("bash", SCRIPT.toString(), String.valueOf(count), table, domain).start();
+        List<String> command = WINDOWS
+            ? new ArrayList<>(List.of("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"))
+            : new ArrayList<>(List.of("bash"));
+        command.addAll(List.of(SCRIPT.toString(), String.valueOf(count), table, domain));
+        Process process = new ProcessBuilder(command).start();
         // The output is one short JSON line, it fits in the pipe buffer until the process ends
         if (!process.waitFor(TIMEOUT_SEC, TimeUnit.SECONDS)) {
             process.destroyForcibly();
-            throw new IOException("id-api.sh did not finish in " + TIMEOUT_SEC + " seconds");
+            throw new IOException(SCRIPT.getFileName() + " did not finish in " + TIMEOUT_SEC + " seconds");
         }
         String out = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         String err = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8).strip();
         if (process.exitValue() == 2) {
-            throw new IOException("Login failed, check the login request in id-api.sh.\n" + err);
+            throw new IOException("Login failed, check the login request in " + SCRIPT.getFileName() + ".\n" + err);
         }
         if (process.exitValue() != 0) {
-            throw new IOException(err.isEmpty() ? "id-api.sh exited with " + process.exitValue() : err);
+            throw new IOException(err.isEmpty() ? SCRIPT.getFileName() + " exited with " + process.exitValue() : err);
         }
         return parseIds(out);
     }
