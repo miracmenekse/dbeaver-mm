@@ -276,7 +276,10 @@ public final class ConfPackages {
             String name = kind.isEmpty() ? "" : m.group(2);
             String schema = name.contains(".") ? bareName(name.substring(0, name.lastIndexOf('.'))).toLowerCase(Locale.ROOT) : "";
             List<Insert> insert = kind.equals("INSERT") ? parseInserts(text, null) : List.of();
-            statements.add(new Statement(text, kind, bareName(name).toLowerCase(Locale.ROOT), schema,
+            // The schema only picks the group; the pasted script has plain table names
+            String plain = schema.isEmpty() ? text
+                : text.substring(0, m.start(2)) + name.substring(name.lastIndexOf('.') + 1) + text.substring(m.end(2));
+            statements.add(new Statement(plain, kind, bareName(name).toLowerCase(Locale.ROOT), schema,
                 insert.isEmpty() ? Map.of() : insert.getFirst().values()));
         }
         Map<String, Integer> depths = new HashMap<>();
