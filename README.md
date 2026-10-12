@@ -109,6 +109,10 @@ once metadata arrives.
 
 ## 🚀 Quick Start
 
+**Windows, no build:** download `dbeaver-mm-windows-x64.zip` from [Releases](https://github.com/miracmenekse/dbeaver-mm/releases), unzip it and double-click `dbeaver\dbeaver.exe`. Java is bundled. If SmartScreen warns, choose *More info → Run anyway*.
+
+**Building from source:**
+
 **Prerequisites:** JDK 21, Apache Maven 3.9+, Git, about 4 GB of free disk space. Close any running DBeaver before you
 build.
 
@@ -231,3 +235,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K35 | 2026-10-10 | Conf Packages panel keeps one row selection: clicking a row in one table clears the selection in the others. |
 | K36 | 2026-10-10 | Double click a cell in the Conf Packages panel to edit it in place; Enter writes the value into the package's INSERT (`NULL` for null), Esc cancels. |
 | K37 | 2026-10-10 | **Plus** main menu (between Window and Help) with Conf Packages, Recent SQL Scripts and Focus Mode; *Fetch IDs* and *Add to conf package* buttons next to the table editor's Properties / Data / Diagram tabs. |
+| K38 | 2026-10-12 | **Windows download**: every `v*` tag builds a ready-to-run Windows zip with bundled Java on GitHub Releases. |

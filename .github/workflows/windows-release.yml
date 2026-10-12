@@ -1,0 +1,58 @@
+# dbeaver-mm: v* etiketi atilinca Windows zip'ini (icinde JRE ile) derleyip Releases'e koyar
+name: Windows Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-zip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: dbeaver
+
+      - name: Clone sibling repos
+        run: |
+          git clone --depth 1 -b devel https://github.com/dbeaver/dbeaver-common.git
+          git clone --depth 1 -b devel https://github.com/dbeaver/datadam-api.git
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build
+        run: |
+          ./dbeaver-common/mvnw install \
+            -Pproduct-dbeaver-ce,product-dbeaver-eclipse-ce \
+            -T 1C -DskipTests \
+            -Drepo.p2.dbeaver.version=26.2.1 \
+            -f dbeaver/product/aggregate
+
+      - name: Add JRE to Windows zip
+        run: |
+          ZIP=$(ls dbeaver/product/community/target/products/*win32.win32.x86_64.zip | head -1)
+          mkdir pack && cd pack
+          unzip -q "../$ZIP"
+          curl -sL -o jre.zip "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse"
+          unzip -q jre.zip && rm jre.zip
+          mv jdk-*-jre dbeaver/jre
+          zip -qr ../dbeaver-mm-windows-x64.zip dbeaver
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=${GITHUB_REF_NAME}
+          [[ "$GITHUB_REF_TYPE" == tag ]] || TAG=nightly-$(date +%Y%m%d-%H%M)
+          gh release create "$TAG" dbeaver-mm-windows-x64.zip \
+            -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "dbeaver-mm $TAG" \
+            --notes "Windows: zip'i cikar, dbeaver klasorundeki dbeaver.exe'ye cift tikla. Java gerekmez."

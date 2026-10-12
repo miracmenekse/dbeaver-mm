@@ -108,6 +108,10 @@ açıklama kendiliğinden görünür.
 
 ## 🚀 Hızlı Başlangıç ve Kurulum
 
+**Windows, derlemeden:** [Releases](https://github.com/miracmenekse/dbeaver-mm/releases) sayfasından `dbeaver-mm-windows-x64.zip` dosyasını indir, çıkar ve `dbeaver\dbeaver.exe` dosyasına çift tıkla. Java içinde gelir. SmartScreen uyarırsa *Ek bilgi → Yine de çalıştır* de.
+
+**Kaynaktan derleme:**
+
 **Gereksinimler:** JDK 21, Apache Maven 3.9+, Git, yaklaşık 4 GB boş disk. Derlemeden önce açık olan DBeaver'ı kapat.
 
 ```bash
@@ -228,3 +232,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K35 | 2026-10-10 | Conf Packages panelinde tek seçim kalır: bir tablodaki satıra tıklamak diğer tablolardaki seçimi kaldırır. |
 | K36 | 2026-10-10 | Conf Packages panelinde hücreye çift tıklayınca yerinde düzenlenir; Enter değeri paketteki INSERT'e yazar (`NULL` = null), Esc vazgeçer. |
 | K37 | 2026-10-10 | Window ile Help arasında **Plus** ana menüsü (Conf Packages, Recent SQL Scripts, Focus Mode); tablo editöründe Properties / Data / Diagram sekmelerinin yanında *Fetch IDs* ve *Add to conf package* butonları. |
+| K38 | 2026-10-12 | **Windows indirmesi**: her `v*` etiketi, Java'sı içinde hazır bir Windows zip'ini GitHub Releases'e koyar. |
