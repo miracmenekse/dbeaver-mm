@@ -235,3 +235,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K38 | 2026-10-12 | **Windows indirmesi**: her `v*` etiketi, Java'sı içinde hazır bir Windows zip'ini GitHub Releases'e koyar. |
 | K39 | 2026-10-12 | **Windows'ta ID'leri getir**: herkes kendi giriş bilgileriyle `%USERPROFILE%\.dbeaver-mm\id-api.ps1` (PowerShell) betiğini kullanır; şablon `docs/id-api.ps1`, Windows zip'inde `id-api-sablon.ps1`. |
 | K40 | 2026-10-12 | **Betiksiz ID'leri getir**: `~/.dbeaver-mm/id-api.properties` varsa (Windows: `%USERPROFILE%\.dbeaver-mm\`) DBeaver ID API'sini herkesin kendi girişiyle doğrudan çağırır, bash ya da PowerShell gerekmez; şablon `docs/id-api.properties`, Windows zip'inde de var. K39'daki PowerShell betiğinin yerini alır. |
+| K41 | 2026-10-12 | İlk Windows indirmesi yayında: [v0.2.3](https://github.com/miracmenekse/dbeaver-mm/releases/tag/v0.2.3) (sürüm derlemesi ürün klasörünü paketler, yan repoları fork'un upstream tabanına sabitler). |

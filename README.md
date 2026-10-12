@@ -238,3 +238,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K38 | 2026-10-12 | **Windows download**: every `v*` tag builds a ready-to-run Windows zip with bundled Java on GitHub Releases. |
 | K39 | 2026-10-12 | **Fetch IDs on Windows**: runs `%USERPROFILE%\.dbeaver-mm\id-api.ps1` (PowerShell) with each user's own login; template `docs/id-api.ps1`, also in the Windows zip as `id-api-sablon.ps1`. |
 | K40 | 2026-10-12 | **Fetch IDs without scripts**: when `~/.dbeaver-mm/id-api.properties` exists (Windows: `%USERPROFILE%\.dbeaver-mm\`), DBeaver calls the ID API itself with each user's own login, no bash or PowerShell needed; template `docs/id-api.properties`, also in the Windows zip. Replaces K39's PowerShell script. |
+| K41 | 2026-10-12 | First Windows download released: [v0.2.3](https://github.com/miracmenekse/dbeaver-mm/releases/tag/v0.2.3) (release build packs the product folder and pins sibling repos to the fork's upstream base). |
