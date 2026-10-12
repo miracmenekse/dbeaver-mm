@@ -55,6 +55,7 @@ import org.jkiss.dbeaver.model.data.DBDDataFilter;
 import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.model.navigator.DBNDatabaseNode;
 import org.jkiss.dbeaver.model.qm.QMQueryFilter;
+import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.runtime.DBRRunnableWithProgress;
 import org.jkiss.dbeaver.model.runtime.SystemJob;
 import org.jkiss.dbeaver.model.sql.SQLConstants;
@@ -919,7 +920,7 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
                 String search = typed.replaceAll("^['\"]|['\"]$", "");
                 String typedFolded = FkDictionaryLabels.foldForSearch(search);
                 for (DBDLabelValuePair pair : resultValuesOnly && fkAttribute != null
-                    ? listResultValues(fkAttribute)
+                    ? listResultValues(monitor, fkAttribute)
                     : FkDictionaryLabels.listValues(monitor, fkAttribute, search.isEmpty() ? null : search, 50)) {
                     String literal = SQLUtils.convertValueToSQL(dataSource, fkAttribute, pair.getValue());
                     String label = CommonUtils.notEmpty(pair.getLabel());
@@ -947,7 +948,7 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
      * dbeaver-mm K20: distinct values of {@code attribute} in the fetched rows, with their dictionary labels.
      */
     @NotNull
-    private List<DBDLabelValuePair> listResultValues(@NotNull DBDAttributeBinding attribute) {
+    private List<DBDLabelValuePair> listResultValues(@NotNull DBRProgressMonitor monitor, @NotNull DBDAttributeBinding attribute) {
         ResultSetModel model = viewer.getModel();
         LinkedHashSet<Object> values = new LinkedHashSet<>();
         for (ResultSetRow row : model.getAllRows()) {
@@ -956,6 +957,8 @@ class ResultSetFilterPanel extends Composite implements IContentProposalProvider
                 values.add(value);
             }
         }
+        // dbeaver-mm K44: one IN query for the labels not cached yet (getLabel no longer queries)
+        FkDictionaryLabels.prefetch(monitor, attribute, values);
         List<DBDLabelValuePair> pairs = new ArrayList<>();
         for (Object value : values) {
             pairs.add(new DBDLabelValuePair(FkDictionaryLabels.getLabel(attribute, value), value));

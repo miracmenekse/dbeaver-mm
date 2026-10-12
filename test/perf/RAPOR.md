@@ -156,3 +156,28 @@ java test/perf/Bench.java   # B4 ölçümü
   Maliyet: 250 ms'de bir boş iş. Bilgisayar uykuya geçerse (aralık > 2 sn) donma sayılmaz.
 - `BackgroundJobIndicator`: kullanıcı işi 1 sn'den uzun sürerse sağ altta "Working: <iş>" etiketi.
 - G2L'de doğrulandı: log `FkDictionaryLabels.getLabel ← GridCellRenderer.renderHints` yığınını gösterdi.
+
+## K44 — FK etiketi düzeltmesi: önce / sonra (30 ms RTT, `gecikme.py`)
+
+| Senaryo | K43 (önce): UI'de soket / bekleme | K44 (sonra): UI'de soket / bekleme | Donma kaydı |
+|---|---|---|---|
+| Karşılıksız FK'li tabloyu açma (A0) | yüzlerce | **0** | yok |
+| Fare gezdirme + Page Down (G2L / A1) | 402 / **4,2 sn** | **0 / 0** | önce 2,7 + 1,7 sn, sonra **yok** |
+| Tek hücre düzenle + kaydet (G4 / A2) | 955 (yerel) | **0** | yok |
+| Filtre kutusu `kolon =` listesi (A3) | 207 (yerel) | **0** (sorgu arka planda) | yok |
+
+Yapılan (`ui/data/hints/FkDictionaryLabels.java`):
+- `getLabel` çizim sırasında hiç sorgu atmaz; önbellekte olmayan değerler kuyruğa girer, tek arka plan işi
+  (`LOADER`, 100 ms gecikmeli) hepsini `prefetch` ile toplu (IN) çeker ve grid'leri yeniden çizer.
+- Sorulup etiketi çıkmayan değer `MISSING` olarak saklanır; FK olmayan kolon (`NOT_FK`) ve sanal FK'nin başka
+  bağlantıya gidip gitmediği (`EXTERNAL`) bir kez hesaplanır. Yenileme (`invalidateLabels`) hepsini unutturur.
+- Filtre kutusundaki "sonuçtaki değerler" listesi etiketleri tek sorguyla önceden çeker.
+
+Kalan (CPU, DB'ye gitmiyor): upstream `ReferenceCellHintProvider:61` her hücrede sanal FK yolunu
+çözüyor (`DBVEntityForeignKey.getRealReferenceConstraint`), fare gezdirmede birkaç ms. Gerekirse
+`DBVEntityForeignKey` içinde çözülen kısıtı önbelleğe almak.
+
+## K45 — sorun raporu
+Plus › Create Problem Report: masaüstüne (yoksa ev klasörüne) `dbeaver-mm-report-<tarih>.zip`
+(info.txt: sürüm, OS, Java, bellek; `donma.log`; Eclipse `.log`; son 4 oturumun `dbeaver-debug*.log`).
+Hiçbir şey kendiliğinden gönderilmez; kullanıcı dosyayı iletir. Log'larda SQL metni / tablo adı olabilir, uyarı gösterilir.

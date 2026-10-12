@@ -58,7 +58,7 @@ no separate rule engine, so it stays a thin layer over upstream DBeaver.
   Copied scripts run without FK errors: DELETEs child tables first, INSERTs parent rows first, then UPDATEs.
 * **Easier reading:** Group rows by a column in two alternating colors. The navigator shows tables directly and puts
   views, indexes and other objects into one *Other objects* node.
-* **Freeze recorder:** When the window stops responding for a second or more, how long and where it hung is written to `~/.dbeaver-mm/donma.log`; freezes of 2 s or more also show a notification afterwards (off in *Preferences › User Interface › Notifications › UI freeze*). A small *Working: …* label in the bottom-right corner shows a background job that has run for over a second, so waiting is no longer mistaken for a freeze.
+* **Freeze recorder:** When the window stops responding for a second or more, how long and where it hung is written to `~/.dbeaver-mm/donma.log`; freezes of 2 s or more also show a notification afterwards (off in *Preferences › User Interface › Notifications › UI freeze*). A small *Working: …* label in the bottom-right corner shows a background job that has run for over a second, so waiting is no longer mistaken for a freeze. *Plus › Create Problem Report* zips version info, the freeze log and the error logs of the last sessions onto the desktop, to send to whoever looks into the problem; nothing is sent automatically.
 
 ## 🛠 Tech Stack
 
@@ -241,3 +241,5 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K40 | 2026-10-12 | **Fetch IDs without scripts**: when `~/.dbeaver-mm/id-api.properties` exists (Windows: `%USERPROFILE%\.dbeaver-mm\`), DBeaver calls the ID API itself with each user's own login, no bash or PowerShell needed; template `docs/id-api.properties`, also in the Windows zip. Replaces K39's PowerShell script. |
 | K41 | 2026-10-12 | First Windows download released: [v0.2.3](https://github.com/miracmenekse/dbeaver-mm/releases/tag/v0.2.3) (release build packs the product folder and pins sibling repos to the fork's upstream base). |
 | K43 | 2026-10-12 | **Freeze recorder**: UI freezes of 1 s or more are logged with their cause to `~/.dbeaver-mm/donma.log`, 2 s or more also notify; a *Working: …* label shows slow background jobs. Freeze test setup in `test/perf/` (1 GB PostgreSQL test data, SSH-like latency proxy, JFR summary, report `RAPOR.md`). |
+| K44 | 2026-10-12 | **No more grid freezes from FK labels over slow connections**: labels missing at paint time (e.g. orphan FK values) are no longer queried per cell on the UI thread but fetched together in the background, and "no label" is remembered. Over a 30 ms link, hovering a table with orphan values went from 4.2 s of UI waiting to 0. |
+| K45 | 2026-10-12 | **Problem report**: *Plus › Create Problem Report* puts a zip with version info, freeze log and error logs on the desktop to send along with a bug report. |

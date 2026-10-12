@@ -200,6 +200,8 @@ public class SpreadsheetPresentation extends AbstractPresentation
             new GridLabelProvider(),
             this);
         this.spreadsheet.setLayoutData(new GridData(GridData.FILL_BOTH));
+        // dbeaver-mm K44: FK labels missing at paint time are loaded in the background, then redrawn
+        org.jkiss.dbeaver.ui.data.hints.FkDictionaryLabels.redrawOnLabels(this.spreadsheet);
 
         this.spreadsheet.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 if (e.detail != SWT.DRAG && e.detail != SWT.DROP_DOWN && e.data != null) {

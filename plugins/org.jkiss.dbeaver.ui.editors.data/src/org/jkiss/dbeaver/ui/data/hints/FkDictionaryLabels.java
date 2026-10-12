@@ -16,6 +16,9 @@
  */
 package org.jkiss.dbeaver.ui.data.hints;
 
+import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.jobs.Job;
+import org.eclipse.swt.widgets.Control;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.Log;
@@ -23,8 +26,10 @@ import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.data.DBDAttributeBinding;
 import org.jkiss.dbeaver.model.data.DBDLabelValuePair;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
+import org.jkiss.dbeaver.model.runtime.DefaultProgressMonitor;
 import org.jkiss.dbeaver.model.runtime.VoidProgressMonitor;
 import org.jkiss.dbeaver.model.struct.*;
+import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.utils.CommonUtils;
 
 import org.jkiss.dbeaver.model.virtual.DBVUtils;
@@ -43,8 +48,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * <ul>
  *     <li>The FK is found with {@link DBUtils#getAttributeReferrers}, not
  *     {@code ResultSetUtils.getEnumerableConstraint()}, which can return null at render time.</li>
- *     <li>A null result is never cached: metadata may not be loaded yet on the first paint, and a
- *     cached null would keep the grid from ever updating.</li>
+ *     <li>dbeaver-mm K44: "not a dictionary FK" is cached once the column's metadata was read
+ *     (a binding without its table column yet is not), and a value without a label is cached as
+ *     {@link #MISSING}: before that every paint and hover re-ran the lookup on the UI thread, one
+ *     database round trip per cell (seconds of freeze over an SSH tunnel). {@link #invalidateLabels}
+ *     (refresh) forgets both.</li>
+ *     <li>dbeaver-mm K44: {@link #getLabel} never queries; a value missing from the cache is loaded
+ *     by one background job together with the others and the grids are redrawn.</li>
  * </ul>
  * Caches are keyed by binding in weak maps, so they go away with the result set they belong to.
  */
@@ -58,6 +68,36 @@ public final class FkDictionaryLabels {
         Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<DBDAttributeBinding, Map<Object, String>> LABELS =
         Collections.synchronizedMap(new WeakHashMap<>());
+    // dbeaver-mm K44: "looked up, has no label" (orphan FK value, NULL description); compared by identity
+    private static final String MISSING = new String("");
+    private static final Set<DBDAttributeBinding> NOT_FK =
+        Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+    private static final Map<DBDAttributeBinding, Boolean> EXTERNAL =
+        Collections.synchronizedMap(new WeakHashMap<>());
+    // Values asked for while painting that were not prefetched, loaded by LOADER; guarded by itself
+    private static final Map<DBDAttributeBinding, Set<Object>> PENDING = new WeakHashMap<>();
+    // Grids to redraw when LOADER brings labels
+    private static final Set<Control> REDRAW =
+        Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+    private static final Job LOADER = Job.create("FK dictionary labels", progress -> {
+        Map<DBDAttributeBinding, Set<Object>> work;
+        synchronized (PENDING) {
+            work = new HashMap<>(PENDING);
+            PENDING.clear();
+        }
+        DBRProgressMonitor monitor = new DefaultProgressMonitor(progress);
+        work.forEach((attr, values) -> prefetch(monitor, attr, values));
+        List<Control> grids;
+        synchronized (REDRAW) {
+            grids = new ArrayList<>(REDRAW);
+        }
+        UIUtils.asyncExec(() -> grids.stream().filter(c -> !c.isDisposed()).forEach(Control::redraw));
+        return Status.OK_STATUS;
+    });
+
+    static {
+        LOADER.setSystem(true);
+    }
 
     private FkDictionaryLabels() {
     }
@@ -71,10 +111,11 @@ public final class FkDictionaryLabels {
             return null;
         }
         DBSEntityAssociation cached = ASSOCIATIONS.get(attr);
-        if (cached != null) {
+        if (cached != null || NOT_FK.contains(attr)) {
             return cached;
         }
         DBSEntityAssociation result = null;
+        boolean known = false;
         try {
             DBSEntityAttribute tableColumn = attr.getEntityAttribute();
             if (tableColumn != null) {
@@ -83,16 +124,22 @@ public final class FkDictionaryLabels {
                         DBSEntityConstraint refConstraint = association.getReferencedConstraint();
                         if (refConstraint != null && refConstraint.getParentObject() instanceof DBSDictionary) {
                             result = association;
+                            // K1: resolving a virtual FK walks the navigator, so do it once here, not per cell
+                            EXTERNAL.put(attr, attr.getDataSource() != null && refConstraint.getDataSource() != null
+                                && refConstraint.getDataSource().getContainer() != attr.getDataSource().getContainer());
                             break;
                         }
                     }
                 }
+                known = true;
             }
         } catch (Throwable e) {
             log.debug("FK dictionary association lookup failed", e);
         }
         if (result != null) {
             ASSOCIATIONS.put(attr, result);
+        } else if (known) {
+            NOT_FK.add(attr);
         }
         return result;
     }
@@ -102,11 +149,7 @@ public final class FkDictionaryLabels {
      * (only possible with a virtual FK; physical FKs never leave their database).
      */
     public static boolean isExternal(@Nullable DBDAttributeBinding attr) {
-        DBSEntityAssociation association = getAssociation(attr);
-        DBSEntityConstraint refConstraint = association == null ? null : association.getReferencedConstraint();
-        return refConstraint != null && attr.getDataSource() != null
-            && refConstraint.getDataSource() != null
-            && refConstraint.getDataSource().getContainer() != attr.getDataSource().getContainer();
+        return getAssociation(attr) != null && Boolean.TRUE.equals(EXTERNAL.get(attr));
     }
 
     /**
@@ -264,34 +307,22 @@ public final class FkDictionaryLabels {
         if (association == null) {
             return null;
         }
-        Map<Object, String> columnLabels = LABELS.computeIfAbsent(attr, a -> new ConcurrentHashMap<>());
-        String cached = columnLabels.get(keyOf(value));
+        String cached = LABELS.computeIfAbsent(attr, a -> new ConcurrentHashMap<>()).get(keyOf(value));
         if (cached != null) {
-            return cached;
+            return cached == MISSING ? null : cached;
         }
-        // Not prefetched (e.g. a value edited in the grid): fall back to a single lookup
-        String label = null;
-        try {
-            VoidProgressMonitor monitor = new VoidProgressMonitor();
-            DBSEntityAttribute refColumn = DBUtils.getReferenceAttribute(monitor, association, attr.getEntityAttribute(), false);
-            DBSEntityConstraint refConstraint = association.getReferencedConstraint();
-            if (refColumn != null && refConstraint != null && refConstraint.getParentObject() instanceof DBSDictionary dictionary) {
-                List<DBDLabelValuePair> pairs = dictionary.getDictionaryValues(
-                    monitor,
-                    Collections.singletonList(refColumn),
-                    Collections.singletonList(new Object[]{value}),
-                    null, false, true, false);
-                if (!pairs.isEmpty()) {
-                    label = pairs.getFirst().getLabel();
-                }
-            }
-        } catch (Throwable e) {
-            log.debug("FK dictionary label lookup failed", e);
+        // Not prefetched (e.g. a value edited in the grid). This runs while the grid paints, so no
+        // query here: queue it, LOADER fetches all queued values together and redraws the grids.
+        synchronized (PENDING) {
+            PENDING.computeIfAbsent(attr, a -> new LinkedHashSet<>()).add(value);
         }
-        if (label != null) {
-            columnLabels.put(keyOf(value), label);
-        }
-        return label;
+        LOADER.schedule(100);
+        return null;
+    }
+
+    /** dbeaver-mm K44: {@code grid} is redrawn when labels it asked for arrive in the background. */
+    public static void redrawOnLabels(@NotNull Control grid) {
+        REDRAW.add(grid);
     }
 
     /**
@@ -323,6 +354,7 @@ public final class FkDictionaryLabels {
             DBSEntityAttribute refColumn = DBUtils.getReferenceAttribute(monitor, association, attr.getEntityAttribute(), false);
             DBSEntityConstraint refConstraint = association.getReferencedConstraint();
             if (refColumn == null || refConstraint == null || !(refConstraint.getParentObject() instanceof DBSDictionary dictionary)) {
+                markMissing(monitor, columnLabels, missing);
                 return;
             }
             for (int from = 0; from < missing.size() && !monitor.isCanceled(); from += PREFETCH_CHUNK) {
@@ -337,6 +369,18 @@ public final class FkDictionaryLabels {
             }
         } catch (Throwable e) {
             log.debug("FK dictionary label prefetch failed", e);
+        }
+        markMissing(monitor, columnLabels, missing);
+    }
+
+    /**
+     * dbeaver-mm K44: values that were asked for and got no label stay without one until a refresh,
+     * a failed lookup included (retrying it on every paint is what froze the grid). A canceled fetch
+     * marks nothing, so it is asked again.
+     */
+    private static void markMissing(@NotNull DBRProgressMonitor monitor, @NotNull Map<Object, String> columnLabels, @NotNull List<Object[]> asked) {
+        if (!monitor.isCanceled()) {
+            asked.forEach(v -> columnLabels.putIfAbsent(keyOf(v[0]), MISSING));
         }
     }
 
@@ -361,5 +405,6 @@ public final class FkDictionaryLabels {
      */
     public static void invalidateLabels() {
         LABELS.clear();
+        NOT_FK.clear();
     }
 }
