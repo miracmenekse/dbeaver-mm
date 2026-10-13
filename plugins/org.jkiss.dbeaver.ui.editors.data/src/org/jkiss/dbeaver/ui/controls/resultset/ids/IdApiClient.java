@@ -40,7 +40,7 @@ import java.util.regex.Pattern;
 /**
  * dbeaver-mm K39: calls the id API without any script, for machines where bash/PowerShell can't run.
  * Everything user specific (urls, headers, login body with the user's own credentials) is read from
- * {@code ~/.dbeaver-mm/id-api.properties}, template in docs/id-api.properties. Same flow as id-api.sh:
+ * {@code ~/.dbeaver-mm/id-api.properties}. Same flow as id-api.sh:
  * the token is kept in {@code ~/.dbeaver-mm/token}; on 401/403 the client logs in again and retries once.
  */
 class IdApiClient {
@@ -78,10 +78,10 @@ class IdApiClient {
         return config;
     }
 
-    /** generate.url is set and isn't the template's BURAYA-... placeholder. */
+    /** The handed-out file is in place (it has generate.url). */
     static boolean isConfigured() {
         String url = load().getProperty("generate.url", "");
-        return !url.isBlank() && !url.contains("BURAYA");
+        return !url.isBlank();
     }
 
     /** Returns the generate response body (JSON with "ids"). */

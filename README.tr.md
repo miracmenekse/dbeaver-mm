@@ -62,8 +62,7 @@ ya da ayrı bir kural motoru gerekmez. Böylece fork, upstream DBeaver'ın üzer
   favoriler en üstte durur. Parametre formu (`Ctrl+Alt+P`) betikteki tüm `kolon = değer` koşullarını tek yerden
   düzenletir.
 * **Yeni satırlara ID:** *Edit › Fetch IDs for new rows*, anahtarı boş yeni satırlar kadar ID'yi ID API'sinden
-  alır ve kaydetmeden tabloya yazar. API, kullanıcının kendi `~/.dbeaver-mm/id-api.sh <sayı> <tablo> <domain>`
-  betiğiyle çağrılır. Domain her bağlantı için bir kez seçilir.
+  alır ve kaydetmeden tabloya yazar. Domain her bağlantı için bir kez seçilir.
 * **Conf paketleri:** *Edit › Add changes to conf package ...*, tablodaki kaydedilmemiş değişiklikleri SQL'e
   çevirir (*Generate SQL* ile aynı betik) ve ilk satırı task açıklaması olan `Scripts/conf/<task id>.sql`
   dosyasının sonuna ekler. Değişiklikler hemen atılabilir, böylece sekme veritabanına bir şey kaydetmeden
@@ -241,7 +240,7 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K19 | 2026-09-28 | Bağlantı çubuğu her bağlantının kısa kodunu gösterir. |
 | K20 | 2026-09-30 | Filtre kutusunda listeyi **yalnızca sonuçta geçen değerlerle** sınırlama seçeneği (etiketleriyle). |
 | K23 | 2026-10-07 | Hücre içi FK açılır listesi **boş (`[NULL]`) hücrelerde** de çalışır; eksik değer, *Can't navigate to NULL value* hatası yerine referans tablodan seçilebilir. |
-| K24 | 2026-10-08 | *Fetch IDs for new rows*, tablodaki yeni satırların anahtarını `~/.dbeaver-mm/id-api.sh` üzerinden ID API'sinden doldurur; ID domain'i her bağlantı için bir kez sorulur. |
+| K24 | 2026-10-08 | *Fetch IDs for new rows*, tablodaki yeni satırların anahtarını ID API'sinden doldurur; ID domain'i her bağlantı için bir kez sorulur. |
 | K25 | 2026-10-08 | *Add changes to conf package ...*, tablodaki kaydedilmemiş değişiklikleri SQL olarak `Scripts/conf/<task id>.sql` dosyasına ekler ve istenirse tablodan atar. |
 | K26 | 2026-10-08 | Hücre içi FK seçicisi conf paketlerine eklenen satırları en üstte gösterir; yeni üst kayıt veritabanında yokken seçilebilir. |
 | K27 | 2026-10-10 | *Conf Packages* alt paneli paketleri listeler; seçilenin eklenen satırlarını tablo başına ve SQL'ini gösterir, paketler değiştikçe yenilenir. |
@@ -256,8 +255,8 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K36 | 2026-10-10 | Conf Packages panelinde hücreye çift tıklayınca yerinde düzenlenir; Enter değeri paketteki INSERT'e yazar (`NULL` = null), Esc vazgeçer. |
 | K37 | 2026-10-10 | Window ile Help arasında **Plus** ana menüsü (Conf Packages, Recent SQL Scripts, Focus Mode); tablo editöründe Properties / Data / Diagram sekmelerinin yanında *Fetch IDs* ve *Add to conf package* butonları. |
 | K38 | 2026-10-12 | **Windows indirmesi**: her `v*` etiketi, Java'sı içinde hazır bir Windows zip'ini GitHub Releases'e koyar. |
-| K39 | 2026-10-12 | **Windows'ta ID'leri getir**: herkes kendi giriş bilgileriyle `%USERPROFILE%\.dbeaver-mm\id-api.ps1` (PowerShell) betiğini kullanır; şablon `docs/id-api.ps1`, Windows zip'inde `id-api-sablon.ps1`. |
-| K40 | 2026-10-12 | **Betiksiz ID'leri getir**: `~/.dbeaver-mm/id-api.properties` varsa (Windows: `%USERPROFILE%\.dbeaver-mm\`) DBeaver ID API'sini herkesin kendi girişiyle doğrudan çağırır, bash ya da PowerShell gerekmez; şablon `docs/id-api.properties`, Windows zip'inde de var. K39'daki PowerShell betiğinin yerini alır. |
+| K39 | 2026-10-12 | **Windows'ta ID'leri getir**, herkes kendi girişiyle. |
+| K40 | 2026-10-12 | **Betiksiz ID'leri getir**: DBeaver ID API'sini kendisi çağırır, bash ya da PowerShell gerekmez. K39'un yerini alır. |
 | K41 | 2026-10-12 | İlk Windows indirmesi yayında: [v0.2.3](https://github.com/miracmenekse/dbeaver-mm/releases/tag/v0.2.3) (sürüm derlemesi ürün klasörünü paketler, yan repoları fork'un upstream tabanına sabitler). |
 | K43 | 2026-10-12 | **Donma kaydedici**: 1 sn ve üstü arayüz donmaları nedeniyle birlikte `~/.dbeaver-mm/donma.log`'a yazılır, 2 sn ve üstü bildirim de verir; yavaş arka plan işleri *Working: …* etiketiyle görünür. Donma test düzeni `test/perf/` altında (1 GB PostgreSQL test verisi, SSH benzeri gecikme aracı, JFR özeti, rapor `RAPOR.md`). |
 | K44 | 2026-10-12 | **Yavaş bağlantıda FK etiketleri yüzünden donma bitti**: çizim anında eksik olan etiketler (ör. karşılıksız FK değerleri) artık arayüzde hücre hücre sorgulanmıyor, arka planda toplu çekiliyor; "etiket yok" sonucu da hatırlanıyor. 30 ms gecikmede karşılıksız değerli tabloda fare gezdirmek 4,2 sn arayüz beklemesinden 0'a indi. |
@@ -268,5 +267,5 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K49 | 2026-10-13 | **Kayıt yalnızca onayla ve anonim**: ilk açılışta dbeaver-mm neden kayıt aldığını (veri biriktirip bu sistemleri ileride otomasyonla yönetmek) anlatır ve bir rumuz sorar (Yüzüklerin Efendisi: Yüzük Kardeşliği'nden 20 karakter ya da kendi rumuzun). Evet denmeden hiçbir şey kaydedilmez; kayıtlarda yalnızca rumuz bulunur. *Plus Settings › Automatic recording...* kaydı açıp kapatır ve rumuzu değiştirir. |
 | K50 | 2026-10-13 | **Oturum dışa aktarma**: oturum durdurulunca kaydı ve aynı adlı conf paketi (`conf/<görev>.sql`) masaüstüne zip olarak konabilir. Yazma arayüz iş parçacığında yapılmaz. |
 | K51 | 2026-10-13 | **Oturum analizi**: `tools/session-analysis/analiz.py` (yalnızca stdlib) oturum kayıtlarını ya da K50 zip'lerini okur; her oturumun adımlarını rumuza göre ve oturumların çoğunda ortak adımları süreç iskeleti olarak yazar. |
-| K52 | 2026-10-13 | **ID API ayar penceresi**: *Plus Settings › ID API account...* Fetch IDs ayarlarını (login adresi, kullanıcı adı, şifre, generate adresi) elle dosya düzenlemek yerine bir pencereden girer; *Import...* dağıtılan dosyayı yükler, kullanıcı yalnızca kendi bilgilerini yazar. Login body'deki `{user}`/`{password}` doldurulup kodlanır. |
-| K53 | 2026-10-13 | **Plus Settings menüsü, ID API kurulum klasöründen**: ikinci bir üst menü tüm Plus ayarlarını toplar (ID API hesabı, otomatik kayıt, donma bildirimleri); *Plus*'ta yalnızca özellikler kalır. API ayarları `dbeaver.exe` yanındaki `id-api.properties` dosyasından gelir (Windows zip'inde hazır, yalnızca üç `BURAYA-...` satırı doldurulur); kullanıcı yalnızca kullanıcı adını ve şifresini girer. |
+| K52 | 2026-10-13 | **ID API hesap penceresi**: kullanıcı adı ve şifre elle dosya düzenlemek yerine bir pencereden girilir. |
+| K53 | 2026-10-13 | **Plus Settings menüsü**: ikinci bir üst menü tüm Plus ayarlarını toplar (ID API hesabı, otomatik kayıt, donma bildirimleri); *Plus*'ta yalnızca özellikler kalır. Fetch IDs ayrıca verilen bir dosyayla kurulur; kullanıcı yalnızca kullanıcı adını ve şifresini girer. |

@@ -216,7 +216,7 @@ public class FetchIdsAction extends Action {
             return parseIds(IdApiClient.generate(count, table, domain));
         }
         if (!Files.isRegularFile(SCRIPT)) {
-            throw new IOException("id-api.properties not found next to dbeaver.exe, or still has BURAYA-... in it");
+            throw new IOException("Fetch IDs isn't set up: put the id-api.properties you were given next to dbeaver.exe");
         }
         Process process = new ProcessBuilder("bash", SCRIPT.toString(), String.valueOf(count), table, domain).start();
         // The output is one short JSON line, it fits in the pipe buffer until the process ends

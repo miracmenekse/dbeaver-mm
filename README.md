@@ -51,8 +51,8 @@ no separate rule engine, so it stays a thin layer over upstream DBeaver.
   favorites pinned on top. A parameter form (`Ctrl+Alt+P`) edits every `column = value` condition of a script in one
   place.
 * **IDs for new rows:** *Edit › Fetch IDs for new rows* asks the id API for as many ids as there are new rows
-  with an empty key and writes them into the grid without saving. The API is called through the user's own
-  `~/.dbeaver-mm/id-api.sh <count> <table> <domain>` script; the domain is chosen once per connection.
+  with an empty key and writes them into the grid without saving. The
+  domain is chosen once per connection.
 * **Conf packages:** *Edit › Add changes to conf package ...* turns the grid's unsaved changes into SQL (the same
   script as *Generate SQL*) and appends it to `Scripts/conf/<task id>.sql`, whose first line is the task
   description. The grid changes can be discarded right away, so the tab closes without saving to the database.
@@ -233,7 +233,7 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K19 | 2026-09-28 | The connections bar shows each connection's short code. |
 | K20 | 2026-09-30 | Option to list **only the values present in the result** in the filter box, labels included. |
 | K23 | 2026-10-07 | The in-cell FK dropdown works on **empty (`[NULL]`) cells** too, so a missing value can be picked from the referenced table instead of showing *Can't navigate to NULL value*. |
-| K24 | 2026-10-08 | *Fetch IDs for new rows* fills the key of the grid's new rows from the id API through `~/.dbeaver-mm/id-api.sh`; the id domain is asked once per connection. |
+| K24 | 2026-10-08 | *Fetch IDs for new rows* fills the key of the grid's new rows from the id API; the id domain is asked once per connection. |
 | K25 | 2026-10-08 | *Add changes to conf package ...* appends the grid's unsaved changes as SQL to `Scripts/conf/<task id>.sql` and can discard them from the grid. |
 | K26 | 2026-10-08 | The in-cell FK picker shows rows inserted in conf packages first, so a new parent row can be picked before it is in the database. |
 | K27 | 2026-10-10 | *Conf Packages* bottom panel lists the packages and shows the selected one's inserted rows per table and its SQL; it refreshes as packages change. |
@@ -248,8 +248,8 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K36 | 2026-10-10 | Double click a cell in the Conf Packages panel to edit it in place; Enter writes the value into the package's INSERT (`NULL` for null), Esc cancels. |
 | K37 | 2026-10-10 | **Plus** main menu (between Window and Help) with Conf Packages, Recent SQL Scripts and Focus Mode; *Fetch IDs* and *Add to conf package* buttons next to the table editor's Properties / Data / Diagram tabs. |
 | K38 | 2026-10-12 | **Windows download**: every `v*` tag builds a ready-to-run Windows zip with bundled Java on GitHub Releases. |
-| K39 | 2026-10-12 | **Fetch IDs on Windows**: runs `%USERPROFILE%\.dbeaver-mm\id-api.ps1` (PowerShell) with each user's own login; template `docs/id-api.ps1`, also in the Windows zip as `id-api-sablon.ps1`. |
-| K40 | 2026-10-12 | **Fetch IDs without scripts**: when `~/.dbeaver-mm/id-api.properties` exists (Windows: `%USERPROFILE%\.dbeaver-mm\`), DBeaver calls the ID API itself with each user's own login, no bash or PowerShell needed; template `docs/id-api.properties`, also in the Windows zip. Replaces K39's PowerShell script. |
+| K39 | 2026-10-12 | **Fetch IDs on Windows** with each user's own login. |
+| K40 | 2026-10-12 | **Fetch IDs without scripts**: DBeaver calls the ID API itself, no bash or PowerShell needed. Replaces K39. |
 | K41 | 2026-10-12 | First Windows download released: [v0.2.3](https://github.com/miracmenekse/dbeaver-mm/releases/tag/v0.2.3) (release build packs the product folder and pins sibling repos to the fork's upstream base). |
 | K43 | 2026-10-12 | **Freeze recorder**: UI freezes of 1 s or more are logged with their cause to `~/.dbeaver-mm/donma.log`, 2 s or more also notify; a *Working: …* label shows slow background jobs. Freeze test setup in `test/perf/` (1 GB PostgreSQL test data, SSH-like latency proxy, JFR summary, report `RAPOR.md`). |
 | K44 | 2026-10-12 | **No more grid freezes from FK labels over slow connections**: labels missing at paint time (e.g. orphan FK values) are no longer queried per cell on the UI thread but fetched together in the background, and "no label" is remembered. Over a 30 ms link, hovering a table with orphan values went from 4.2 s of UI waiting to 0. |
@@ -260,5 +260,5 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K49 | 2026-10-13 | **Recording only with consent, anonymous**: on first start dbeaver-mm explains why it records (to collect data so these systems can be run by automation later) and asks for a nickname (one of 20 Fellowship of the Ring characters or your own). Nothing is recorded without a yes; records carry only the nickname. *Plus Settings › Automatic recording...* turns it on or off and changes the nickname. |
 | K50 | 2026-10-13 | **Session export**: stopping a session offers to zip its log, plus the conf package of the same name (`conf/<task>.sql`), onto the desktop to send on. Written off the UI thread. |
 | K51 | 2026-10-13 | **Session analysis**: `tools/session-analysis/analiz.py` (stdlib) reads session logs or K50 zips and prints each session's steps per nickname and the steps most sessions share, as a process skeleton. |
-| K52 | 2026-10-13 | **ID API settings form**: *Plus Settings › ID API account...* edits the Fetch IDs settings (login URL, user name, password, generate URL) in a form instead of a hand-edited file; *Import...* loads a shared file so users only type their own credentials. `{user}`/`{password}` in the login body are filled and encoded. |
-| K53 | 2026-10-13 | **Plus Settings menu, ID API from the install folder**: a second top-level menu holds every Plus setting (ID API account, automatic recording, freeze notifications); *Plus* keeps only the features. The API settings come from `id-api.properties` next to `dbeaver.exe` (shipped in the Windows zip, only three `BURAYA-...` lines to fill), so users type nothing but their user name and password. |
+| K52 | 2026-10-13 | **ID API account form**: user name and password are entered in a window instead of a hand-edited file. |
+| K53 | 2026-10-13 | **Plus Settings menu**: a second top-level menu holds every Plus setting (ID API account, automatic recording, freeze notifications); *Plus* keeps only the features. Fetch IDs is set up with a file handed out separately; users only type their user name and password. |

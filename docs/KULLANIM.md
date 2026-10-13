@@ -133,18 +133,9 @@ seçer. Sorguda yazdığın tablo hangi bağlantıdaysa editör ona kendisi geç
 Yeni satır eklerken anahtar (ID) değerini ID API'sinden almak için kullanılır. Tek seferde, eklediğin tüm boş ID'li
 satırlar için ID alınır.
 
-**Bir kerelik kurulum.** Herkes kendi API bilgileriyle çalışır; bu bilgiler yalnızca senin bilgisayarında durur.
-
-1. Zip'in içindeki `id-api-sablon.properties` dosyasını (repoda [docs/id-api.properties](id-api.properties)) Not
-   Defteri ile aç.
-2. `BURAYA-...` yazan yerleri Postman'deki isteklerinden doldur: giriş adresi (`login.url`), kendi kullanıcı adın /
-   şifrenle giriş gövdesi (`login.body`) ve ID üretme adresi (`generate.url`). Ek başlık gerekiyorsa
-   `login.header.<Ad>=` ya da `generate.header.<Ad>=` satırı ekle.
-3. Dosyayı `C:\Users\<kullanıcı-adın>\.dbeaver-mm\id-api.properties` olarak kaydet. Not Defteri'nde *Kayıt türü*
-   olarak **Tüm dosyalar** seç, yoksa sonuna `.txt` eklenir. `.dbeaver-mm` klasörü yoksa oluştur.
-
-Giriş isteğin JSON gönderiyorsa `login.contentType=application/json` yap. Şifren bu dosyada düz metin durur; dosyayı
-kimseyle paylaşma. (Linux'ta dosya yoksa eski `~/.dbeaver-mm/id-api.sh` betiği kullanılır.)
+**Bir kerelik kurulum.** API dosyasını (`id-api.properties`) sana veren kişiden al ve `dbeaver` klasörüne,
+`dbeaver.exe`'nin yanına koy. Sonra *Plus Settings › ID API account...* ile yalnızca kendi kullanıcı adını ve
+şifreni gir. Dosyayı oraya koyamıyorsan aynı penceredeki **Import...** ile seç.
 
 **Kullanım.**
 
@@ -232,9 +223,8 @@ kişiye gönder. Rapor SQL metni, tablo adları ve sunucu adresleri içerebilir;
 | --- | --- |
 | "Windows bilgisayarınızı korudu" | **Ek bilgi › Yine de çalıştır**. Dosya imzasız olduğu için normaldir. |
 | FK hücresinde açıklama görünmüyor | Kolonun gerçekten bir FK (ya da sanal FK) olduğundan emin ol. Açıklama kolonunu başlıktaki **⋯** ile seç. |
-| *Fetch IDs*: `id-api.properties not found` | Dosya `C:\Users\<kullanıcı-adın>\.dbeaver-mm\` altında değil ya da adı `.txt` ile bitiyor. Dosya Gezgini'nde *Görünüm › Dosya adı uzantıları*'nı açıp kontrol et. |
-| *Fetch IDs*: `Login failed (HTTP …)` | `login.*` satırlarını Postman'deki giriş isteğiyle karşılaştır; JSON gönderiyorsan `login.contentType=application/json`. |
-| *Fetch IDs*: `ID API HTTP 4xx/5xx` | `generate.url` ve `generate.header.*` satırlarını kontrol et. Mesajın devamında API'nin cevabı yazar. |
+| *Fetch IDs*: `isn't set up` | `id-api.properties` dosyası `dbeaver.exe`'nin yanında değil. Dosyayı veren kişiye sor ya da *Plus Settings › ID API account... › Import...* ile seç. |
+| *Fetch IDs*: `Login failed` | Kullanıcı adı ya da şifre yanlış: *Plus Settings › ID API account...* ile yeniden gir. |
 | *Fetch IDs* menüde soluk | Tabloda boş ID'li yeni satır yok ya da tablonun tek kolonlu bir anahtarı yok. |
 | DBeaver bir süre cevap vermiyor | Sağ altta *Working: …* varsa iş sürüyor, bekle. Tekrarlıyorsa *Plus › Create Problem Report* ile zip'i gönder. |
 | Yeni sürüme geçmek | Yeni zip'i ayrı bir klasöre çıkar ve oradan aç. Bağlantılar ve ayarlar `%APPDATA%\DBeaverData`'da, conf paketleri ve kayıtlar `.dbeaver-mm`'de kalır. |
