@@ -3,13 +3,23 @@
 🇹🇷 **[Türkçe dokümantasyon → README.tr.md](README.tr.md)**
 
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
-![Version](https://img.shields.io/badge/version-0.1-green.svg)
+![Version](https://img.shields.io/badge/version-0.3.0-green.svg)
 ![Java](https://img.shields.io/badge/Java-21-orange.svg)
 ![Based on](https://img.shields.io/badge/based%20on-DBeaver%20Community-lightgrey.svg)
 
 > **dbeaver-mm: see what every ID means, and pick values instead of typing them.**
 
 ---
+
+## 📖 How it works: user guide
+
+The meaning of an ID shows up next to the ID, and wherever a value has to be written you search it by name and pick it:
+
+![FK labels in the grid: names next to status_id and channel_id](docs/rehber/02-fk-etiketleri.png)
+
+![In-cell picker: typing "kullan" finds Kullanımdan kalktı](docs/rehber/04-hucre-secici.png)
+
+Step-by-step guide with screenshots for every feature (Turkish): **[Kullanım Rehberi → docs/KULLANIM.md](docs/KULLANIM.md)**
 
 ## 📌 About the Project and Problem Statement
 
@@ -246,3 +256,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K45 | 2026-10-12 | **Problem report**: *Plus › Create Problem Report* puts a zip with version info, freeze log and error logs on the desktop to send along with a bug report. |
 | K46 | 2026-10-12 | **Conf Packages finds tables in every schema**: a package's tables were looked up only in the connection's default schema, so packages for other schemas (e.g. `pcm` with default `public`) got no FK labels or colors and were copied in file order instead of FK-safe order. Now the INSERT's own schema is used, and unqualified tables are searched in all schemas. |
 | K47 | 2026-10-12 | **Session recording**: always-on light log of table opens, searches, DML and conf package changes, plus named sessions (*Plus › Start session...*) that record every step, to learn which configuration steps each kind of work needs. Measured: 0 file writes on the UI thread. |
+| K48 | 2026-10-13 | **User guide** `docs/KULLANIM.md` (Turkish): every feature step by step with 17 screenshots; *How it works* section at the top of the README. |

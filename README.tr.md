@@ -3,13 +3,34 @@
 🇬🇧 **[English README](README.md)**
 
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
-![Version](https://img.shields.io/badge/version-0.1-green.svg)
+![Version](https://img.shields.io/badge/version-0.3.0-green.svg)
 ![Java](https://img.shields.io/badge/Java-21-orange.svg)
 ![Based on](https://img.shields.io/badge/based%20on-DBeaver%20Community-lightgrey.svg)
 
 > **dbeaver-mm: her ID'nin anlamını gör, değeri yazmak yerine seç.**
 
 ---
+
+## 📖 Nasıl çalışır? Kullanım rehberi
+
+ID'nin anlamı ID'nin yanında görünür; değer yazman gereken her yerde adıyla arayıp seçersin:
+
+![Tabloda FK açıklamaları: status_id ve channel_id'nin yanında adlar](docs/rehber/02-fk-etiketleri.png)
+
+![Hücre içi seçici: "kullan" yazınca Kullanımdan kalktı bulunuyor](docs/rehber/04-hucre-secici.png)
+
+Her özelliğin adım adım, ekran görüntülü anlatımı: **[Kullanım Rehberi → docs/KULLANIM.md](docs/KULLANIM.md)**
+
+| Ne yapmak istiyorsun? | Rehberde |
+| --- | --- |
+| Windows'a kurmak | [Başlarken](docs/KULLANIM.md#başlarken) |
+| ID'lerin ne anlama geldiğini görmek | [Tabloda FK açıklamaları](docs/KULLANIM.md#tabloda-fk-açıklamaları) |
+| Hücreye değeri adıyla seçmek | [Hücreden değer seçme](docs/KULLANIM.md#hücreden-değer-seçme) |
+| Sonucu adla filtrelemek | [Filtre kutusu](docs/KULLANIM.md#filtre-kutusunda-adla-filtreleme) |
+| SQL'de değer seçmek, parametre formu | [SQL editörü araçları](docs/KULLANIM.md#sql-editörü-araçları) |
+| Yeni satırlara API'den ID almak | [ID getirme](docs/KULLANIM.md#yeni-satırlara-id-getirme) |
+| Değişiklikleri task betiğinde toplamak | [Conf paketleri](docs/KULLANIM.md#conf-paketleri) |
+| Hata bildirmek | [Oturum kaydı ve sorun raporu](docs/KULLANIM.md#oturum-kaydı-ve-sorun-raporu) |
 
 ## 📌 Proje Hakkında ve Problem
 
@@ -243,3 +264,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K45 | 2026-10-12 | **Sorun raporu**: *Plus › Create Problem Report* sürüm bilgisi, donma kaydı ve hata log'larını içeren bir zip'i hata bildirimiyle gönderilmek üzere masaüstüne koyar. |
 | K46 | 2026-10-12 | **Conf Packages tabloları her şemada buluyor**: paket tabloları yalnızca bağlantının varsayılan şemasında aranıyordu; başka şemanın paketleri (ör. varsayılan `public` iken `pcm`) FK etiketi ve renk almıyor, FK sırası yerine dosya sırasıyla kopyalanıyordu. Artık INSERT'in kendi şeması kullanılıyor, şemasız tablolar tüm şemalarda aranıyor. |
 | K47 | 2026-10-12 | **Oturum kaydı**: tablo açma, arama, DML ve conf paketi değişiklikleri her zaman hafifçe kaydedilir; isimli oturumlar (*Plus › Start session...*) her adımı kaydeder. Amaç her iş türünün hangi konfigürasyon adımlarını gerektirdiğini öğrenmek. Ölçüm: arayüz iş parçacığında 0 dosya yazması. |
+| K48 | 2026-10-13 | **Kullanım rehberi** `docs/KULLANIM.md`: her özellik adım adım, 17 ekran görüntüsüyle; README'nin başında *Nasıl çalışır?* bölümü. |
