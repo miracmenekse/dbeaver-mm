@@ -172,6 +172,15 @@ public final class SessionRecorder {
         return file;
     }
 
+    /** Waits (off the UI thread) until queued lines are on disk, so a just-stopped session can be zipped. */
+    public static void awaitWritten() throws InterruptedException {
+        // ponytail: polls the queue, plus one pause for the batch already taken; a real flush latch if lines go missing
+        for (int i = 0; i < 50 && !QUEUE.isEmpty(); i++) {
+            Thread.sleep(20);
+        }
+        Thread.sleep(100);
+    }
+
     private static void queue(String type, String conn, String target, String detail, boolean light) {
         if (!enabled) {
             return;

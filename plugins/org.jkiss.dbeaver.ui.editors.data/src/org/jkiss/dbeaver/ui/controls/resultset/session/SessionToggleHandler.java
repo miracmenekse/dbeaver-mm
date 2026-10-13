@@ -56,9 +56,13 @@ public class SessionToggleHandler extends AbstractHandler implements IElementUpd
     public Object execute(ExecutionEvent event) {
         Shell shell = HandlerUtil.getActiveShell(event);
         if (SessionRecorder.isRecording()) {
+            String name = SessionRecorder.sessionName();
             Path file = SessionRecorder.stop();
             showIndicator(shell);
-            MessageDialog.openInformation(shell, "Session recording", "Session saved:\n" + file);
+            if (MessageDialog.openQuestion(shell, "Session recording", "Session saved:\n" + file +
+                "\n\nAlso zip it with its conf package onto the desktop, to send on?")) {
+                SessionExport.zip(file, name, shell.getDisplay());
+            }
         } else {
             if (!SessionRecorder.isEnabled()) {
                 RecordingConsent.ask(shell);
