@@ -16,7 +16,10 @@
  */
 package org.jkiss.dbeaver.ui.controls.resultset.ids;
 
+import org.eclipse.core.runtime.Platform;
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
+import org.jkiss.dbeaver.utils.RuntimeUtils;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -29,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,18 +46,48 @@ import java.util.regex.Pattern;
 class IdApiClient {
 
     private static final Path DIR = Path.of(System.getProperty("user.home"), ".dbeaver-mm");
+    // K53: the user's own file holds login.user / login.password (and may override anything shared)
     static final Path CONFIG = DIR.resolve("id-api.properties");
     private static final Path TOKEN = DIR.resolve("token");
     private static final Duration TIMEOUT = Duration.ofSeconds(15);
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
 
+    /** K53: the file handed out with the install, next to dbeaver.exe; null when there is none. */
+    @Nullable
+    static Path sharedConfig() {
+        try {
+            Path file = RuntimeUtils.getLocalFileFromURL(Platform.getInstallLocation().getURL()).resolve("id-api.properties");
+            return Files.isRegularFile(file) ? file : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Shared file first, then the user's own on top of it. */
+    @NotNull
+    static Properties load() {
+        Properties config = new Properties();
+        Path shared = sharedConfig();
+        for (Path file : shared == null ? List.of(CONFIG) : List.of(shared, CONFIG)) {
+            try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                config.load(reader);
+            } catch (IOException ignored) {
+                // missing file: nothing from it
+            }
+        }
+        return config;
+    }
+
+    /** generate.url is set and isn't the template's BURAYA-... placeholder. */
+    static boolean isConfigured() {
+        String url = load().getProperty("generate.url", "");
+        return !url.isBlank() && !url.contains("BURAYA");
+    }
+
     /** Returns the generate response body (JSON with "ids"). */
     @NotNull
     static String generate(int count, @NotNull String table, @NotNull String domain) throws IOException, InterruptedException {
-        Properties config = new Properties();
-        try (Reader reader = Files.newBufferedReader(CONFIG, StandardCharsets.UTF_8)) {
-            config.load(reader);
-        }
+        Properties config = load();
         String url = require(config, "generate.url")
             .replace("{count}", String.valueOf(count))
             .replace("{table}", URLEncoder.encode(table, StandardCharsets.UTF_8))
@@ -93,7 +127,7 @@ class IdApiClient {
         String field = config.getProperty("token.field", "access_token").strip();
         String token = response.statusCode() == 200 ? jsonString(response.body(), field) : null;
         if (token == null) {
-            throw new IOException("Login failed (HTTP " + response.statusCode() + "), check login.* in " + CONFIG + "\n" + response.body());
+            throw new IOException("Login failed (HTTP " + response.statusCode() + "), check user name / password under Plus Settings > ID API account" + "\n" + response.body());
         }
         Files.writeString(TOKEN, token);
     }
@@ -124,7 +158,7 @@ class IdApiClient {
     private static String require(@NotNull Properties config, @NotNull String key) throws IOException {
         String value = config.getProperty(key);
         if (value == null || value.isBlank()) {
-            throw new IOException(key + " is missing in " + CONFIG);
+            throw new IOException(key + " is missing in id-api.properties (next to dbeaver.exe or in " + CONFIG.getParent() + ")");
         }
         return value.strip();
     }

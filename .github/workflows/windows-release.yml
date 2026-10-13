@@ -51,7 +51,7 @@ jobs:
           curl -sL -o jre.zip "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse"
           unzip -q jre.zip && rm jre.zip
           mv jdk-*-jre dbeaver/jre
-          cp ../dbeaver/docs/id-api.properties dbeaver/id-api-sablon.properties
+          cp ../dbeaver/docs/id-api.properties dbeaver/id-api.properties
           zip -qr ../dbeaver-mm-windows-x64.zip dbeaver
 
       - name: Publish release
@@ -63,4 +63,4 @@ jobs:
           gh release create "$TAG" dbeaver-mm-windows-x64.zip \
             -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "dbeaver-mm $TAG" \
-            --notes "Windows: zip'i cikar, dbeaver klasorundeki dbeaver.exe'ye cift tikla. Java gerekmez. Fetch IDs icin dbeaver\\id-api-sablon.properties dosyasini doldurup %USERPROFILE%\\.dbeaver-mm\\id-api.properties olarak kaydet."
+            --notes "Windows: zip'i cikar, dbeaver klasorundeki dbeaver.exe'ye cift tikla. Java gerekmez. Fetch IDs: dbeaver\\id-api.properties dosyasindaki BURAYA-... yerlerini doldur (ya da sana verilen dosyayi onun yerine koy), sonra Plus Settings > ID API account... ile kullanici adi ve sifre gir."

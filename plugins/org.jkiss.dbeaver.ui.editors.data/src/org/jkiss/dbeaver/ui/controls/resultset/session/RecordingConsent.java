@@ -35,7 +35,7 @@ import java.util.Map;
 
 /**
  * dbeaver-mm K49: asks once, on first start, whether to record and under which nickname, and again
- * from Plus > Automatic recording. Records only ever carry the nickname, so they stay anonymous.
+ * from Plus Settings > Automatic recording. Records only ever carry the nickname, so they stay anonymous.
  */
 public class RecordingConsent extends AbstractHandler implements IElementUpdater {
 
@@ -51,7 +51,7 @@ public class RecordingConsent extends AbstractHandler implements IElementUpdater
         "dbeaver-mm can record what you do (tables opened, searches, SQL, conf package changes) to\n" +
         "~/.dbeaver-mm/kayit. Purpose: to collect data so these systems can be run by automation in the future.\n\n" +
         "Records are kept and published only under the nickname below, never under your name.\n" +
-        "Pick a Fellowship name or type your own. You can change this any time under Plus > Automatic recording.";
+        "Pick a Fellowship name or type your own. You can change this any time under Plus Settings > Automatic recording.";
 
     /** First start: ask only if the user was never asked. */
     public static void askOnce(@Nullable Shell shell) {

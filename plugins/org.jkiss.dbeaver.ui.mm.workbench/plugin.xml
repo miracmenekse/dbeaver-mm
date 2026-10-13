@@ -72,6 +72,15 @@
                 <command commandId="org.jkiss.dbeaver.ui.mm.workbench.problemReport"/>
             </menu>
         </menuContribution>
+        <!-- dbeaver-mm K53: every setting of the Plus features in one menu next to Plus -->
+        <menuContribution allPopups="false" locationURI="menu:org.eclipse.ui.main.menu?after=org.jkiss.dbeaver.mm.plus">
+            <menu id="org.jkiss.dbeaver.mm.plus.settings" label="Plus Settings">
+                <separator name="additions" visible="false"/>
+                <command commandId="org.eclipse.ui.window.preferences" label="Freeze notifications..." style="push">
+                    <parameter name="preferencePageId" value="org.jkiss.dbeaver.preferences.main.notifications"/>
+                </command>
+            </menu>
+        </menuContribution>
     </extension>
 
     <!--

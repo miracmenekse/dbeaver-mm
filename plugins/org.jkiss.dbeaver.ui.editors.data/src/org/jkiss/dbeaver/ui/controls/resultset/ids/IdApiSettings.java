@@ -32,94 +32,68 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Properties;
 
 /**
- * dbeaver-mm K52: Plus > ID API settings... edits {@code ~/.dbeaver-mm/id-api.properties} in a form,
- * so nobody has to find a hidden folder or fight Notepad's .txt on Windows. "Import..." loads a file
- * someone handed out (urls, headers); the user then types only their own user name and password.
- * Keys the form doesn't show (login.header.*, generate.header.*, generate.body) are kept as they are.
+ * dbeaver-mm K52/K53: Plus Settings > ID API account... The API itself (urls, body, headers) comes
+ * from the id-api.properties handed out next to dbeaver.exe; the user only types their user name and
+ * password, which go to their own {@code ~/.dbeaver-mm/id-api.properties}.
  */
 public class IdApiSettings extends AbstractHandler {
 
-    // key -> label; login.password is shown masked
-    private static final Map<String, String> FIELDS = new LinkedHashMap<>();
-
-    static {
-        FIELDS.put("login.url", "Login URL:");
-        FIELDS.put("login.user", "User name:");
-        FIELDS.put("login.password", "Password:");
-        FIELDS.put("login.contentType", "Login content type:");
-        FIELDS.put("login.body", "Login body:");
-        FIELDS.put("token.field", "Token field:");
-        FIELDS.put("generate.url", "Generate URL:");
-        FIELDS.put("generate.method", "Generate method:");
-    }
-
-    private static final Map<String, String> DEFAULTS = Map.of(
-        "login.contentType", "application/x-www-form-urlencoded",
-        "login.body", "username={user}&password={password}",
-        "token.field", "access_token",
-        "generate.url", "https://SERVER/generate?count={count}&table={table}&domain={domain}",
-        "generate.method", "GET");
-
     @Override
     public Object execute(ExecutionEvent event) {
-        Shell shell = HandlerUtil.getActiveShell(event);
-        Properties config = load(IdApiClient.CONFIG);
-        new SettingsDialog(shell, config).open();
+        new AccountDialog(HandlerUtil.getActiveShell(event)).open();
         return null;
     }
 
-    private static Properties load(Path file) {
+    private static Properties own() {
         Properties config = new Properties();
-        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+        try (Reader reader = Files.newBufferedReader(IdApiClient.CONFIG, StandardCharsets.UTF_8)) {
             config.load(reader);
         } catch (IOException ignored) {
-            // first time: defaults
+            // first time
         }
         return config;
     }
 
-    private static class SettingsDialog extends Dialog {
-        private final Properties config;
-        private final Map<String, Text> texts = new LinkedHashMap<>();
+    private static class AccountDialog extends Dialog {
+        private Text user;
+        private Text password;
 
-        SettingsDialog(Shell shell, Properties config) {
+        AccountDialog(Shell shell) {
             super(shell);
-            this.config = config;
         }
 
         @Override
         protected void configureShell(Shell shell) {
             super.configureShell(shell);
-            shell.setText("ID API settings");
+            shell.setText("ID API account");
         }
 
         @Override
         protected Control createDialogArea(Composite parent) {
             Composite area = (Composite) super.createDialogArea(parent);
             ((GridLayout) area.getLayout()).numColumns = 2;
+            Path shared = IdApiClient.sharedConfig();
             Label info = new Label(area, SWT.WRAP);
-            info.setText("Saved to " + IdApiClient.CONFIG + ". {user} and {password} in the login body are filled from the fields above it.\n"
-                + "The password stays on this computer only, in that file; don't share the file once it has your password.");
-            GridData infoData = new GridData(SWT.FILL, SWT.TOP, true, false, 2, 1);
-            infoData.widthHint = 560;
-            info.setLayoutData(infoData);
-            for (Map.Entry<String, String> field : FIELDS.entrySet()) {
-                new Label(area, SWT.NONE).setText(field.getValue());
-                Text text = new Text(area, SWT.BORDER | (field.getKey().equals("login.password") ? SWT.PASSWORD : SWT.NONE));
-                text.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-                texts.put(field.getKey(), text);
-            }
-            fill(config);
+            info.setText(IdApiClient.isConfigured()
+                ? "API settings: " + (shared != null ? shared : IdApiClient.CONFIG) + "\nEnter your own user name and password for the ID API."
+                : "No filled id-api.properties found next to dbeaver.exe. Ask for the file and put it into\n"
+                    + (shared != null ? shared.getParent() : "the dbeaver folder (where dbeaver.exe is)") + ", or use Import... below.");
+            info.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 2, 1));
+            Properties config = own();
+            new Label(area, SWT.NONE).setText("User name:");
+            user = new Text(area, SWT.BORDER);
+            user.setText(config.getProperty("login.user", ""));
+            user.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+            new Label(area, SWT.NONE).setText("Password:");
+            password = new Text(area, SWT.BORDER | SWT.PASSWORD);
+            password.setText(config.getProperty("login.password", ""));
+            GridData data = new GridData(SWT.FILL, SWT.CENTER, true, false);
+            data.widthHint = 300;
+            password.setLayoutData(data);
             return area;
-        }
-
-        private void fill(Properties from) {
-            texts.forEach((key, text) -> text.setText(from.getProperty(key, DEFAULTS.getOrDefault(key, ""))));
         }
 
         @Override
@@ -134,37 +108,42 @@ public class IdApiSettings extends AbstractHandler {
                 super.buttonPressed(id);
                 return;
             }
+            // when the dbeaver folder isn't writable: take the handed-out file into the user's own one
             FileDialog dialog = new FileDialog(getShell(), SWT.OPEN);
             dialog.setFilterExtensions(new String[]{"*.properties;*.txt", "*.*"});
             String file = dialog.open();
-            if (file != null) {
-                Properties imported = load(Path.of(file));
-                // keep what the user already typed for themselves
-                for (String key : new String[]{"login.user", "login.password"}) {
-                    if (!texts.get(key).getText().isEmpty() && imported.getProperty(key, "").isEmpty()) {
-                        imported.setProperty(key, texts.get(key).getText());
-                    }
-                }
-                config.putAll(imported);
-                fill(config);
+            if (file == null) {
+                return;
+            }
+            Properties imported = new Properties();
+            try (Reader reader = Files.newBufferedReader(Path.of(file), StandardCharsets.UTF_8)) {
+                imported.load(reader);
+                save(imported);
+            } catch (IOException e) {
+                MessageDialog.openError(getShell(), "ID API account", "Can't import " + file + ":\n" + e.getMessage());
             }
         }
 
         @Override
         protected void okPressed() {
-            texts.forEach((key, text) -> config.setProperty(key, text.getText().strip()));
             try {
-                Files.createDirectories(IdApiClient.CONFIG.getParent());
-                try (Writer writer = Files.newBufferedWriter(IdApiClient.CONFIG, StandardCharsets.UTF_8)) {
-                    config.store(writer, "dbeaver-mm Fetch IDs settings (Plus > ID API settings...)");
-                }
-                // old token belongs to the old settings
-                Files.deleteIfExists(IdApiClient.CONFIG.resolveSibling("token"));
+                save(own());
             } catch (IOException e) {
-                MessageDialog.openError(getShell(), "ID API settings", "Can't save " + IdApiClient.CONFIG + ":\n" + e.getMessage());
+                MessageDialog.openError(getShell(), "ID API account", "Can't save " + IdApiClient.CONFIG + ":\n" + e.getMessage());
                 return;
             }
             super.okPressed();
+        }
+
+        private void save(Properties config) throws IOException {
+            config.setProperty("login.user", user.getText().strip());
+            config.setProperty("login.password", password.getText());
+            Files.createDirectories(IdApiClient.CONFIG.getParent());
+            try (Writer writer = Files.newBufferedWriter(IdApiClient.CONFIG, StandardCharsets.UTF_8)) {
+                config.store(writer, "dbeaver-mm ID API account (Plus Settings > ID API account...)");
+            }
+            // the old token belongs to the old account
+            Files.deleteIfExists(IdApiClient.CONFIG.resolveSibling("token"));
         }
     }
 }

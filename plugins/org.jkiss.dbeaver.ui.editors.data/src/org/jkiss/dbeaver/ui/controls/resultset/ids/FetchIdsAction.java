@@ -54,7 +54,7 @@ import java.util.regex.Pattern;
 /**
  * dbeaver-mm K24: fills the key column of the grid's new rows with ids from the id API.
  * The API is called through the user's own script {@code ~/.dbeaver-mm/id-api.sh <count> <table> <domain>},
- * or, when {@code ~/.dbeaver-mm/id-api.properties} exists, by {@link IdApiClient} (Windows, no scripts needed),
+ * or, when id-api.properties is filled in (next to dbeaver.exe or in {@code ~/.dbeaver-mm}), by {@link IdApiClient} (Windows, no scripts needed),
  * so its URL, headers and token never live in the workspace. The domain is asked once per connection and
  * kept as a connection tag. Rows are not saved; the user copies the ids into related tables.
  */
@@ -212,11 +212,11 @@ public class FetchIdsAction extends Action {
 
     @NotNull
     static List<Long> fetchIds(int count, @NotNull String table, @NotNull String domain) throws IOException, InterruptedException {
-        if (Files.isRegularFile(IdApiClient.CONFIG)) {
+        if (IdApiClient.isConfigured()) {
             return parseIds(IdApiClient.generate(count, table, domain));
         }
         if (!Files.isRegularFile(SCRIPT)) {
-            throw new IOException(IdApiClient.CONFIG + " not found");
+            throw new IOException("id-api.properties not found next to dbeaver.exe, or still has BURAYA-... in it");
         }
         Process process = new ProcessBuilder("bash", SCRIPT.toString(), String.valueOf(count), table, domain).start();
         // The output is one short JSON line, it fits in the pipe buffer until the process ends
