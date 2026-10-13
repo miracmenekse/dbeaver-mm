@@ -137,6 +137,11 @@ satırlar için ID alınır.
 `dbeaver.exe`'nin yanına koy. Sonra *Plus Settings › ID API account...* ile yalnızca kendi kullanıcı adını ve
 şifreni gir. Dosyayı oraya koyamıyorsan aynı penceredeki **Import...** ile seç.
 
+**Dosyayı dağıtan kişi için.** Dosya GitHub'da yoktur, elden verilir. Kendi çalışan dosyandan bir kopya hazırla:
+kopyada senin kullanıcı adın ve şifren olmasın; giriş gövdesinde onların yerinde `{user}` ve `{password}` yazsın
+(DBeaver bunları her kullanıcının girdikleriyle doldurur). Kopyanın adı tam olarak `id-api.properties` olsun ve
+kullanıcıya yalnızca bu dosyayı ver. Kullanıcıdan başka bir şey istenmez.
+
 **Kullanım.**
 
 1. Tabloyu aç, alttaki **Add row** (veya Alt+Insert) ile istediğin kadar yeni satır ekle. ID hücrelerini boş bırak.
