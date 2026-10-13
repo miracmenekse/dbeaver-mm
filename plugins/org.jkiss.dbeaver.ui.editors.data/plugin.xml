@@ -1686,6 +1686,9 @@
     <extension point="org.eclipse.ui.commands">
         <command id="org.jkiss.dbeaver.mm.session.toggle" categoryId="org.jkiss.dbeaver.core.util"
             name="Start session..." description="Record every step under a name you give, until you stop it"/>
+        <!-- dbeaver-mm K52: Fetch IDs API settings in a form -->
+        <command id="org.jkiss.dbeaver.mm.idapi.settings" categoryId="org.jkiss.dbeaver.core.util"
+            name="ID API settings..." description="Login URL, user name, password and generate URL for Fetch IDs"/>
         <!-- dbeaver-mm K49: recording only with consent, under a nickname -->
         <command id="org.jkiss.dbeaver.mm.session.consent" categoryId="org.jkiss.dbeaver.core.util"
             name="Automatic recording..." description="Turn recording on or off and pick the nickname records are kept under"/>
@@ -1693,11 +1696,14 @@
     <extension point="org.eclipse.ui.handlers">
         <handler commandId="org.jkiss.dbeaver.mm.session.toggle"
             class="org.jkiss.dbeaver.ui.controls.resultset.session.SessionToggleHandler"/>
+        <handler commandId="org.jkiss.dbeaver.mm.idapi.settings"
+            class="org.jkiss.dbeaver.ui.controls.resultset.ids.IdApiSettings"/>
         <handler commandId="org.jkiss.dbeaver.mm.session.consent"
             class="org.jkiss.dbeaver.ui.controls.resultset.session.RecordingConsent"/>
     </extension>
     <extension point="org.eclipse.ui.menus">
         <menuContribution allPopups="false" locationURI="menu:org.jkiss.dbeaver.mm.plus?before=support">
+            <command commandId="org.jkiss.dbeaver.mm.idapi.settings"/>
             <command commandId="org.jkiss.dbeaver.mm.session.consent" style="toggle"/>
             <command commandId="org.jkiss.dbeaver.mm.session.toggle"/>
         </menuContribution>

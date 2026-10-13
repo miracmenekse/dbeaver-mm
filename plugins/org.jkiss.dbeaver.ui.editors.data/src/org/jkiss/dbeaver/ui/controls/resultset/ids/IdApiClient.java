@@ -87,7 +87,7 @@ class IdApiClient {
     private static void login(@NotNull Properties config) throws IOException, InterruptedException {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(require(config, "login.url"))).timeout(TIMEOUT)
             .header("Content-Type", config.getProperty("login.contentType", "application/x-www-form-urlencoded").strip())
-            .POST(HttpRequest.BodyPublishers.ofString(require(config, "login.body")));
+            .POST(HttpRequest.BodyPublishers.ofString(loginBody(config)));
         addHeaders(config, "login.header.", request);
         HttpResponse<String> response = HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
         String field = config.getProperty("token.field", "access_token").strip();
@@ -96,6 +96,20 @@ class IdApiClient {
             throw new IOException("Login failed (HTTP " + response.statusCode() + "), check login.* in " + CONFIG + "\n" + response.body());
         }
         Files.writeString(TOKEN, token);
+    }
+
+    /** K52: {user} / {password} in login.body come from login.user / login.password, encoded for the body's type. */
+    @NotNull
+    static String loginBody(@NotNull Properties config) throws IOException {
+        boolean json = config.getProperty("login.contentType", "").contains("json");
+        String body = require(config, "login.body");
+        for (String name : new String[]{"user", "password"}) {
+            String value = config.getProperty("login." + name, "");
+            body = body.replace("{" + name + "}", json
+                ? org.jkiss.dbeaver.model.data.json.JSONUtils.escapeJsonString(value)
+                : URLEncoder.encode(value, StandardCharsets.UTF_8));
+        }
+        return body;
     }
 
     private static void addHeaders(@NotNull Properties config, @NotNull String prefix, @NotNull HttpRequest.Builder request) {
