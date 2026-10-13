@@ -72,6 +72,8 @@ public final class SessionSteps implements IStartup {
         IWorkbench workbench = PlatformUI.getWorkbench();
         workbench.getDisplay().asyncExec(() -> {
             workbench.getService(ICommandService.class).addExecutionListener(new Commands());
+            IWorkbenchWindow active = workbench.getActiveWorkbenchWindow();
+            RecordingConsent.askOnce(active == null ? null : active.getShell());
             for (IWorkbenchWindow window : workbench.getWorkbenchWindows()) {
                 hook(window);
             }

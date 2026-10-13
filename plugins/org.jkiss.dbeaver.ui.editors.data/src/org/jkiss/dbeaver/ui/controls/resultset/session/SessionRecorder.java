@@ -22,6 +22,8 @@ import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.data.json.JSONUtils;
 
 import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,6 +35,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -44,6 +47,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * those and every other step also go to {@code ~/.dbeaver-mm/kayit/<yyyyMMdd-HHmm>-<name>.jsonl}.
  * Callers only queue a line: no I/O and no metadata reads on the caller's thread (test/perf/RAPOR.md B1/B3);
  * one daemon thread writes.
+ * K49: nothing is recorded unless the user agreed ({@link #isEnabled()}); lines carry only the
+ * nickname the user picked, never the OS user name.
  */
 public final class SessionRecorder {
 
@@ -53,6 +58,11 @@ public final class SessionRecorder {
     private static final Path ALWAYS = FOLDER.resolve("surekli.jsonl");
     private static final long MAX_ALWAYS_BYTES = 2L << 20;
     private static final int MAX_DETAIL = 4000;
+    private static final Path SETTINGS = FOLDER.resolveSibling("kayit.properties");
+
+    private static volatile boolean enabled;
+    @Nullable
+    private static volatile String nickname;
 
     private record Line(@NotNull String json, boolean light, @Nullable Path session) {
     }
@@ -68,12 +78,54 @@ public final class SessionRecorder {
     private static String last = "";
 
     static {
+        Properties props = new Properties();
+        try (Reader in = Files.newBufferedReader(SETTINGS, StandardCharsets.UTF_8)) {
+            props.load(in);
+        } catch (IOException ignored) {
+            // not asked yet
+        }
+        nickname = props.getProperty("nickname");
+        enabled = nickname != null && Boolean.parseBoolean(props.getProperty("enabled"));
         Thread writer = new Thread(SessionRecorder::write, "dbeaver-mm session writer");
         writer.setDaemon(true);
         writer.start();
     }
 
     private SessionRecorder() {
+    }
+
+    /** The user was asked at least once (a nickname is saved). */
+    public static boolean isAsked() {
+        return nickname != null;
+    }
+
+    public static boolean isEnabled() {
+        return enabled;
+    }
+
+    @Nullable
+    public static String nickname() {
+        return nickname;
+    }
+
+    /** Saves the user's choice; turning recording off also stops a running session. */
+    public static synchronized void configure(@NotNull String nick, boolean on) {
+        if (!on) {
+            stop();
+        }
+        nickname = nick.strip();
+        enabled = on;
+        Properties props = new Properties();
+        props.setProperty("nickname", nickname);
+        props.setProperty("enabled", Boolean.toString(on));
+        try {
+            Files.createDirectories(SETTINGS.getParent());
+            try (Writer out = Files.newBufferedWriter(SETTINGS, StandardCharsets.UTF_8)) {
+                props.store(out, "dbeaver-mm session recording consent");
+            }
+        } catch (IOException e) {
+            log.debug("Can't save recording settings: " + e.getMessage());
+        }
     }
 
     public static boolean isRecording() {
@@ -99,6 +151,9 @@ public final class SessionRecorder {
 
     @NotNull
     public static synchronized Path start(@NotNull String name) {
+        if (!enabled) {
+            throw new IllegalStateException("Recording is off");
+        }
         String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"));
         sessionFile = FOLDER.resolve(stamp + "-" + name.strip().replaceAll("[^\\p{L}\\p{N}_.-]", "_") + ".jsonl");
         sessionName = name.strip();
@@ -118,6 +173,9 @@ public final class SessionRecorder {
     }
 
     private static void queue(String type, String conn, String target, String detail, boolean light) {
+        if (!enabled) {
+            return;
+        }
         String event = type + '\0' + conn + '\0' + target + '\0' + detail;
         Path session;
         String name;
@@ -132,7 +190,7 @@ public final class SessionRecorder {
         if (detail != null && detail.length() > MAX_DETAIL) {
             detail = detail.substring(0, MAX_DETAIL) + "...";
         }
-        String json = "{\"t\":" + str(LocalDateTime.now().toString()) + ",\"session\":" + str(name) + ",\"type\":" + str(type) +
+        String json = "{\"t\":" + str(LocalDateTime.now().toString()) + ",\"user\":" + str(nickname) + ",\"session\":" + str(name) + ",\"type\":" + str(type) +
             ",\"conn\":" + str(conn) + ",\"target\":" + str(target) + ",\"detail\":" + str(detail) + "}\n";
         if (!QUEUE.offer(new Line(json, light, session))) {
             DROPPED.incrementAndGet();

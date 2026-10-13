@@ -60,6 +60,12 @@ public class SessionToggleHandler extends AbstractHandler implements IElementUpd
             showIndicator(shell);
             MessageDialog.openInformation(shell, "Session recording", "Session saved:\n" + file);
         } else {
+            if (!SessionRecorder.isEnabled()) {
+                RecordingConsent.ask(shell);
+                if (!SessionRecorder.isEnabled()) {
+                    return null;
+                }
+            }
             InputDialog dialog = new InputDialog(shell, "Start session",
                 "Session name (task id or what you are about to do):", "",
                 text -> text.isBlank() ? "Enter a name" : null);
@@ -79,7 +85,7 @@ public class SessionToggleHandler extends AbstractHandler implements IElementUpd
         element.setText(name == null ? "Start session..." : "Stop session (" + name + ")");
     }
 
-    private static void showIndicator(@Nullable Shell active) {
+    static void showIndicator(@Nullable Shell active) {
         if (indicator != null && !indicator.isDisposed()) {
             indicator.getParent().removeControlListener(FOLLOW);
             indicator.dispose();
