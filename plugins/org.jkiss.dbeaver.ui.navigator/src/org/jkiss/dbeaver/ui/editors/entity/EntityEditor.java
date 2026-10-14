@@ -830,13 +830,12 @@ public class EntityEditor extends MultiPageDatabaseEditor
             }
         }
 
-        String subEditorsString = changedSubEditors.isEmpty() ? "" : "(" + String.join(", ", changedSubEditors) + ")";
-        final int result = ConfirmationDialog.confirmAction(
+        // dbeaver-mm K57: explicit dialog, Cancel by default, typed confirmation before writing
+        final int result = new PersistChangesDialog(
             getSite().getShell(),
-            NavigatorPreferences.CONFIRM_ENTITY_EDIT_CLOSE,
-            ConfirmationDialog.QUESTION_WITH_CANCEL,
             getEditorInput().getNavigatorNode().getNodeDisplayName(),
-            subEditorsString);
+            String.join(", ", changedSubEditors),
+            getDataSourceContainer()).open();
         if (result == IDialogConstants.YES_ID) {
 //            getWorkbenchPart().getSite().getPage().saveEditor(this, false);
             return ISaveablePart2.YES;
