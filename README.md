@@ -262,3 +262,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K51 | 2026-10-13 | **Session analysis**: `tools/session-analysis/analiz.py` (stdlib) reads session logs or K50 zips and prints each session's steps per nickname and the steps most sessions share, as a process skeleton. |
 | K52 | 2026-10-13 | **ID API account form**: user name and password are entered in a window instead of a hand-edited file. |
 | K53 | 2026-10-13 | **Plus Settings menu**: a second top-level menu holds every Plus setting (ID API account, automatic recording, freeze notifications); *Plus* keeps only the features. Fetch IDs is set up with a file handed out separately; users only type their user name and password. |
+| K56 | 2026-10-14 | Fetch IDs skips headers Java's HTTP client sets itself (`Connection`, `Host`, ...), so browser-copied headers in `id-api.properties` no longer fail. |

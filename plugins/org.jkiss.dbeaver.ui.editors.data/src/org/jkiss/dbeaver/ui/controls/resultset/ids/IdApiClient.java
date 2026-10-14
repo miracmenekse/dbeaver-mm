@@ -33,7 +33,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -146,10 +148,14 @@ class IdApiClient {
         return body;
     }
 
+    private static final Set<String> RESTRICTED_HEADERS = Set.of("connection", "content-length", "expect", "host", "upgrade");
+
     private static void addHeaders(@NotNull Properties config, @NotNull String prefix, @NotNull HttpRequest.Builder request) {
         for (String key : config.stringPropertyNames()) {
-            if (key.startsWith(prefix)) {
-                request.header(key.substring(prefix.length()), config.getProperty(key).strip());
+            String name = key.substring(prefix.length());
+            // dbeaver-mm K56: Java's HttpClient sets these itself and throws on them (copied from browser requests)
+            if (key.startsWith(prefix) && !RESTRICTED_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
+                request.header(name, config.getProperty(key).strip());
             }
         }
     }

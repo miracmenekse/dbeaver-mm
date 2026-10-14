@@ -269,3 +269,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K51 | 2026-10-13 | **Oturum analizi**: `tools/session-analysis/analiz.py` (yalnızca stdlib) oturum kayıtlarını ya da K50 zip'lerini okur; her oturumun adımlarını rumuza göre ve oturumların çoğunda ortak adımları süreç iskeleti olarak yazar. |
 | K52 | 2026-10-13 | **ID API hesap penceresi**: kullanıcı adı ve şifre elle dosya düzenlemek yerine bir pencereden girilir. |
 | K53 | 2026-10-13 | **Plus Settings menüsü**: ikinci bir üst menü tüm Plus ayarlarını toplar (ID API hesabı, otomatik kayıt, donma bildirimleri); *Plus*'ta yalnızca özellikler kalır. Fetch IDs ayrıca verilen bir dosyayla kurulur; kullanıcı yalnızca kullanıcı adını ve şifresini girer. |
+| K56 | 2026-10-14 | ID'leri getir, Java'nın kendi koyduğu başlıkları (`Connection`, `Host` ...) atlar; tarayıcıdan kopyalanan başlıklar `id-api.properties` içinde artık hata vermez. |
