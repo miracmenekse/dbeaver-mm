@@ -81,3 +81,4 @@ Sorun: hızlı/ezbere SQL yazan kullanıcıda popup geç geliyor, ad yazınca fi
 - [ ] Hızlı kısayol: `=` otomatik açılmadan da `==` ya da tek tuş (ör. Ctrl+Alt+Space) ile anında açılsın; ayar: otomatik/yalnız kısayol.
 - [ ] Mevcut kısaltmalar (bağlantı kısa kodu `kod.`) alias ve tablo adı kısaltmalarıyla birlikte kullanılsın (`bfs` yazınca tablo + kolon önerisi).
 - [ ] SQL tamamlama (gelecekte çalışılacak): tablo/kolon/JOIN önerileri, FK'dan JOIN koşulu üretme, bağlantılar arası tablo adı, sık kullanılan sorgu parçaları; mevcut picker'la tek akışta.
+- [x] K60: Ctrl+Space değer konumunda (`kolon =`, `IN (`) seçiciyi açar, başka yerde standart tamamlamayı çağırır. DBeaver'ın kendi Ctrl+Space kaydı plugin.xml'de silinip yerine konur; canlı denenmedi, çakışırsa Window › Preferences › Keys'te Ctrl+Space'e bakılmalı.

@@ -29,7 +29,7 @@ import org.jkiss.dbeaver.ui.inlinefkpicker.core.SqlCaretAnalyzer;
 import org.jkiss.dbeaver.ui.inlinefkpicker.ui.FkPickerPopup;
 
 /**
- * Manual trigger (Ctrl+Alt+Space by default): opens the inline FK picker when the caret sits in a
+ * Manual trigger (Ctrl+Space and Ctrl+Alt+Space by default): opens the inline FK picker when the caret sits in a
  * supported {@code xxx_id =} / {@code xxx_id IN (} context of the active SQL editor.
  */
 public class OpenFkPickerHandler extends AbstractHandler {
@@ -51,6 +51,12 @@ public class OpenFkPickerHandler extends AbstractHandler {
         int stmtEnd = stmt != null ? stmt.getOffset() + stmt.getLength() : docText.length();
         FkColumnRef ref = SqlCaretAnalyzer.analyze(docText, sel.x, stmtStart, stmtEnd);
         if (ref == null) {
+            // dbeaver-mm K60: bound to Ctrl+Space too, so anywhere but a value position it must
+            // behave as the standard completion it replaces
+            if (viewer instanceof org.eclipse.jface.text.ITextOperationTarget target
+                && target.canDoOperation(org.eclipse.jface.text.source.ISourceViewer.CONTENTASSIST_PROPOSALS)) {
+                target.doOperation(org.eclipse.jface.text.source.ISourceViewer.CONTENTASSIST_PROPOSALS);
+            }
             return null;
         }
         // dbeaver-mm K6: pick the connection the statement's tables live in first

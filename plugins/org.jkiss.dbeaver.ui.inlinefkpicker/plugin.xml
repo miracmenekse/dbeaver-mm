@@ -79,6 +79,18 @@
             contextId="org.jkiss.dbeaver.ui.editors.sql.script.focused"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M1+M3+SPACE"/>
+        <!-- dbeaver-mm K60: Ctrl+Space opens the value picker at "column =" / "IN (", else standard
+             completion. A key without commandId removes DBeaver's own Ctrl+Space binding (same
+             scheme and context) so the two do not conflict. -->
+        <key
+            contextId="org.jkiss.dbeaver.ui.editors.sql"
+            schemeId="org.jkiss.dbeaver.defaultKeyScheme"
+            sequence="M1+SPACE"/>
+        <key
+            commandId="org.jkiss.dbeaver.ui.inlinefkpicker.open"
+            contextId="org.jkiss.dbeaver.ui.editors.sql"
+            schemeId="org.jkiss.dbeaver.defaultKeyScheme"
+            sequence="M1+SPACE"/>
         <key
             commandId="org.jkiss.dbeaver.ui.inlinefkpicker.whereParams"
             contextId="org.jkiss.dbeaver.ui.editors.sql.script.focused"
