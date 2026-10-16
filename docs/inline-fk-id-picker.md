@@ -73,3 +73,11 @@ SQL editöründe bir sorgu yazarken, başka bir tabloya referans veren bir id ko
 - [x] Inline widget/popup: kompakt liste + yazarak arama + ok tuşu/scroll + Enter/Esc.
 - [x] Seçilen değeri tip-duyarlı biçimde editöre yazma; `IN (...)` için çoklu seçim → virgüllü liste.
 - [ ] Canlı uçtan uca test (Eclipse PDE): `where short_code =`, `where bfs.id =`, `... IN (...)`; kenar durumları.
+
+## Gelecek işler (2026-10-16, SQL yazma kolaylığı)
+Sorun: hızlı/ezbere SQL yazan kullanıcıda popup geç geliyor, ad yazınca filtrelemiyor, kısaltmalar kullanılamıyor.
+- [x] K59: yazılan metin yalnız id'ye değil, etiket (ad) kolonuna da uygulanır (iki sorgu birleştirilir).
+- [ ] Popup gecikmesi: kolon/tablo çözümü + ilk satırlar `=` yazılınca değil, `WHERE`/kolon adı bitince önceden ısıtılsın (önbellek); ilk 50 satır tablo başına bellekte tutulsun.
+- [ ] Hızlı kısayol: `=` otomatik açılmadan da `==` ya da tek tuş (ör. Ctrl+Alt+Space) ile anında açılsın; ayar: otomatik/yalnız kısayol.
+- [ ] Mevcut kısaltmalar (bağlantı kısa kodu `kod.`) alias ve tablo adı kısaltmalarıyla birlikte kullanılsın (`bfs` yazınca tablo + kolon önerisi).
+- [ ] SQL tamamlama (gelecekte çalışılacak): tablo/kolon/JOIN önerileri, FK'dan JOIN koşulu üretme, bağlantılar arası tablo adı, sık kullanılan sorgu parçaları; mevcut picker'la tek akışta.

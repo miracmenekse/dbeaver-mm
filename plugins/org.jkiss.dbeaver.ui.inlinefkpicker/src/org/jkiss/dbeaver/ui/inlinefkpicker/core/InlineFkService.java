@@ -454,8 +454,27 @@ public final class InlineFkService {
                     maxResults
                 );
                 List<FkRow> rows = new ArrayList<>(pairs.size());
+                java.util.Set<String> seen = new java.util.HashSet<>();
                 for (DBDLabelValuePair pair : pairs) {
-                    rows.add(toRow(dataSource, keyColumn, pair.getValue(), pair.getLabel()));
+                    FkRow row = toRow(dataSource, keyColumn, pair.getValue(), pair.getLabel());
+                    if (seen.add(row.getLiteral())) {
+                        rows.add(row);
+                    }
+                }
+                // dbeaver-mm K59: typed text also matches the label (name) column. The dictionary ANDs
+                // key and description conditions, so the name search is a second query, merged after
+                // the id matches. Rows are re-checked here because without a label column the
+                // second query is unfiltered.
+                if (searchText != null && rows.size() < maxResults) {
+                    String folded = foldForSearch(searchText);
+                    for (DBDLabelValuePair pair : dict.getDictionaryEnumeration(
+                        monitor, keyColumn, null, searchText, null, true, true, true, 0, maxResults)) {
+                        FkRow row = toRow(dataSource, keyColumn, pair.getValue(), pair.getLabel());
+                        if (rows.size() < maxResults && foldForSearch(row.getLabel()).contains(folded)
+                            && seen.add(row.getLiteral())) {
+                            rows.add(row);
+                        }
+                    }
                 }
                 return rows;
             }

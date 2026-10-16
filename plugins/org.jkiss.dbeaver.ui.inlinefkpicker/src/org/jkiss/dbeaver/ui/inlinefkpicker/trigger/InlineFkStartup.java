@@ -56,7 +56,30 @@ public class InlineFkStartup implements IStartup {
 
     @Override
     public void earlyStartup() {
+        enableAutoCompletionOnce();
         UIUtils.asyncExec(this::hookWorkbench);
+    }
+
+    /**
+     * dbeaver-mm K59: typing "wh" must offer WHERE without Ctrl+Space. Auto activation is on by default,
+     * but an older saved setting can turn it off, so it is switched on once; the marker keeps a later
+     * deliberate "off" from being overridden.
+     */
+    private static void enableAutoCompletionOnce() {
+        try {
+            org.jkiss.dbeaver.model.preferences.DBPPreferenceStore store =
+                org.jkiss.dbeaver.runtime.DBWorkbench.getPlatform().getPreferenceStore();
+            String marker = "mm.autoActivationEnabled";
+            if (store.getBoolean(marker)) {
+                return;
+            }
+            store.setValue(org.jkiss.dbeaver.ui.editors.sql.SQLPreferenceConstants.ENABLE_AUTO_ACTIVATION, true);
+            store.setValue(org.jkiss.dbeaver.ui.editors.sql.SQLPreferenceConstants.ENABLE_KEYSTROKE_ACTIVATION, true);
+            store.setValue(marker, true);
+            org.jkiss.dbeaver.utils.PrefUtils.savePreferenceStore(store);
+        } catch (Throwable e) {
+            log.debug("Failed to enable SQL auto activation", e);
+        }
     }
 
     private void hookWorkbench() {
