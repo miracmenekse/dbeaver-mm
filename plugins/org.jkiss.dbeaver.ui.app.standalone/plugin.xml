@@ -390,7 +390,8 @@
         <key commandId="org.eclipse.ui.edit.text.openLocalFile" schemeId="org.eclipse.ui.defaultAcceleratorConfiguration" sequence="CTRL+O"/>
 
         <!-- Text editors -->
-        <key commandId="org.eclipse.ui.edit.text.contentAssist.proposals" contextId="org.jkiss.dbeaver.ui.editors.sql" schemeId="org.jkiss.dbeaver.defaultKeyScheme" sequence="CTRL+SPACE"/>
+        <!-- dbeaver-mm K64: Ctrl+Space goes to the value picker command, which opens standard completion itself when the caret is not at a value position -->
+        <key commandId="org.jkiss.dbeaver.ui.inlinefkpicker.open" contextId="org.jkiss.dbeaver.ui.editors.sql" schemeId="org.jkiss.dbeaver.defaultKeyScheme" sequence="CTRL+SPACE"/>
         <key commandId="org.eclipse.ui.edit.text.hippieCompletion" contextId="org.jkiss.dbeaver.ui.editors.sql" schemeId="org.jkiss.dbeaver.defaultKeyScheme" sequence="CTRL+SHIFT+SPACE"/>
         <key commandId="org.eclipse.ui.edit.text.contentAssist.contextInformation" contextId="org.jkiss.dbeaver.ui.editors.sql" schemeId="org.jkiss.dbeaver.defaultKeyScheme" sequence="CTRL+ALT+SPACE"/>
         <key commandId="org.eclipse.jdt.ui.edit.text.java.correction.assist.proposals" contextId="org.jkiss.dbeaver.ui.editors.sql" schemeId="org.jkiss.dbeaver.defaultKeyScheme" sequence="CTRL+1"/>
