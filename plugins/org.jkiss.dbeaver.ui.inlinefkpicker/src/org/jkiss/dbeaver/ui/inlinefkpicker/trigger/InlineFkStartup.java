@@ -142,6 +142,10 @@ public class InlineFkStartup implements IStartup {
         if (c != '=' && c != '(') {
             return;
         }
+        // dbeaver-mm K61: Plus Settings can switch the automatic opening off (Ctrl+Space still opens it)
+        if (!ToggleAutoOpenHandler.isAutoOpen()) {
+            return;
+        }
         Display display = e.display;
         // Defer until after the typed character has been inserted into the document.
         display.asyncExec(() -> {

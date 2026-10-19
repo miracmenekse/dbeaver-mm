@@ -34,6 +34,13 @@
             name="Use for SQL auto connection"
             description="The SQL editor switches to this connection when a query's tables are found in it"
             defaultHandler="org.jkiss.dbeaver.ui.inlinefkpicker.trigger.ToggleAutoConnectHandler"/>
+        <!-- dbeaver-mm K61: switch the automatic opening of the value picker off (Plus Settings menu) -->
+        <command
+            id="org.jkiss.dbeaver.ui.inlinefkpicker.toggleAutoOpen"
+            categoryId="org.jkiss.dbeaver.ui.inlinefkpicker.category"
+            name="SQL value picker opens on '='"
+            description="Open the value picker as soon as '=' or 'IN (' is typed after a column; off = Ctrl+Space only"
+            defaultHandler="org.jkiss.dbeaver.ui.inlinefkpicker.trigger.ToggleAutoOpenHandler"/>
         <!-- dbeaver-mm K13: short code typed as "<code>." to list that connection's tables -->
         <command
             id="org.jkiss.dbeaver.ui.inlinefkpicker.setShortCode"
@@ -44,6 +51,9 @@
     </extension>
 
     <extension point="org.eclipse.ui.menus">
+        <menuContribution allPopups="false" locationURI="menu:org.jkiss.dbeaver.mm.plus.settings?after=additions">
+            <command commandId="org.jkiss.dbeaver.ui.inlinefkpicker.toggleAutoOpen" style="toggle"/>
+        </menuContribution>
         <menuContribution allPopups="false" locationURI="popup:org.eclipse.ui.popup.any?after=additions">
             <command commandId="org.jkiss.dbeaver.ui.inlinefkpicker.toggleAutoConnect" style="toggle">
                 <visibleWhen checkEnabled="false">
