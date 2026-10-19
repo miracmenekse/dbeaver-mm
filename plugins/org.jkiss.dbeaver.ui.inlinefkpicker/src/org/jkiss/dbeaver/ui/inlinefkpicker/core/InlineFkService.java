@@ -65,6 +65,7 @@ public final class InlineFkService {
     private static final Log log = Log.getLog(InlineFkService.class);
 
     public static final int DEFAULT_MAX_RESULTS = 50;
+    private static final int FALLBACK_SCAN = 2000;
 
     private InlineFkService() {
     }
@@ -476,6 +477,14 @@ public final class InlineFkService {
                         }
                     }
                 }
+                // dbeaver-mm K65: without any label the dictionary query only adds duplicates of a plain
+                // (non-unique) column and no useful search - list its distinct values instead
+                if (rows.stream().allMatch(r -> r.getLabel().isEmpty())) {
+                    List<FkRow> distinct = enumerateFallback(monitor, context, entity, keyColumn, searchText, maxResults);
+                    if (!distinct.isEmpty()) {
+                        return distinct;
+                    }
+                }
                 return rows;
             }
             // Fallback for non-dictionary entities: list distinct key values only (no server filter).
@@ -573,20 +582,24 @@ public final class InlineFkService {
     ) throws DBException {
         DBPDataSource dataSource = entity.getDataSource();
         String keyId = DBUtils.getQuotedIdentifier(keyColumn);
-        StringBuilder query = new StringBuilder("SELECT ").append(keyId)
+        // dbeaver-mm K65: distinct values, and the typed text is matched here (accent and case blind)
+        // over up to FALLBACK_SCAN values instead of over the first maxResults rows.
+        // ponytail: columns with more distinct values than FALLBACK_SCAN are searched only in the first ones
+        String folded = searchText == null ? null : foldForSearch(searchText);
+        StringBuilder query = new StringBuilder("SELECT DISTINCT ").append(keyId)
             .append(" FROM ").append(DBUtils.getObjectFullName(entity, org.jkiss.dbeaver.model.DBPEvaluationContext.DML))
             .append(" ORDER BY ").append(keyId);
         List<FkRow> rows = new ArrayList<>();
         try (DBCSession session = context.openSession(monitor, DBCExecutionPurpose.UTIL, "Read FK id candidates")) {
             try (DBCStatement dbStat = session.prepareStatement(DBCStatementType.QUERY, query.toString(), false, false, false)) {
-                dbStat.setLimit(0, maxResults);
+                dbStat.setLimit(0, folded == null ? maxResults : FALLBACK_SCAN);
                 if (dbStat.executeStatement()) {
                     try (DBCResultSet rs = dbStat.openResultSet()) {
                         if (rs != null) {
                             while (rs.nextRow() && rows.size() < maxResults) {
                                 Object value = rs.getAttributeValue(0);
                                 String idText = value == null ? "" : String.valueOf(value);
-                                if (searchText != null && !idText.toLowerCase(java.util.Locale.ROOT).contains(searchText.toLowerCase(java.util.Locale.ROOT))) {
+                                if (folded != null && !foldForSearch(idText).contains(folded)) {
                                     continue;
                                 }
                                 rows.add(toRow(dataSource, keyColumn, value, null));
