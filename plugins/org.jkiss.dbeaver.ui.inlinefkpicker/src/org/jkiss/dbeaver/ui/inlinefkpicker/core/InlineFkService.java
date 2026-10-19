@@ -442,34 +442,24 @@ public final class InlineFkService {
         String searchText = (filter == null || filter.trim().isEmpty()) ? null : filter.trim();
         try {
             if (entity instanceof DBSDictionary dict && dict.supportsDictionaryEnumeration()) {
-                List<DBDLabelValuePair> pairs = dict.getDictionaryEnumeration(
-                    monitor,
-                    keyColumn,
-                    searchText,    // keyPattern - filter on the compared column's own value
-                    null,          // no separate description search
-                    null,          // preceding keys
-                    true,          // case-insensitive search
-                    true,          // ascending
-                    true,          // sort by the compared column's value
-                    0,
-                    maxResults
-                );
-                List<FkRow> rows = new ArrayList<>(pairs.size());
+                // dbeaver-mm K66: every query runs on its own - one failing (a text typed into a numeric
+                // key column is a type error) must not hide the results of the others
+                List<FkRow> rows = new ArrayList<>();
                 java.util.Set<String> seen = new java.util.HashSet<>();
-                for (DBDLabelValuePair pair : pairs) {
-                    FkRow row = toRow(dataSource, keyColumn, pair.getValue(), pair.getLabel());
-                    if (seen.add(row.getLiteral())) {
-                        rows.add(row);
+                boolean textKey = keyColumn.getDataKind() == org.jkiss.dbeaver.model.DBPDataKind.STRING;
+                if (searchText == null || textKey) {
+                    for (DBDLabelValuePair pair : safeEnumeration(monitor, dict, keyColumn, searchText, null, maxResults)) {
+                        FkRow row = toRow(dataSource, keyColumn, pair.getValue(), pair.getLabel());
+                        if (seen.add(row.getLiteral())) {
+                            rows.add(row);
+                        }
                     }
                 }
-                // dbeaver-mm K59: typed text also matches the label (name) column. The dictionary ANDs
-                // key and description conditions, so the name search is a second query, merged after
-                // the id matches. Rows are re-checked here because without a label column the
-                // second query is unfiltered.
-                if (searchText != null && rows.size() < maxResults) {
+                // typed text also matches the label (name) column; the dictionary ANDs key and description
+                // conditions, so that is a second query. Re-checked here: without a label column it is unfiltered.
+                if (searchText != null) {
                     String folded = foldForSearch(searchText);
-                    for (DBDLabelValuePair pair : dict.getDictionaryEnumeration(
-                        monitor, keyColumn, null, searchText, null, true, true, true, 0, maxResults)) {
+                    for (DBDLabelValuePair pair : safeEnumeration(monitor, dict, keyColumn, null, searchText, maxResults)) {
                         FkRow row = toRow(dataSource, keyColumn, pair.getValue(), pair.getLabel());
                         if (rows.size() < maxResults && foldForSearch(row.getLabel()).contains(folded)
                             && seen.add(row.getLiteral())) {
@@ -477,12 +467,18 @@ public final class InlineFkService {
                         }
                     }
                 }
-                // dbeaver-mm K65: without any label the dictionary query only adds duplicates of a plain
-                // (non-unique) column and no useful search - list its distinct values instead
-                if (rows.stream().allMatch(r -> r.getLabel().isEmpty())) {
+                // distinct key values, matched "contains" here: finds numbers typed into a numeric key and
+                // lists a plain column (no labels) without the duplicates the dictionary query returns
+                boolean unlabeled = rows.stream().allMatch(r -> r.getLabel().isEmpty());
+                if (searchText != null || unlabeled) {
                     List<FkRow> distinct = enumerateFallback(monitor, context, entity, keyColumn, searchText, maxResults);
-                    if (!distinct.isEmpty()) {
-                        return distinct;
+                    if (unlabeled) {
+                        return distinct.isEmpty() ? rows : distinct;
+                    }
+                    for (FkRow row : distinct) {
+                        if (rows.size() < maxResults && seen.add(row.getLiteral())) {
+                            rows.add(row);
+                        }
                     }
                 }
                 return rows;
@@ -491,6 +487,24 @@ public final class InlineFkService {
             return enumerateFallback(monitor, context, entity, keyColumn, searchText, maxResults);
         } catch (DBException e) {
             log.debug("FK enumeration failed for " + entity.getName(), e);
+            return Collections.emptyList();
+        }
+    }
+
+    @NotNull
+    private static List<DBDLabelValuePair> safeEnumeration(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBSDictionary dict,
+        @NotNull DBSEntityAttribute keyColumn,
+        @Nullable String keyPattern,
+        @Nullable String descPattern,
+        int maxResults
+    ) {
+        try {
+            return dict.getDictionaryEnumeration(
+                monitor, keyColumn, keyPattern, descPattern, null, true, true, true, 0, maxResults);
+        } catch (Exception e) {
+            log.debug("Dictionary enumeration failed for " + keyColumn.getName(), e);
             return Collections.emptyList();
         }
     }

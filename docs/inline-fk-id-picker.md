@@ -85,3 +85,4 @@ Sorun: hızlı/ezbere SQL yazan kullanıcıda popup geç geliyor, ad yazınca fi
 - [x] K64: Ctrl+Space yarışan iki kayıt yerine doğrudan app.standalone/plugin.xml içindeki DBeaver satırı bizim komuta çevrildi (K60 kaydı Ctrl+Space'te işe yaramamıştı).
 - [x] K61: Plus Settings > "SQL value picker opens on '='" ayarı; kapalıyken `=` / `IN (` pop-up açmaz, yalnız Ctrl+Space açar (varsayılan açık).
 - [x] K65: etiketsiz kolonda (ör. cmd_config.cmd_def_id) seçici DISTINCT değerleri listeler, aranan metin 2000 değer üzerinde (aksan/harf duyarsız) süzülür; eskiden tekrarlar birleşince az satır kalıyordu.
+- [x] K66: seçici sorguları birbirinden bağımsız çalışır (sayısal kolona metin yazınca id sorgusu hata verip tüm sonucu silmesin); aranan değer ayrıca DISTINCT değerlerde "içerir" olarak aranıp sonuca eklenir.
