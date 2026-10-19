@@ -35,18 +35,20 @@ import java.util.Map;
 public class ToggleAutoOpenHandler extends AbstractHandler implements IElementUpdater {
 
     public static final String COMMAND_ID = "org.jkiss.dbeaver.ui.inlinefkpicker.toggleAutoOpen";
-    private static final String PREF = "mm.sqlPicker.autoOpen";
+    // Stored inverted: a boolean preference equal to its default (false) is removed from the store, so
+    // "off" must be the true value or switching it off would be forgotten.
+    private static final String PREF_OFF = "mm.sqlPicker.autoOpenOff";
 
     /** On unless the user switched it off. */
     public static boolean isAutoOpen() {
         DBPPreferenceStore store = DBWorkbench.getPlatform().getPreferenceStore();
-        return !store.contains(PREF) || store.getBoolean(PREF);
+        return !store.getBoolean(PREF_OFF);
     }
 
     @Override
     public Object execute(ExecutionEvent event) {
         DBPPreferenceStore store = DBWorkbench.getPlatform().getPreferenceStore();
-        store.setValue(PREF, !isAutoOpen());
+        store.setValue(PREF_OFF, isAutoOpen());
         PrefUtils.savePreferenceStore(store);
         PlatformUI.getWorkbench().getService(ICommandService.class).refreshElements(COMMAND_ID, null);
         return null;
