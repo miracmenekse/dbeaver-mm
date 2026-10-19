@@ -799,6 +799,15 @@ public abstract class JDBCTable<DATASOURCE extends DBPDataSource, CONTAINER exte
             }
         }
 
+        // dbeaver-mm K62: a text search also looks in the key column itself ("b2b" must find the key B2B_...), not only in the description
+        List<DBSEntityAttribute> searchAttrs = new ArrayList<>();
+        if (searchInDesc) {
+            searchAttrs.addAll(descAttributes);
+            if (keyColumn.getDataKind() == DBPDataKind.STRING && DBUtils.findObject(descAttributes, keyColumn.getName(), true) == null) {
+                searchAttrs.add(keyColumn);
+            }
+        }
+
         if (!CommonUtils.isEmpty(precedingKeys) || keyValue != null || searchInDesc) {
             query.append(" WHERE ");
         }
@@ -844,7 +853,7 @@ public abstract class JDBCTable<DATASOURCE extends DBPDataSource, CONTAINER exte
             if (keyValue != null) {
                 query.append(" AND (");
             }
-            for (DBSEntityAttribute descAttr : descAttributes) {
+            for (DBSEntityAttribute descAttr : searchAttrs) {
                 if (descAttr.getDataKind() == DBPDataKind.STRING) {
                     final String identifier = DBUtils.getQuotedIdentifier(descAttr);
                     if (hasCondition) {
@@ -901,7 +910,7 @@ public abstract class JDBCTable<DATASOURCE extends DBPDataSource, CONTAINER exte
                 }
 
                 if (searchInDesc) {
-                    for (DBSEntityAttribute descAttr : descAttributes) {
+                    for (DBSEntityAttribute descAttr : searchAttrs) {
                         if (descAttr.getDataKind() == DBPDataKind.STRING) {
                             final DBDValueHandler valueHandler = DBUtils.findValueHandler(session, descAttr);
                             valueHandler.bindValueObject(session, dbStat, descAttr, paramPos++,
