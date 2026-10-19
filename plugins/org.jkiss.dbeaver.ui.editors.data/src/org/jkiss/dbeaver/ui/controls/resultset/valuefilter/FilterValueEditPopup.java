@@ -288,7 +288,8 @@ public class FilterValueEditPopup extends AbstractPopupPanel {
     }
 
     private boolean isCaseInsensitiveSearchEnabled() {
-        return CommonUtils.getBoolean(getDialogBoundsSettings().getBoolean(PROP_CASE_INSENSITIVE_SEARCH), true);
+        // dbeaver-mm K61: IDialogSettings.getBoolean() returns false for a missing key, so the default never applied
+        return CommonUtils.getBoolean(getDialogBoundsSettings().get(PROP_CASE_INSENSITIVE_SEARCH), true);
     }
 
     private boolean isAttributeSupportsLike() {
