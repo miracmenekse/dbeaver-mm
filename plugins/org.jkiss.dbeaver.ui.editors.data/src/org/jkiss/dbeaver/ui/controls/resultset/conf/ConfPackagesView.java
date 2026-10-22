@@ -50,6 +50,7 @@ import org.jkiss.dbeaver.model.exec.DBCExecutionContextDefaults;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.runtime.DefaultProgressMonitor;
 import org.jkiss.dbeaver.model.struct.*;
+import org.jkiss.dbeaver.model.virtual.DBVUtils;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.ui.DBeaverIcons;
 import org.jkiss.dbeaver.ui.UIIcon;
@@ -298,7 +299,7 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
             }
         }
         relayoutRows();
-        loadLabels(byTable, schemaOf);
+        loadLabels(byTable, schemaOf, ConfPackages.deleteTables(sql));
     }
 
     /**
@@ -340,9 +341,10 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
      * is looked up in the connected connections of the active project, the first one that has it.
      */
     // ponytail: first connected connection with the table wins; a package doesn't record its connection
-    private void loadLabels(@NotNull Map<String, List<Map<String, String>>> byTable, @NotNull Map<String, String> schemaOf) {
+    private void loadLabels(@NotNull Map<String, List<Map<String, String>>> byTable, @NotNull Map<String, String> schemaOf,
+                            @NotNull Map<String, String> deleteTables) {
         int generation = ++labelGeneration;
-        if (byTable.isEmpty()) {
+        if (byTable.isEmpty() && deleteTables.isEmpty()) {
             return;
         }
         Job job = Job.create("Conf package labels", progress -> {
@@ -378,6 +380,29 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
                     } catch (Exception e) {
                         log.debug("Can't read FK labels of " + entry.getKey() + "." + column.getKey(), e);
                     }
+                }
+            }
+            // K67: a DELETE-only table has no INSERT columns to look at, yet its FKs decide the DELETE order
+            for (Map.Entry<String, String> table : deleteTables.entrySet()) {
+                DBSEntity entity = findTable(monitor, table.getValue(), table.getKey());
+                if (entity == null) {
+                    continue;
+                }
+                try {
+                    for (DBSEntityAssociation fk : DBVUtils.getAllAssociations(monitor, entity)) {
+                        if (!(fk instanceof DBSEntityReferrer referrer)) {
+                            continue;
+                        }
+                        for (DBSEntityAttributeRef ref : referrer.getAttributeReferences(monitor)) {
+                            DBSEntityAttribute attribute = ref.getAttribute();
+                            String target = attribute == null ? null : referencedColumn(monitor, attribute);
+                            if (target != null) {
+                                links.putIfAbsent(table.getKey() + "." + attribute.getName().toLowerCase(Locale.ROOT), target);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.debug("Can't read FKs of " + table.getKey(), e);
                 }
             }
             if (!labels.isEmpty() || !links.isEmpty()) {

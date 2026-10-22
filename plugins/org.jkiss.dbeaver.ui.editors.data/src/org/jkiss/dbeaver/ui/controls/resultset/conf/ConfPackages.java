@@ -303,6 +303,21 @@ public final class ConfPackages {
         return result;
     }
 
+    /** dbeaver-mm K67: tables the package DELETEs from (lower case) -> their schema, so their FKs can order the DELETEs. */
+    @NotNull
+    public static Map<String, String> deleteTables(@NotNull String sql) {
+        Map<String, String> result = new LinkedHashMap<>();
+        for (String text : splitStatements(sql)) {
+            java.util.regex.Matcher m = TARGET.matcher(text);
+            if (m.find() && m.group(1).toUpperCase(Locale.ROOT).startsWith("DELETE")) {
+                String name = m.group(2);
+                result.putIfAbsent(bareName(name).toLowerCase(Locale.ROOT),
+                    name.contains(".") ? bareName(name.substring(0, name.lastIndexOf('.'))).toLowerCase(Locale.ROOT) : "");
+            }
+        }
+        return result;
+    }
+
     /** 0 for a table without FKs, else 1 + the deepest table it references (cycles cut). */
     private static int tableDepth(@NotNull String table, @NotNull Map<String, String> links,
                                   @NotNull Map<String, Integer> depths, @NotNull Set<String> visiting) {

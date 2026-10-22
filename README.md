@@ -267,3 +267,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K58 | 2026-10-15 | Fetch IDs no longer fails with "Range [13, 11) out of bounds" when `id-api.properties` has a short key such as `token.field`; header keys are checked for their prefix before it is cut off. |
 | K61 | 2026-10-19 | The value picker of the filter popup now searches case-insensitively by default (the "case insensitive" option was off until toggled), so typing `b2b` finds `B2B`. |
 | K62 | 2026-10-19 | The `column =` value proposals search the key column itself as well as its description column, so typing `b2b` after `shrt_code =` lists every `shrt_code` containing it (it only searched the description column, e.g. `cuser_name`). |
+| K67 | 2026-10-22 | Conf packages: tables that are only DELETEd (no INSERT) now also contribute their FKs, so their DELETEs are ordered child-first too. |
