@@ -277,3 +277,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K67 | 2026-10-22 | Conf paketleri: yalnızca DELETE edilen (INSERT olmayan) tabloların FK'ları da okunur; bu tabloların DELETE'leri de önce alt tablo olacak şekilde sıralanır. |
 | K68 | 2026-10-23 | `data_tp` / `row_id` etiketleri için altyapı: sütun çifti tanınır, tablo → bağlantı eşlemesi `~/.dbeaver-mm/data-tp.properties` dosyasında tutulur (henüz görünür değişiklik yok). |
 | K69 | 2026-10-23 | `data_tp` hücresi id'nin yanında `etiya_type_value`'dan gelen hedef tablo adını gösterir (`14 \| CUST_CONTR`); bağlantı başına bir kez okunur, FK etiketleriyle aynı soluk biçimde. |
+| K70 | 2026-10-23 | `row_id` hücresi gösterdiği satırın açıklamasını yazar: tabloyu `data_tp` verir, tablo açık bağlantılarda aranır (yalnız birinde varsa kendiliğinden eşlenip hatırlanır), etiket anahtar kolonundan gelir; başka bağlantıdan gelen etiket dış veri rengindedir. |

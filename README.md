@@ -270,3 +270,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K67 | 2026-10-22 | Conf packages: tables that are only DELETEd (no INSERT) now also contribute their FKs, so their DELETEs are ordered child-first too. |
 | K68 | 2026-10-23 | Groundwork for `data_tp` / `row_id` labels: the column pair is recognised and the table → connection mapping is kept in `~/.dbeaver-mm/data-tp.properties` (no visible change yet). |
 | K69 | 2026-10-23 | `data_tp` cells show the target table name from `etiya_type_value` next to the id (`14 \| CUST_CONTR`), read once per connection, in the same dimmed style as FK labels. |
+| K70 | 2026-10-23 | `row_id` cells show the description of the row they point to: `data_tp` gives the table, the table is found among open connections (mapped automatically when only one has it and remembered), the label comes from its key column, and labels from another connection use the external-data colour. |
