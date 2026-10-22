@@ -276,3 +276,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K62 | 2026-10-19 | `kolon =` değer önerileri artık açıklama kolonunun yanında anahtar kolonunda da arar; `shrt_code =` sonrası `b2b` yazınca içinde geçen tüm `shrt_code` değerleri gelir (önceden yalnızca açıklama kolonunda, örn. `cuser_name`, arıyordu). |
 | K67 | 2026-10-22 | Conf paketleri: yalnızca DELETE edilen (INSERT olmayan) tabloların FK'ları da okunur; bu tabloların DELETE'leri de önce alt tablo olacak şekilde sıralanır. |
 | K68 | 2026-10-23 | `data_tp` / `row_id` etiketleri için altyapı: sütun çifti tanınır, tablo → bağlantı eşlemesi `~/.dbeaver-mm/data-tp.properties` dosyasında tutulur (henüz görünür değişiklik yok). |
+| K69 | 2026-10-23 | `data_tp` hücresi id'nin yanında `etiya_type_value`'dan gelen hedef tablo adını gösterir (`14 \| CUST_CONTR`); bağlantı başına bir kez okunur, FK etiketleriyle aynı soluk biçimde. |

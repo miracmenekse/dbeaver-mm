@@ -60,11 +60,17 @@ public class FkDictionaryHintProvider implements DBDCellHintProvider {
         @NotNull EnumSet<DBDValueHint.HintType> types,
         int options
     ) {
+        // dbeaver-mm K69: data_tp/row_id pair - the target table name of the type id replaces the FK label,
+        // the in-cell picker (K5) stays
+        String typeTable = types.contains(DBDValueHint.HintType.STRING) && DataTpStore.isDataTp(attribute.getName())
+            ? DataTpLabels.getTypeTable(attribute, value) : null;
         if (FkDictionaryLabels.getAssociation(attribute) == null) {
-            return null;
+            return CommonUtils.isEmpty(typeTable) ? null : new DBDValueHint[]{new ValueHintText(typeTable, typeTable, null)};
         }
         List<DBDValueHint> hints = new ArrayList<>(2);
-        if (types.contains(DBDValueHint.HintType.STRING)) {
+        if (!CommonUtils.isEmpty(typeTable)) {
+            hints.add(new ValueHintText(typeTable, typeTable, null));
+        } else if (types.contains(DBDValueHint.HintType.STRING)) {
             String label = FkDictionaryLabels.getLabel(attribute, value);
             if (!CommonUtils.isEmpty(label)) {
                 hints.add(FkDictionaryLabels.isExternal(attribute) ? new ExternalHint(label) : new ValueHintText(label, label, null));
@@ -89,6 +95,10 @@ public class FkDictionaryHintProvider implements DBDCellHintProvider {
 
     @Override
     public int getAttributeHintSize(@NotNull DBDValueHintContext context, @NotNull DBDAttributeBinding attribute) {
+        // dbeaver-mm K69: the data_tp cell also carries a label
+        if (DataTpStore.isDataTp(attribute.getName())) {
+            return LABEL_HINT_SIZE;
+        }
         return FkDictionaryLabels.getAssociation(attribute) != null ? LABEL_HINT_SIZE : 0;
     }
 
@@ -102,6 +112,21 @@ public class FkDictionaryHintProvider implements DBDCellHintProvider {
     ) {
         if (cleanupCache) {
             FkDictionaryLabels.invalidateLabels();
+            // dbeaver-mm K69
+            DataTpLabels.invalidate();
+        }
+        // dbeaver-mm K69: the pair's target table names, once per connection
+        DBDAttributeBinding dataTp = null;
+        boolean hasRowId = false;
+        for (DBDAttributeBinding attr : attributes) {
+            if (DataTpStore.isDataTp(attr.getName())) {
+                dataTp = attr;
+            } else if (DataTpStore.isRowId(attr.getName())) {
+                hasRowId = true;
+            }
+        }
+        if (dataTp != null && hasRowId) {
+            DataTpLabels.prefetchTypes(monitor, dataTp);
         }
         for (DBDAttributeBinding attr : attributes) {
             // Nested attributes (documents, arrays) are not table foreign keys
