@@ -1064,6 +1064,18 @@ public class SpreadsheetPresentation extends AbstractPresentation
         if (!(element instanceof DBDAttributeBinding binding)) {
             return;
         }
+        // dbeaver-mm K71: row_id of a data_tp/row_id pair opens the target table dialog instead of the menu
+        DBDAttributeBinding dataTp = findDataTpPair(binding);
+        if (dataTp != null) {
+            new org.jkiss.dbeaver.ui.data.hints.DataTpDialog(
+                spreadsheet.getShell(), dataTp, binding, new java.util.ArrayList<>(controller.getModel().getAllRows()),
+                () -> {
+                    if (!spreadsheet.isDisposed()) {
+                        spreadsheet.redrawGrid();
+                    }
+                }).open();
+            return;
+        }
         org.jkiss.dbeaver.model.struct.DBSEntityAssociation association = getFkDictAssociation(binding);
         if (association == null || association.getReferencedConstraint() == null) {
             return;
@@ -1103,6 +1115,20 @@ public class SpreadsheetPresentation extends AbstractPresentation
         }
         menu.setLocation(spreadsheet.getDisplay().getCursorLocation());
         menu.setVisible(true);
+    }
+
+    /** dbeaver-mm K71: the data_tp column of the same result if {@code binding} is its row_id, else null */
+    @Nullable
+    private DBDAttributeBinding findDataTpPair(@NotNull DBDAttributeBinding binding) {
+        if (!org.jkiss.dbeaver.ui.data.hints.DataTpStore.isRowId(binding.getName())) {
+            return null;
+        }
+        for (DBDAttributeBinding attr : controller.getModel().getAttributes()) {
+            if (org.jkiss.dbeaver.ui.data.hints.DataTpStore.isDataTp(attr.getName())) {
+                return attr;
+            }
+        }
+        return null;
     }
 
     private void applyFkDictColumn(org.jkiss.dbeaver.model.struct.DBSEntity refEntity, String columnName) {
@@ -2477,7 +2503,8 @@ public class SpreadsheetPresentation extends AbstractPresentation
         public boolean isElementSupportsFkDict(IGridColumn element) {
             // PoC: sadece bir sozluk tablosuna giden FK kolonlarinda buton goster
             if (element != null && element.getElement() instanceof DBDAttributeBinding binding) {
-                return getFkDictAssociation(binding) != null;
+                // dbeaver-mm K71: also on row_id when the result has data_tp too
+                return getFkDictAssociation(binding) != null || findDataTpPair(binding) != null;
             }
             return false;
         }

@@ -489,9 +489,12 @@ public final class DataTpLabels {
         return String.valueOf(value);
     }
 
-    /** "20" -> 20 for a numeric key, 20 -> "20" for a text key; anything unparsable stays as it is */
+    /**
+     * "20" -> 20 for a numeric key, 20 -> "20" for a text key; anything unparsable stays as it is.
+     * dbeaver-mm K71: package-private, the K71 dialog's preview binds row_id the same way.
+     */
     @Nullable
-    private static Object asKeyType(@Nullable Object value, boolean numericKey) {
+    static Object asKeyType(@Nullable Object value, boolean numericKey) {
         if (numericKey && value instanceof String text) {
             try {
                 return text.strip().contains(".") ? new BigDecimal(text.strip()) : (Object) Long.valueOf(text.strip());
