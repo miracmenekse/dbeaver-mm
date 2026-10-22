@@ -268,3 +268,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K61 | 2026-10-19 | The value picker of the filter popup now searches case-insensitively by default (the "case insensitive" option was off until toggled), so typing `b2b` finds `B2B`. |
 | K62 | 2026-10-19 | The `column =` value proposals search the key column itself as well as its description column, so typing `b2b` after `shrt_code =` lists every `shrt_code` containing it (it only searched the description column, e.g. `cuser_name`). |
 | K67 | 2026-10-22 | Conf packages: tables that are only DELETEd (no INSERT) now also contribute their FKs, so their DELETEs are ordered child-first too. |
+| K68 | 2026-10-23 | Groundwork for `data_tp` / `row_id` labels: the column pair is recognised and the table → connection mapping is kept in `~/.dbeaver-mm/data-tp.properties` (no visible change yet). |

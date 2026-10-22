@@ -275,3 +275,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K61 | 2026-10-19 | Filtre penceresindeki değer seçici artık varsayılan olarak büyük/küçük harfe duyarsız arar ("case insensitive" seçeneği elle açılana kadar kapalıydı); `b2b` yazınca `B2B` bulunur. |
 | K62 | 2026-10-19 | `kolon =` değer önerileri artık açıklama kolonunun yanında anahtar kolonunda da arar; `shrt_code =` sonrası `b2b` yazınca içinde geçen tüm `shrt_code` değerleri gelir (önceden yalnızca açıklama kolonunda, örn. `cuser_name`, arıyordu). |
 | K67 | 2026-10-22 | Conf paketleri: yalnızca DELETE edilen (INSERT olmayan) tabloların FK'ları da okunur; bu tabloların DELETE'leri de önce alt tablo olacak şekilde sıralanır. |
+| K68 | 2026-10-23 | `data_tp` / `row_id` etiketleri için altyapı: sütun çifti tanınır, tablo → bağlantı eşlemesi `~/.dbeaver-mm/data-tp.properties` dosyasında tutulur (henüz görünür değişiklik yok). |
