@@ -23,7 +23,6 @@ import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
-import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Label;
@@ -35,7 +34,7 @@ import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.ModelPreferences;
 import org.jkiss.dbeaver.model.DBPDataKind;
-import org.jkiss.dbeaver.model.DBPDataSource;
+import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.DBPEvaluationContext;
 import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.data.DBDAttributeBinding;
@@ -51,30 +50,28 @@ import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.sql.SQLUtils;
 import org.jkiss.dbeaver.model.struct.DBSEntity;
 import org.jkiss.dbeaver.model.struct.DBSEntityAttribute;
-import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.model.virtual.DBVEntity;
 import org.jkiss.dbeaver.model.virtual.DBVUtils;
 import org.jkiss.dbeaver.ui.UIUtils;
 
 import java.math.BigDecimal;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.StringJoiner;
 
 /**
  * dbeaver-mm K71: the "..." button of a {@code row_id} column header. Lists the target tables the
- * {@code data_tp} values of this result point to; for the selected one the user picks the connection
- * that holds it and the description columns of its label, with a live preview of the first row.
+ * {@code data_tp} values of this result point to; for the selected one the user picks the description
+ * columns of its label, with a live preview of the first row.
+ * dbeaver-mm K74: the connection and schema come only from the tenant's data_tp mapping and are shown
+ * read only; the mapping itself is built in Plus Settings > data_tp mapping...
  * <p>
- * Every metadata read, query and file write runs in a background job; results come back with
- * {@link UIUtils#asyncExec}. Save writes the connection mapping ({@link DataTpStore#save}) and the
- * description columns (virtual model), then reloads the labels and calls {@code afterSave} on the UI thread.
+ * Every metadata read and query runs in a background job; results come back with
+ * {@link UIUtils#asyncExec}. Save writes the description columns (virtual model), then reloads the
+ * labels and calls {@code afterSave} on the UI thread.
  */
 public class DataTpDialog extends Dialog {
 
@@ -83,39 +80,40 @@ public class DataTpDialog extends Dialog {
     /** dbeaver-mm K71: what the dialog knows about one target table; touched on the UI thread only */
     private static final class TableState {
         final String table;
-        final boolean unresolved;
+        // dbeaver-mm K74: null when the data_tp value is not in the tenant mapping
+        final DataTpStore.Entry entry;
+        final String where;
         int rows;
         Object sampleRowId;
         boolean loaded;
-        boolean mappingChanged;
         boolean columnsChanged;
         int version;
-        List<DBSEntity> candidates = List.of();
-        int chosen = -1;
+        DBSEntity entity;
         List<DBSEntityAttribute> columns = List.of();
         List<DBSEntityAttribute> checked = new ArrayList<>();
         String preview = "";
         String message = "";
 
-        TableState(String table, boolean unresolved) {
+        TableState(String table, DataTpStore.Entry entry, String where) {
             this.table = table;
-            this.unresolved = unresolved;
+            this.entry = entry;
+            this.where = where;
         }
     }
 
-    /** dbeaver-mm K71: what a background load produced, applied on the UI thread */
-    private record Loaded(List<DBSEntity> candidates, int chosen, List<DBSEntityAttribute> columns,
+    /** dbeaver-mm K71: what the background load produced, applied on the UI thread */
+    private record Loaded(DBSEntity entity, List<DBSEntityAttribute> columns,
                           List<DBSEntityAttribute> checked, String preview, String message) {
     }
 
     private final DBDAttributeBinding dataTp;
     private final DBDAttributeBinding rowId;
     private final List<? extends DBDValueRow> rows;
-    private final Runnable afterSave;
+    private Runnable afterSave;
     private final List<TableState> states = new ArrayList<>();
 
     private org.eclipse.swt.widgets.List tableList;
-    private Combo connectionCombo;
+    private Label connectionLabel;
     private Label messageLabel;
     private Table columnTable;
     private Label previewLabel;
@@ -133,29 +131,39 @@ public class DataTpDialog extends Dialog {
         this.rowId = rowId;
         this.rows = rows;
         this.afterSave = afterSave;
-        // dbeaver-mm K71: cache reads only (no query), so building the list on the UI thread is fine
-        Map<String, TableState> byTable = new LinkedHashMap<>();
+        // dbeaver-mm K74: cache and registry reads only (no query, no file), so this is fine on the UI thread
+        String tenant = DataTpLabels.getTenant(dataTp);
+        Map<Object, TableState> byTarget = new LinkedHashMap<>();
         int tpIndex = dataTp.getOrdinalPosition();
         int idIndex = rowId.getOrdinalPosition();
         for (DBDValueRow row : rows) {
             Object[] values = row.getValues();
-            if (tpIndex < 0 || tpIndex >= values.length) {
+            if (tpIndex < 0 || tpIndex >= values.length || DBUtils.isNullValue(values[tpIndex])) {
                 continue;
             }
-            String table = DataTpLabels.getTypeTable(dataTp, values[tpIndex]);
-            if (table == null) {
-                continue;
-            }
-            TableState state = byTable.computeIfAbsent(DataTpStore.tableKey(table),
-                k -> new TableState(table, DataTpLabels.unresolved().contains(k)));
+            DataTpStore.Entry entry = DataTpLabels.getEntry(dataTp, values[tpIndex]);
+            String typeKey = DataTpStore.typeKey(values[tpIndex]);
+            TableState state = byTarget.computeIfAbsent(entry != null ? entry : "data_tp " + typeKey,
+                k -> entry == null
+                    ? new TableState("data_tp " + typeKey, null,
+                        "Not in the data_tp mapping of " + tenant + " — Plus Settings › data_tp mapping...")
+                    : new TableState(entry.table(), entry, "Connection: " + connectionName(dataTp, entry)
+                        + (entry.schema().isEmpty() ? "" : " · schema " + entry.schema()) + " (data_tp mapping)"));
             state.rows++;
             if (state.sampleRowId == null && idIndex >= 0 && idIndex < values.length && !DBUtils.isNullValue(values[idIndex])) {
                 state.sampleRowId = values[idIndex];
             }
         }
-        // dbeaver-mm K71: tables still missing a connection come first
-        byTable.values().stream().filter(s -> s.unresolved).forEach(states::add);
-        byTable.values().stream().filter(s -> !s.unresolved).forEach(states::add);
+        // dbeaver-mm K74: values missing from the mapping first, they need the user's attention
+        byTarget.values().stream().filter(s -> s.entry == null).forEach(states::add);
+        byTarget.values().stream().filter(s -> s.entry != null).forEach(states::add);
+    }
+
+    @NotNull
+    private static String connectionName(@NotNull DBDAttributeBinding binding, @NotNull DataTpStore.Entry entry) {
+        DBPDataSourceContainer container = binding.getDataSource() == null ? null
+            : binding.getDataSource().getContainer().getRegistry().getDataSource(entry.connectionId());
+        return container == null ? entry.connectionId() : container.getName();
     }
 
     @Override
@@ -180,43 +188,34 @@ public class DataTpDialog extends Dialog {
         listData.heightHint = 260;
         tableList.setLayoutData(listData);
         for (TableState state : states) {
-            tableList.add((state.unresolved ? "⚠ " : "") + state.table + " (" + state.rows + ")"
-                + (state.unresolved ? "  connection?" : ""));
+            tableList.add((state.entry == null ? "⚠ " : "") + state.table + " (" + state.rows + ")");
         }
 
         Composite right = new Composite(area, SWT.NONE);
-        right.setLayout(new GridLayout(2, false));
+        right.setLayout(new GridLayout(1, false));
         GridData rightData = new GridData(SWT.FILL, SWT.FILL, true, true);
         rightData.widthHint = 380;
         right.setLayoutData(rightData);
 
-        new Label(right, SWT.NONE).setText("Connection:");
-        connectionCombo = new Combo(right, SWT.DROP_DOWN | SWT.READ_ONLY);
-        connectionCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        // dbeaver-mm K74: read only, the mapping is edited in Plus Settings > data_tp mapping...
+        connectionLabel = new Label(right, SWT.WRAP);
+        connectionLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         messageLabel = new Label(right, SWT.WRAP);
-        messageLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
+        messageLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         Label columnsLabel = new Label(right, SWT.NONE);
         columnsLabel.setText("Columns shown:");
-        columnsLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
+        columnsLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
         columnTable = new Table(right, SWT.CHECK | SWT.BORDER | SWT.V_SCROLL);
-        columnTable.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true, 2, 1));
+        columnTable.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
         previewLabel = new Label(right, SWT.WRAP);
-        previewLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
+        previewLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         tableList.addListener(SWT.Selection, e -> {
             int index = tableList.getSelectionIndex();
             show(index < 0 ? null : states.get(index));
-        });
-        connectionCombo.addListener(SWT.Selection, e -> {
-            if (current != null && current.loaded && connectionCombo.getSelectionIndex() != current.chosen) {
-                current.chosen = connectionCombo.getSelectionIndex();
-                current.mappingChanged = true;
-                current.checked = new ArrayList<>();
-                load(current, false, true);
-            }
         });
         columnTable.addListener(SWT.Selection, e -> {
             if (e.detail != SWT.CHECK || current == null || !current.loaded) {
@@ -230,12 +229,12 @@ public class DataTpDialog extends Dialog {
             }
             current.checked = checked;
             current.columnsChanged = true;
-            load(current, false, false);
+            load(current, false);
         });
 
         if (states.isEmpty()) {
-            connectionCombo.setEnabled(false);
-            messageLabel.setText("No data_tp target tables are known for these rows yet.");
+            columnTable.setEnabled(false);
+            messageLabel.setText("No data_tp values in these rows.");
         } else {
             tableList.select(0);
             show(states.get(0));
@@ -252,12 +251,13 @@ public class DataTpDialog extends Dialog {
     /** dbeaver-mm K71: shows {@code state}, loading it in the background on first view */
     private void show(@Nullable TableState state) {
         current = state;
-        if (state != null && !state.loaded) {
-            connectionCombo.removeAll();
+        if (state != null && state.entry != null && !state.loaded) {
+            connectionLabel.setText(state.where);
             columnTable.removeAll();
+            columnTable.setEnabled(false);
             messageLabel.setText("Loading...");
             previewLabel.setText("");
-            load(state, true, true);
+            load(state, true);
             return;
         }
         render();
@@ -265,19 +265,10 @@ public class DataTpDialog extends Dialog {
 
     private void render() {
         TableState state = current;
-        if (state == null || connectionCombo.isDisposed()) {
+        if (state == null || connectionLabel.isDisposed()) {
             return;
         }
-        connectionCombo.removeAll();
-        for (DBSEntity candidate : state.candidates) {
-            DBSObject parent = candidate.getParentObject();
-            connectionCombo.add(candidate.getDataSource().getContainer().getName()
-                + (parent == null || parent instanceof DBPDataSource ? "" : " / " + parent.getName()));
-        }
-        if (state.chosen >= 0) {
-            connectionCombo.select(state.chosen);
-        }
-        connectionCombo.setEnabled(!state.candidates.isEmpty());
+        connectionLabel.setText(state.where);
         messageLabel.setText(state.message);
         columnTable.removeAll();
         for (DBSEntityAttribute column : state.columns) {
@@ -286,32 +277,33 @@ public class DataTpDialog extends Dialog {
             item.setData(column);
             item.setChecked(state.checked.contains(column));
         }
+        // dbeaver-mm K74: not mapped, closed or missing table: nothing to pick
+        columnTable.setEnabled(state.entity != null);
         previewLabel.setText(state.preview.isEmpty() ? "" : "Preview: " + state.preview);
         messageLabel.getParent().layout(true, true);
     }
 
     /**
-     * dbeaver-mm K71: reads candidates (connections), columns and the preview of {@code state} in a job.
+     * dbeaver-mm K71: reads the columns and the preview of {@code state} in a job.
      * Inputs are copied here on the UI thread; a result older than the state's last request is dropped.
      */
-    private void load(@NotNull TableState state, boolean candidatesToo, boolean columnsToo) {
+    private void load(@NotNull TableState state, boolean columnsToo) {
         int version = ++state.version;
-        List<DBSEntity> candidates = state.candidates;
-        int chosen = state.chosen;
+        DBSEntity entity = state.entity;
         List<DBSEntityAttribute> columns = state.columns;
         List<DBSEntityAttribute> checked = List.copyOf(state.checked);
         Object sample = state.sampleRowId;
+        DBPDataSourceContainer grid = dataTp.getDataSource() == null ? null : dataTp.getDataSource().getContainer();
         new AbstractJob("Load data_tp target " + state.table) {
             @Override
             protected IStatus run(@NotNull DBRProgressMonitor monitor) {
-                Loaded result = read(monitor, state.table, candidatesToo, columnsToo, candidates, chosen, columns, checked, sample);
+                Loaded result = read(monitor, grid, state.entry, entity, columnsToo, columns, checked, sample);
                 UIUtils.asyncExec(() -> {
                     if (version != state.version || tableList == null || tableList.isDisposed()) {
                         return;
                     }
                     state.loaded = true;
-                    state.candidates = result.candidates();
-                    state.chosen = result.chosen();
+                    state.entity = result.entity();
                     state.columns = result.columns();
                     state.checked = new ArrayList<>(result.checked());
                     state.preview = result.preview();
@@ -319,7 +311,7 @@ public class DataTpDialog extends Dialog {
                     if (state != current) {
                         return;
                     }
-                    if (candidatesToo || columnsToo) {
+                    if (columnsToo) {
                         render();
                     } else {
                         // dbeaver-mm K71: preview-only load, keep the column list where it is
@@ -336,43 +328,33 @@ public class DataTpDialog extends Dialog {
     @NotNull
     private static Loaded read(
         @NotNull DBRProgressMonitor monitor,
-        @NotNull String table,
-        boolean candidatesToo,
+        @Nullable DBPDataSourceContainer grid,
+        @NotNull DataTpStore.Entry target,
+        @Nullable DBSEntity entity,
         boolean columnsToo,
-        @NotNull List<DBSEntity> candidates,
-        int chosen,
         @NotNull List<DBSEntityAttribute> columns,
         @NotNull List<DBSEntityAttribute> checked,
         @Nullable Object sample
     ) {
-        String message = "";
         try {
-            if (candidatesToo) {
-                candidates = DataTpLabels.findTables(monitor, table);
-                DBSEntity target = DataTpLabels.resolveTarget(monitor, table);
-                if (target == null && candidates.size() > 1) {
-                    // dbeaver-mm K71: ambiguous and not mapped: nothing preselected, the user must pick
-                    return new Loaded(candidates, -1, List.of(), List.of(), "",
-                        "Found in " + candidates.size() + " connections, pick one.");
+            if (entity == null) {
+                // dbeaver-mm K74: straight to the mapped connection, schema and table; a closed connection is not opened
+                DBPDataSourceContainer container = grid == null ? null : grid.getRegistry().getDataSource(target.connectionId());
+                if (container == null) {
+                    return new Loaded(null, List.of(), List.of(), "",
+                        "Connection " + target.connectionId() + " of the data_tp mapping is not in this project.");
                 }
-                chosen = candidates.isEmpty() ? -1 : 0;
-                for (int i = 0; target != null && i < candidates.size(); i++) {
-                    if (sameTable(candidates.get(i), target)) {
-                        chosen = i;
-                    }
+                if (!container.isConnected()) {
+                    return new Loaded(null, List.of(), List.of(), "", "Connection " + container.getName() + " is closed.");
+                }
+                entity = DataTpLabels.findMappedTable(monitor, grid, target);
+                if (entity == null) {
+                    return new Loaded(null, List.of(), List.of(), "",
+                        "Table " + target.table() + " is not in " + container.getName()
+                            + (target.schema().isEmpty() ? "" : " · schema " + target.schema())
+                            + ". Build the data_tp mapping again.");
                 }
             }
-            if (candidates.isEmpty()) {
-                return new Loaded(candidates, -1, List.of(), List.of(), "",
-                    "Table " + table + " is not in any open connection. Connect the database that holds it and open this dialog again.");
-            }
-            if (candidates.size() > 1) {
-                message = "Found in " + candidates.size() + " connections, pick one.";
-            }
-            if (chosen < 0 || chosen >= candidates.size()) {
-                chosen = 0;
-            }
-            DBSEntity entity = candidates.get(chosen);
             List<? extends DBSEntityAttribute> key = DBUtils.getBestTableIdentifier(monitor, entity);
             if (columnsToo) {
                 Collection<? extends DBSEntityAttribute> attributes = entity.getAttributes(monitor);
@@ -388,10 +370,10 @@ public class DataTpDialog extends Dialog {
                 }
             }
             String preview = key.isEmpty() || sample == null ? "" : preview(monitor, entity, key.get(0), checked, sample);
-            return new Loaded(candidates, chosen, columns, checked, preview, message);
+            return new Loaded(entity, columns, checked, preview, "");
         } catch (Throwable e) {
-            log.debug("Can't load data_tp target " + table, e);
-            return new Loaded(candidates, chosen, columns, checked, "", "Can't read " + table + ": " + e.getMessage());
+            log.debug("Can't load data_tp target " + target.table(), e);
+            return new Loaded(entity, columns, checked, "", "Can't read " + target.table() + ": " + e.getMessage());
         }
     }
 
@@ -442,68 +424,33 @@ public class DataTpDialog extends Dialog {
         return sample + " | (row not found)";
     }
 
-    private static boolean sameTable(@NotNull DBSEntity a, @NotNull DBSEntity b) {
-        return a == b || (a.getDataSource() != null && b.getDataSource() != null
-            && a.getDataSource().getContainer() == b.getDataSource().getContainer()
-            && Objects.equals(DBUtils.getObjectFullName(a, DBPEvaluationContext.UI), DBUtils.getObjectFullName(b, DBPEvaluationContext.UI)));
-    }
-
     @Override
     protected void okPressed() {
-        // dbeaver-mm K71: only what the user changed or confirmed on screen is saved
-        Map<String, DataTpStore.Target> newMappings = new HashMap<>();
+        // dbeaver-mm K71: only what the user changed on screen is saved
+        // dbeaver-mm K74: description columns only, the connection mapping belongs to Plus Settings
         Map<DBSEntity, String> newColumns = new LinkedHashMap<>();
         for (TableState state : states) {
-            if (!state.loaded || state.chosen < 0 || state.chosen >= state.candidates.size()) {
-                continue;
-            }
-            DBSEntity entity = state.candidates.get(state.chosen);
-            if (state.mappingChanged || state.unresolved) {
-                DBSObject parent = entity.getParentObject();
-                newMappings.put(DataTpStore.tableKey(state.table), new DataTpStore.Target(
-                    entity.getDataSource().getContainer().getId(),
-                    parent == null || parent instanceof DBPDataSource ? "" : parent.getName()));
-            }
-            if (state.columnsChanged && !state.checked.isEmpty()) {
+            if (state.loaded && state.entity != null && state.columnsChanged && !state.checked.isEmpty()) {
                 StringJoiner names = new StringJoiner(",");
                 state.checked.forEach(c -> names.add(DBUtils.getQuotedIdentifier(c)));
-                newColumns.put(entity, names.toString());
+                newColumns.put(state.entity, names.toString());
             }
         }
         super.okPressed();
-        if (newMappings.isEmpty() && newColumns.isEmpty()) {
+        if (newColumns.isEmpty()) {
             return;
         }
         new AbstractJob("Save data_tp labels") {
             @Override
             protected IStatus run(@NotNull DBRProgressMonitor monitor) {
-                save(monitor, newMappings, newColumns);
+                save(monitor, newColumns);
                 return Status.OK_STATUS;
             }
         }.schedule();
     }
 
-    /** dbeaver-mm K71: background part of Save: mapping file, virtual model, then the labels again */
-    private void save(
-        @NotNull DBRProgressMonitor monitor,
-        @NotNull Map<String, DataTpStore.Target> newMappings,
-        @NotNull Map<DBSEntity, String> newColumns
-    ) {
-        if (!newMappings.isEmpty()) {
-            Path file = DataTpStore.defaultFile();
-            // same lock as DataTpLabels.resolveTarget, which also writes this file
-            synchronized (DataTpLabels.class) {
-                try {
-                    Map<String, DataTpStore.Target> all = new HashMap<>(DataTpStore.load(file));
-                    all.putAll(newMappings);
-                    DataTpStore.save(file, all);
-                    // under the same lock, so no fetch job re-saves its stale mappings over this file
-                    DataTpLabels.invalidate();
-                } catch (Exception e) {
-                    log.error("Can't save data_tp mappings", e);
-                }
-            }
-        }
+    /** dbeaver-mm K71: background part of Save: virtual model, then the labels again */
+    private void save(@NotNull DBRProgressMonitor monitor, @NotNull Map<DBSEntity, String> newColumns) {
         for (Map.Entry<DBSEntity, String> entry : newColumns.entrySet()) {
             try {
                 DBSEntity entity = entry.getKey();

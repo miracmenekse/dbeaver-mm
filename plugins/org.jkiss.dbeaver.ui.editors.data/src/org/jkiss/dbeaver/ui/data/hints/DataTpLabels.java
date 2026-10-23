@@ -19,35 +19,24 @@ package org.jkiss.dbeaver.ui.data.hints;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.Log;
-import org.jkiss.dbeaver.model.DBPDataSource;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
-import org.jkiss.dbeaver.model.DBPEvaluationContext;
 import org.jkiss.dbeaver.model.DBUtils;
-import org.jkiss.dbeaver.model.app.DBPProject;
 import org.jkiss.dbeaver.model.data.DBDAttributeBinding;
 import org.jkiss.dbeaver.model.data.DBDLabelValuePair;
 import org.jkiss.dbeaver.model.data.DBDValueRow;
-import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
-import org.jkiss.dbeaver.model.exec.DBCExecutionContextDefaults;
-import org.jkiss.dbeaver.model.exec.DBCExecutionPurpose;
-import org.jkiss.dbeaver.model.exec.DBCResultSet;
-import org.jkiss.dbeaver.model.exec.DBCSession;
-import org.jkiss.dbeaver.model.exec.DBCStatement;
-import org.jkiss.dbeaver.model.exec.DBCStatementType;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSDictionary;
-import org.jkiss.dbeaver.model.struct.DBSObject;
-import org.jkiss.dbeaver.model.struct.DBSObjectContainer;
 import org.jkiss.dbeaver.model.struct.DBSEntity;
 import org.jkiss.dbeaver.model.struct.DBSEntityAttribute;
-import org.jkiss.dbeaver.runtime.DBWorkbench;
+import org.jkiss.dbeaver.model.struct.DBSObject;
+import org.jkiss.dbeaver.model.struct.DBSObjectContainer;
 
-import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,61 +46,57 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * dbeaver-mm K69: {@code data_tp} type id -> target table name, read once per connection from
- * {@code etiya_type_value}.
+ * dbeaver-mm K69: {@code data_tp} type id -> target table, for the data_tp/row_id pair.
+ * dbeaver-mm K74: read only from the tenant mapping file written by {@link DataTpMapDialog}
+ * (tenant = first word of the grid connection's name). No type table query, no table search.
  * <p>
- * Follows the {@link FkDictionaryLabels} pattern: values are prefetched in the result set fetch
- * job, and {@link #getTypeTable} only reads the cache, so painting a cell never queries.
- * A connection whose lookup found nothing keeps an empty map, so it is not retried until
- * {@link #invalidate}.
+ * Follows the {@link FkDictionaryLabels} pattern: the mapping file and the row labels are loaded in
+ * the result set fetch job, and {@link #getTypeTable} / {@link #getRowLabel} only read the caches,
+ * so painting a cell never queries and never reads a file.
  */
 public final class DataTpLabels {
 
     private static final Log log = Log.getLog(DataTpLabels.class);
 
-    // dbeaver-mm K69: connection id -> (type id -> table name)
-    private static final Map<String, Map<String, String>> TYPES = new ConcurrentHashMap<>();
+    // dbeaver-mm K74: mapping file contents with the modification time they were read at
+    private record Cached(long modified, DataTpStore.TenantMap map) {
+    }
+
+    // dbeaver-mm K74: tenant mapping file -> its contents (missing file = empty map)
+    private static final Map<Path, Cached> MAPS = new ConcurrentHashMap<>();
 
     private static final int PREFETCH_CHUNK = 100;
-    // dbeaver-mm K70: tableKey + "\u0000" + keyOf(row_id) -> description of the target row
+    // dbeaver-mm K70: target key + "\u0000" + keyOf(row_id) -> description of the target row
     private static final Map<String, String> ROWS = new ConcurrentHashMap<>();
     // dbeaver-mm K70: "looked up, has no label"; compared by identity, like FkDictionaryLabels.MISSING
     private static final String MISSING = new String("");
-    // dbeaver-mm K70: tableKey -> resolved target table
-    private static final Map<String, DBSEntity> TARGETS = new ConcurrentHashMap<>();
-    // dbeaver-mm K70: tableKeys with no saved mapping and zero or several candidate tables (K71 asks)
-    private static final Set<String> UNRESOLVED = ConcurrentHashMap.newKeySet();
-    // dbeaver-mm K70: saved mappings, read at most once until invalidate(); guarded by DataTpLabels.class
-    private static Map<String, DataTpStore.Target> mappings;
+    // dbeaver-mm K74: mapped target (connection, schema, table) -> resolved table
+    private static final Map<DataTpStore.Entry, DBSEntity> TARGETS = new ConcurrentHashMap<>();
 
     private DataTpLabels() {
     }
 
     /**
-     * dbeaver-mm K69: loads the type table of {@code dataTp}'s connection, once per connection.
-     * Called from the fetch job, so a missing or unreachable table is remembered as empty.
+     * dbeaver-mm K69: loads the mapping of {@code dataTp}'s connection.
+     * dbeaver-mm K74: the tenant mapping file, re-read only when its modification time changed.
+     * Called from the fetch job (file I/O), never while painting.
      */
     public static void prefetchTypes(@NotNull DBRProgressMonitor monitor, @Nullable DBDAttributeBinding dataTp) {
-        if (dataTp == null || dataTp.getDataSource() == null || dataTp.getDataSource().getContainer() == null) {
+        Path file = mappingFile(dataTp);
+        if (file == null) {
             return;
         }
-        String cacheKey = keyOf(dataTp.getDataSource().getContainer().getId());
-        if (cacheKey == null || TYPES.containsKey(cacheKey)) {
-            return;
-        }
-        Map<String, String> types;
+        long modified;
         try {
-            types = new HashMap<>();
-            DBSEntity entity = findTypeTable(monitor, dataTp);
-            if (entity != null) {
-                loadTypes(monitor, entity, types);
-            }
+            modified = Files.getLastModifiedTime(file).toMillis();
         } catch (Exception e) {
-            log.debug("data_tp type names lookup failed", e);
-            types = new HashMap<>();
+            modified = -1; // dbeaver-mm K74: no file yet, loadTenant gives an empty map
         }
-        // dbeaver-mm K69: an empty map is kept too, so a missing table is looked up only once
-        TYPES.putIfAbsent(cacheKey, new ConcurrentHashMap<>(types));
+        Cached cached = MAPS.get(file);
+        if (cached != null && cached.modified() == modified) {
+            return;
+        }
+        MAPS.put(file, new Cached(modified, DataTpStore.loadTenant(file)));
     }
 
     /**
@@ -120,70 +105,60 @@ public final class DataTpLabels {
      */
     @Nullable
     public static String getTypeTable(@Nullable DBDAttributeBinding dataTp, @Nullable Object value) {
-        if (dataTp == null || dataTp.getDataSource() == null || dataTp.getDataSource().getContainer() == null
-            || DBUtils.isNullValue(value)) {
-            return null;
-        }
-        Map<String, String> types = TYPES.get(keyOf(dataTp.getDataSource().getContainer().getId()));
-        return types == null ? null : types.get(keyOf(value));
+        DataTpStore.Entry entry = getEntry(dataTp, value);
+        return entry == null ? null : entry.table();
     }
 
     /**
-     * dbeaver-mm K69: forgets the loaded type tables, e.g. after the type table was edited.
-     * dbeaver-mm K70: also the row labels, resolved targets and the saved mappings (re-read on next use).
+     * dbeaver-mm K74: mapping entry of {@code value} in the tenant of {@code binding}'s connection,
+     * or null if not prefetched or not mapped. Cache only.
+     */
+    @Nullable
+    public static DataTpStore.Entry getEntry(@Nullable DBDAttributeBinding binding, @Nullable Object value) {
+        if (DBUtils.isNullValue(value)) {
+            return null;
+        }
+        Path file = mappingFile(binding);
+        Cached cached = file == null ? null : MAPS.get(file);
+        return cached == null ? null : cached.map().types().get(DataTpStore.typeKey(value));
+    }
+
+    /** dbeaver-mm K74: tenant of {@code binding}'s connection, "" if unknown. */
+    @NotNull
+    public static String getTenant(@Nullable DBDAttributeBinding binding) {
+        DBPDataSourceContainer container = containerOf(binding);
+        return container == null ? "" : DataTpStore.tenantOf(container.getName());
+    }
+
+    /**
+     * dbeaver-mm K69: forgets loaded type tables, e.g. after the type table was edited.
+     * dbeaver-mm K74: mapping files, row labels and resolved targets (re-read on next fetch).
      */
     public static void invalidate() {
-        TYPES.clear();
+        MAPS.clear();
         ROWS.clear();
         TARGETS.clear();
-        UNRESOLVED.clear();
-        synchronized (DataTpLabels.class) {
-            mappings = null;
-        }
     }
 
     /**
      * dbeaver-mm K70: description of the row {@code rowIdValue} of the table {@code dataTpValue} points to,
      * or null if not prefetched or unknown. Never queries: this runs while the grid paints.
-     * {@code rowId} gives the connection whose type table maps {@code dataTpValue}.
      */
     @Nullable
     public static String getRowLabel(@Nullable DBDAttributeBinding rowId, @Nullable Object dataTpValue, @Nullable Object rowIdValue) {
-        String table = getTypeTable(rowId, dataTpValue);
-        if (table == null || DBUtils.isNullValue(rowIdValue)) {
+        DataTpStore.Entry entry = getEntry(rowId, dataTpValue);
+        if (entry == null || DBUtils.isNullValue(rowIdValue)) {
             return null;
         }
-        String label = ROWS.get(rowKey(table, rowIdValue));
+        String label = ROWS.get(rowKey(entry, rowIdValue));
         return label == null || label == MISSING ? null : label;
     }
 
-    /** dbeaver-mm K70: true if the target table of {@code dataTpValue} lives in another connection than the grid. */
+    /** dbeaver-mm K74: true if the mapped target connection of {@code dataTpValue} is not the grid's one. */
     public static boolean isExternal(@Nullable DBDAttributeBinding rowId, @Nullable Object dataTpValue) {
-        String table = getTypeTable(rowId, dataTpValue);
-        DBSEntity target = table == null ? null : TARGETS.get(DataTpStore.tableKey(table));
-        return target != null && target.getDataSource() != null && rowId.getDataSource() != null
-            && target.getDataSource().getContainer() != rowId.getDataSource().getContainer();
-    }
-
-    /** dbeaver-mm K70: target table names the {@code data_tp} values of {@code rows} point to (cache only). */
-    @NotNull
-    public static Set<String> getTypeTables(@NotNull DBDAttributeBinding dataTp, @NotNull Collection<? extends DBDValueRow> rows) {
-        Set<String> tables = new TreeSet<>();
-        int index = dataTp.getOrdinalPosition();
-        for (DBDValueRow row : rows) {
-            Object[] values = row.getValues();
-            String table = index >= 0 && index < values.length ? getTypeTable(dataTp, values[index]) : null;
-            if (table != null) {
-                tables.add(table);
-            }
-        }
-        return tables;
-    }
-
-    /** dbeaver-mm K70: target table names that could not be resolved automatically (none or several candidates). */
-    @NotNull
-    public static Set<String> unresolved() {
-        return Collections.unmodifiableSet(UNRESOLVED);
+        DataTpStore.Entry entry = getEntry(rowId, dataTpValue);
+        DBPDataSourceContainer container = containerOf(rowId);
+        return entry != null && container != null && !entry.connectionId().equals(container.getId());
     }
 
     /**
@@ -201,7 +176,7 @@ public final class DataTpLabels {
         }
         int tpIndex = dataTp.getOrdinalPosition();
         int idIndex = rowId.getOrdinalPosition();
-        Map<String, List<Object[]>> byTable = new LinkedHashMap<>();
+        Map<DataTpStore.Entry, List<Object[]>> byTarget = new LinkedHashMap<>();
         Set<String> seen = new HashSet<>();
         for (DBDValueRow row : rows) {
             Object[] values = row.getValues();
@@ -209,22 +184,23 @@ public final class DataTpLabels {
                 || DBUtils.isNullValue(values[idIndex])) {
                 continue;
             }
-            String table = getTypeTable(dataTp, values[tpIndex]);
-            if (table == null) {
+            DataTpStore.Entry target = getEntry(dataTp, values[tpIndex]);
+            if (target == null) {
                 continue;
             }
-            String key = rowKey(table, values[idIndex]);
+            String key = rowKey(target, values[idIndex]);
             if (!ROWS.containsKey(key) && seen.add(key)) {
-                byTable.computeIfAbsent(table, t -> new ArrayList<>()).add(new Object[]{values[idIndex]});
+                byTarget.computeIfAbsent(target, t -> new ArrayList<>()).add(new Object[]{values[idIndex]});
             }
         }
-        for (Map.Entry<String, List<Object[]>> entry : byTable.entrySet()) {
-            if (monitor.isCanceled()) {
+        DBPDataSourceContainer grid = containerOf(dataTp);
+        for (Map.Entry<DataTpStore.Entry, List<Object[]>> entry : byTarget.entrySet()) {
+            if (monitor.isCanceled() || grid == null) {
                 return;
             }
-            DBSEntity entity = resolveTarget(monitor, entry.getKey());
+            DBSEntity entity = findMappedTable(monitor, grid, entry.getKey());
             if (entity == null) {
-                // no target yet: not marked missing, so a mapping made later (K71) brings the labels
+                // dbeaver-mm K74: closed connection or table not there: not marked missing, so connecting brings the labels
                 continue;
             }
             List<Object[]> missing = entry.getValue();
@@ -247,9 +223,9 @@ public final class DataTpLabels {
                     }
                 }
             } catch (Throwable e) {
-                log.debug("data_tp row labels lookup failed for " + entry.getKey(), e);
+                log.debug("data_tp row labels lookup failed for " + entry.getKey().table(), e);
             }
-            // dbeaver-mm K70: asked and got no label stays without one until a refresh (K44); a canceled fetch is asked again
+            // dbeaver-mm K70: asked and got no label stays without one until refresh (K44); canceled fetch asked again
             if (!monitor.isCanceled()) {
                 missing.forEach(v -> ROWS.putIfAbsent(rowKey(entry.getKey(), v[0]), MISSING));
             }
@@ -257,97 +233,24 @@ public final class DataTpLabels {
     }
 
     /**
-     * dbeaver-mm K70: target table of {@code tableName}: the saved mapping if any (null while its connection is
-     * not connected); else the only table of that name in the open connections, which is then saved;
-     * else null and the name goes to {@link #unresolved()}. Queries metadata and may write the mapping
-     * file, so call it from a background job, never while painting.
+     * dbeaver-mm K74: the table {@code entry} names: its connection (looked up in the registry of
+     * {@code grid}), schema and table. Null if the connection is unknown or not connected (it is never
+     * opened here) or the table is not there. Reads metadata, so call it from a background job.
      */
     @Nullable
-    public static DBSEntity resolveTarget(@NotNull DBRProgressMonitor monitor, @NotNull String tableName) {
-        String key = DataTpStore.tableKey(tableName);
-        DBSEntity cached = TARGETS.get(key);
+    public static DBSEntity findMappedTable(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBPDataSourceContainer grid,
+        @NotNull DataTpStore.Entry entry
+    ) {
+        DBSEntity cached = TARGETS.get(entry);
         // dbeaver-mm K70: a reconnect replaces the data source, so a table of the old one is resolved again
-        if (cached != null && (cached.getDataSource() == null
-            || cached.getDataSource().getContainer().getDataSource() != cached.getDataSource())) {
-            TARGETS.remove(key);
-            cached = null;
-        }
-        if (cached != null || UNRESOLVED.contains(key)) {
+        if (cached != null && cached.getDataSource() != null
+            && cached.getDataSource().getContainer().getDataSource() == cached.getDataSource()) {
             return cached;
         }
-        // ponytail: one lock for resolving and saving, fine while only fetch jobs and the K71 dialog call it
-        synchronized (DataTpLabels.class) {
-            if (mappings == null) {
-                mappings = new HashMap<>(DataTpStore.load(DataTpStore.defaultFile()));
-            }
-            DataTpStore.Target target = mappings.get(key);
-            DBSEntity entity;
-            if (target != null) {
-                entity = findMapped(monitor, target, tableName);
-            } else {
-                List<DBSEntity> found = findTables(monitor, tableName);
-                if (found.size() != 1) {
-                    UNRESOLVED.add(key);
-                    return null;
-                }
-                entity = found.get(0);
-                DBSObject parent = entity.getParentObject();
-                mappings.put(key, new DataTpStore.Target(
-                    entity.getDataSource().getContainer().getId(),
-                    parent == null || parent instanceof DBPDataSource ? "" : parent.getName()));
-                try {
-                    DataTpStore.save(DataTpStore.defaultFile(), mappings);
-                } catch (IOException e) {
-                    log.debug("Can't save data_tp mapping of " + tableName, e);
-                }
-            }
-            if (entity != null) {
-                TARGETS.put(key, entity);
-            }
-            return entity;
-        }
-    }
-
-    /**
-     * dbeaver-mm K70: every table named {@code table} in the open connections of the active project:
-     * per connection the default schema first, then two levels below the root (catalog > schema).
-     * Like {@code ConfPackagesView.findTable}, but collects all matches.
-     */
-    @NotNull
-    public static List<DBSEntity> findTables(@NotNull DBRProgressMonitor monitor, @NotNull String table) {
-        List<DBSEntity> result = new ArrayList<>();
-        DBPProject project = DBWorkbench.getPlatform().getWorkspace().getActiveProject();
-        if (project == null) {
-            return result;
-        }
-        for (DBPDataSourceContainer container : project.getDataSourceRegistry().getDataSources()) {
-            if (!container.isConnected() || container.getDataSource() == null) {
-                continue;
-            }
-            try {
-                DBCExecutionContext context = DBUtils.getDefaultContext(container.getDataSource(), true);
-                DBSObjectContainer root = DBUtils.getAdapter(DBSObjectContainer.class, container.getDataSource());
-                DBCExecutionContextDefaults<?, ?> defaults = context == null ? null : context.getContextDefaults();
-                DBSObjectContainer schema = defaults == null ? null
-                    : defaults.getDefaultSchema() instanceof DBSObjectContainer s ? s
-                    : defaults.getDefaultCatalog() instanceof DBSObjectContainer c ? c : null;
-                if (schema != null && DBUtils.findObject(schema.getChildren(monitor), table, true) instanceof DBSEntity entity) {
-                    result.add(entity);
-                } else if (root != null) {
-                    collectInChildren(monitor, root, table, 2, result, Integer.MAX_VALUE);
-                }
-            } catch (Exception e) {
-                log.debug("Can't look up " + table + " in " + container.getName(), e);
-            }
-        }
-        return result;
-    }
-
-    /** dbeaver-mm K70: the saved target's table, or null if its connection is gone or not connected. */
-    @Nullable
-    private static DBSEntity findMapped(@NotNull DBRProgressMonitor monitor, @NotNull DataTpStore.Target target, @NotNull String table) {
-        DBPProject project = DBWorkbench.getPlatform().getWorkspace().getActiveProject();
-        DBPDataSourceContainer container = project == null ? null : project.getDataSourceRegistry().getDataSource(target.connectionId());
+        TARGETS.remove(entry);
+        DBPDataSourceContainer container = grid.getRegistry().getDataSource(entry.connectionId());
         if (container == null || !container.isConnected() || container.getDataSource() == null) {
             return null;
         }
@@ -356,118 +259,64 @@ public final class DataTpLabels {
             return null;
         }
         try {
-            if (target.schema() == null || target.schema().isEmpty()) {
-                return findInChildren(monitor, root, table, 2);
-            }
-            DBCExecutionContext context = DBUtils.getDefaultContext(container.getDataSource(), true);
-            if (context != null
-                && DBUtils.getObjectByPath(monitor, context, root, null, target.schema(), table) instanceof DBSEntity entity) {
+            DBSObjectContainer schema = entry.schema().isEmpty() ? root : findSchema(monitor, root, entry.schema(), 1);
+            if (schema != null
+                && DBUtils.findObject(schema.getChildren(monitor), entry.table(), true) instanceof DBSEntity entity) {
+                TARGETS.put(entry, entity);
                 return entity;
             }
         } catch (Exception e) {
-            log.debug("Can't look up " + target.schema() + "." + table + " in " + container.getName(), e);
+            log.debug("Can't look up " + entry.schema() + "." + entry.table() + " in " + container.getName(), e);
         }
         return null;
     }
 
-    @NotNull
-    private static String rowKey(@NotNull String table, @Nullable Object rowIdValue) {
-        return DataTpStore.tableKey(table) + "\u0000" + keyOf(rowIdValue);
-    }
-
-    /**
-     * dbeaver-mm K69: the type table is searched in the column's own schema first, then two levels
-     * below the data source root (catalog > schema), like {@code ConfPackagesView.findInChildren}.
-     */
+    /** dbeaver-mm K74: schema named {@code name} below {@code container} (catalog > schema: one level deeper). */
     @Nullable
-    private static DBSEntity findTypeTable(@NotNull DBRProgressMonitor monitor, @NotNull DBDAttributeBinding dataTp) {
-        DBSEntityAttribute column = dataTp.getEntityAttribute();
-        DBSObject table = column == null ? null : column.getParentObject();
-        DBSObject schema = table == null ? null : table.getParentObject();
-        if (schema instanceof DBSObjectContainer container) {
-            try {
-                if (DBUtils.findObject(container.getChildren(monitor), DataTpStore.TYPE_TABLE, true) instanceof DBSEntity entity) {
-                    return entity;
-                }
-            } catch (Exception e) {
-                log.debug("Can't look up " + DataTpStore.TYPE_TABLE + " in " + container.getName(), e);
-            }
-        }
-        DBSObjectContainer root = DBUtils.getAdapter(DBSObjectContainer.class, dataTp.getDataSource());
-        return root == null ? null : findInChildren(monitor, root, DataTpStore.TYPE_TABLE, 2);
-    }
-
-    /** dbeaver-mm K69: {@code table} in {@code container} or its sub-containers, {@code depth} levels down. */
-    @Nullable
-    private static DBSEntity findInChildren(
+    private static DBSObjectContainer findSchema(
         @NotNull DBRProgressMonitor monitor,
         @NotNull DBSObjectContainer container,
-        @NotNull String table,
+        @NotNull String name,
         int depth
-    ) {
-        List<DBSEntity> found = new ArrayList<>(1);
-        collectInChildren(monitor, container, table, depth, found, 1);
-        return found.isEmpty() ? null : found.get(0);
-    }
-
-    /** dbeaver-mm K70: adds matches of {@code table} below {@code container} to {@code found} until it has {@code limit}. */
-    private static void collectInChildren(
-        @NotNull DBRProgressMonitor monitor,
-        @NotNull DBSObjectContainer container,
-        @NotNull String table,
-        int depth,
-        @NotNull List<DBSEntity> found,
-        int limit
-    ) {
-        try {
-            Collection<? extends DBSObject> children = container.getChildren(monitor);
-            if (DBUtils.findObject(children, table, true) instanceof DBSEntity entity) {
-                found.add(entity);
-            }
-            if (depth > 0 && children != null) {
-                for (DBSObject child : children) {
-                    if (found.size() >= limit || monitor.isCanceled()) {
-                        return;
-                    }
-                    if (child instanceof DBSObjectContainer sub && !(child instanceof DBSEntity)) {
-                        collectInChildren(monitor, sub, table, depth - 1, found, limit);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.debug("Can't look up " + table + " in " + container.getName(), e);
-        }
-    }
-
-    /** dbeaver-mm K69: reads the whole type table; a failure is handled by {@link #prefetchTypes}. */
-    private static void loadTypes(
-        @NotNull DBRProgressMonitor monitor,
-        @NotNull DBSEntity entity,
-        @NotNull Map<String, String> types
     ) throws Exception {
-        DBCExecutionContext context = DBUtils.getDefaultContext(entity.getDataSource(), true);
-        if (context == null) {
-            return;
+        Collection<? extends DBSObject> children = container.getChildren(monitor);
+        if (children == null) {
+            return null;
         }
-        DBCSession session = context.openSession(monitor, DBCExecutionPurpose.UTIL, "Read data_tp type names");
-        try (session) {
-            String query = "SELECT " + DataTpStore.TYPE_ID + ", " + DataTpStore.TYPE_NAME
-                + " FROM " + DBUtils.getObjectFullName(entity, DBPEvaluationContext.DML);
-            try (DBCStatement statement = session.prepareStatement(DBCStatementType.QUERY, query, false, false, false)) {
-                if (!statement.executeStatement()) {
-                    return;
-                }
-                try (DBCResultSet resultSet = statement.openResultSet()) {
-                    while (resultSet != null && !monitor.isCanceled() && resultSet.nextRow()) {
-                        String key = keyOf(resultSet.getAttributeValue(0));
-                        Object name = resultSet.getAttributeValue(1);
-                        if (key != null && name != null) {
-                            types.put(key, String.valueOf(name));
-                        }
+        if (DBUtils.findObject(children, name, true) instanceof DBSObjectContainer schema && !(schema instanceof DBSEntity)) {
+            return schema;
+        }
+        if (depth > 0) {
+            for (DBSObject child : children) {
+                if (child instanceof DBSObjectContainer sub && !(child instanceof DBSEntity)) {
+                    DBSObjectContainer schema = findSchema(monitor, sub, name, depth - 1);
+                    if (schema != null) {
+                        return schema;
                     }
                 }
             }
         }
+        return null;
+    }
+
+    @Nullable
+    private static DBPDataSourceContainer containerOf(@Nullable DBDAttributeBinding binding) {
+        return binding == null || binding.getDataSource() == null ? null : binding.getDataSource().getContainer();
+    }
+
+    /** dbeaver-mm K74: tenant mapping file of {@code binding}'s connection; path only, no file access. */
+    @Nullable
+    private static Path mappingFile(@Nullable DBDAttributeBinding binding) {
+        DBPDataSourceContainer container = containerOf(binding);
+        return container == null ? null
+            : DataTpStore.tenantFile(DataTpStore.tenantDir(), DataTpStore.tenantOf(container.getName()));
+    }
+
+    @NotNull
+    private static String rowKey(@NotNull DataTpStore.Entry target, @Nullable Object rowIdValue) {
+        // dbeaver-mm K74: the same table name in two tenants is two different tables
+        return target.connectionId() + "\u0000" + target.schema() + "\u0000" + DataTpStore.tableKey(target.table())
+            + "\u0000" + keyOf(rowIdValue);
     }
 
     /**

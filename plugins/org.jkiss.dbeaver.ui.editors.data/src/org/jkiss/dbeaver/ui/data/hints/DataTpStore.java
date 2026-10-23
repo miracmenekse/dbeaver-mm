@@ -31,14 +31,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
-import java.util.TreeMap;
 
 /**
  * dbeaver-mm K68: data_tp column pair recognition and connection target mapping store.
+ * dbeaver-mm K74: global table mapping (Target, load, save, defaultFile) removed; tenant files only.
  * dbeaver-mm K72: tenant başına data_tp eşleme dosyası (saf Java).
  * <p>
  * Saf Java: yalnız {@code java.*} kullanır, böylece Eclipse olmadan test edilebilir.
- * Kayıt dosyası satır biçimi: {@code ANAHTAR=bağlantıId|şema}.
+ * Tenant file line format: {@code tp.<data_tp>=TABLE|connectionId|schema}.
  */
 public final class DataTpStore {
 
@@ -49,9 +49,6 @@ public final class DataTpStore {
     public static final String TYPE_NAME = "table_name";
 
     private DataTpStore() {
-    }
-
-    public record Target(String connectionId, String schema) {
     }
 
     // dbeaver-mm K72: eşlenen hedef tablo (tablo, bağlantı ve şema)
@@ -95,72 +92,6 @@ public final class DataTpStore {
 
     public static String tableKey(String tableName) {
         return tableName.strip().toUpperCase(Locale.ROOT);
-    }
-
-    public static Path defaultFile() {
-        return Paths.get(System.getProperty("user.home"), ".dbeaver-mm", "data-tp.properties");
-    }
-
-    /**
-     * Kayıtları okur. Dosya yok, okunamaz ya da bozuksa boş harita döner; asla fırlatmaz.
-     */
-    public static Map<String, Target> load(Path file) {
-        Map<String, Target> result = new HashMap<>();
-        if (file == null) {
-            return result;
-        }
-        Properties properties = new Properties();
-        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
-            properties.load(reader);
-        } catch (Exception e) {
-            return new HashMap<>();
-        }
-        for (String name : properties.stringPropertyNames()) {
-            String value = properties.getProperty(name, "");
-            if (value.isBlank()) {
-                continue;
-            }
-            int separator = value.indexOf('|');
-            String connectionId = separator < 0 ? value : value.substring(0, separator);
-            String schema = separator < 0 ? "" : value.substring(separator + 1);
-            if (name.isBlank() || connectionId.isBlank()) {
-                continue;
-            }
-            result.put(tableKey(name), new Target(connectionId, schema));
-        }
-        return result;
-    }
-
-    /**
-     * Kayıtları atomik olarak yazar: önce aynı dizinde geçici dosya, sonra yerine taşıma.
-     */
-    public static void save(Path file, Map<String, Target> targets) throws IOException {
-        Path parent = file.toAbsolutePath().getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
-        Path temp = Files.createTempFile(parent, "data-tp", ".tmp");
-        try {
-            Map<String, Target> sorted = new TreeMap<>();
-            for (Map.Entry<String, Target> entry : targets.entrySet()) {
-                sorted.put(tableKey(entry.getKey()), entry.getValue());
-            }
-            try (Writer writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
-                for (Map.Entry<String, Target> entry : sorted.entrySet()) {
-                    Target target = entry.getValue();
-                    String schema = target.schema() == null ? "" : target.schema();
-                    String connectionId = target.connectionId() == null ? "" : target.connectionId();
-                    writer.write(entry.getKey() + "=" + connectionId + "|" + schema + "\n");
-                }
-            }
-            try {
-                Files.move(temp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
-            }
-        } finally {
-            Files.deleteIfExists(temp);
-        }
     }
 
     // dbeaver-mm K72: bağlantı adının ilk kelimesi tenant kimliğidir (T3 CRM -> T3)
