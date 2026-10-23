@@ -1689,6 +1689,9 @@
         <!-- dbeaver-mm K52: Fetch IDs API settings in a form -->
         <command id="org.jkiss.dbeaver.mm.idapi.settings" categoryId="org.jkiss.dbeaver.core.util"
             name="ID API account..." description="Your user name and password for Fetch IDs"/>
+        <!-- dbeaver-mm K73: where data_tp ids point, per tenant -->
+        <command id="org.jkiss.dbeaver.mm.datatp.settings" categoryId="org.jkiss.dbeaver.core.util"
+            name="data_tp mapping..." description="Where data_tp ids point: type table and target tables per tenant"/>
         <!-- dbeaver-mm K49: recording only with consent, under a nickname -->
         <command id="org.jkiss.dbeaver.mm.session.consent" categoryId="org.jkiss.dbeaver.core.util"
             name="Automatic recording..." description="Turn recording on or off and pick the nickname records are kept under"/>
@@ -1698,6 +1701,8 @@
             class="org.jkiss.dbeaver.ui.controls.resultset.session.SessionToggleHandler"/>
         <handler commandId="org.jkiss.dbeaver.mm.idapi.settings"
             class="org.jkiss.dbeaver.ui.controls.resultset.ids.IdApiSettings"/>
+        <handler commandId="org.jkiss.dbeaver.mm.datatp.settings"
+            class="org.jkiss.dbeaver.ui.data.hints.DataTpMapDialog$Handler"/>
         <handler commandId="org.jkiss.dbeaver.mm.session.consent"
             class="org.jkiss.dbeaver.ui.controls.resultset.session.RecordingConsent"/>
     </extension>
@@ -1708,6 +1713,7 @@
         <!-- dbeaver-mm K53: settings go to Plus Settings, Plus keeps only the features -->
         <menuContribution allPopups="false" locationURI="menu:org.jkiss.dbeaver.mm.plus.settings?before=additions">
             <command commandId="org.jkiss.dbeaver.mm.idapi.settings"/>
+            <command commandId="org.jkiss.dbeaver.mm.datatp.settings"/>
             <command commandId="org.jkiss.dbeaver.mm.session.consent" style="toggle"/>
         </menuContribution>
     </extension>
