@@ -19,6 +19,7 @@ package org.jkiss.dbeaver.ui.data.hints;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -34,6 +35,7 @@ import java.util.TreeMap;
 
 /**
  * dbeaver-mm K68: data_tp column pair recognition and connection target mapping store.
+ * dbeaver-mm K72: tenant başına data_tp eşleme dosyası (saf Java).
  * <p>
  * Saf Java: yalnız {@code java.*} kullanır, böylece Eclipse olmadan test edilebilir.
  * Kayıt dosyası satır biçimi: {@code ANAHTAR=bağlantıId|şema}.
@@ -50,6 +52,17 @@ public final class DataTpStore {
     }
 
     public record Target(String connectionId, String schema) {
+    }
+
+    // dbeaver-mm K72: eşlenen hedef tablo (tablo, bağlantı ve şema)
+    public record Entry(String table, String connectionId, String schema) {
+    }
+
+    // dbeaver-mm K72: tenant dosyasının içeriği
+    public record TenantMap(String typeConnectionId, String typeSchema, Map<String, Entry> types, String built) {
+        public TenantMap {
+            types = types == null ? Map.of() : Map.copyOf(types);
+        }
     }
 
     public static boolean isDataTp(String columnName) {
@@ -148,5 +161,135 @@ public final class DataTpStore {
         } finally {
             Files.deleteIfExists(temp);
         }
+    }
+
+    // dbeaver-mm K72: bağlantı adının ilk kelimesi tenant kimliğidir (T3 CRM -> T3)
+    public static String tenantOf(String connectionName) {
+        if (connectionName == null) {
+            return "";
+        }
+        String stripped = connectionName.strip();
+        if (stripped.isEmpty()) {
+            return "";
+        }
+        int end = 0;
+        while (end < stripped.length() && !Character.isWhitespace(stripped.charAt(end))) {
+            end++;
+        }
+        return stripped.substring(0, end).toUpperCase(Locale.ROOT);
+    }
+
+    // dbeaver-mm K72: sayılar tek biçime indirilir, sayı olmayan metin yalnız kırpılır
+    public static String typeKey(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value instanceof CharSequence ? value.toString().strip() : value.toString();
+        try {
+            return new BigDecimal(text).stripTrailingZeros().toPlainString();
+        } catch (NumberFormatException e) {
+            return text.strip();
+        }
+    }
+
+    // dbeaver-mm K72: tenant eşleme dosyalarının dizini
+    public static Path tenantDir() {
+        return Paths.get(System.getProperty("user.home"), ".dbeaver-mm", "data-tp");
+    }
+
+    // dbeaver-mm K72: tenant adı güvenli dosya adına çevrilir (a/b -> A_B)
+    public static Path tenantFile(Path dir, String tenant) {
+        String upper = tenant == null ? "" : tenant.toUpperCase(Locale.ROOT);
+        StringBuilder name = new StringBuilder(upper.length());
+        for (int i = 0; i < upper.length(); i++) {
+            char c = upper.charAt(i);
+            boolean safe = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+            name.append(safe ? c : '_');
+        }
+        if (name.length() == 0) {
+            name.append('_');
+        }
+        return dir.resolve(name + ".properties");
+    }
+
+    // dbeaver-mm K72: tenant dosyasını okur; yok ya da okunamazsa boş eşleme, asla fırlatmaz
+    public static TenantMap loadTenant(Path file) {
+        if (file == null) {
+            return new TenantMap("", "", Map.of(), "");
+        }
+        Properties properties = new Properties();
+        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            properties.load(reader);
+        } catch (Exception e) {
+            return new TenantMap("", "", Map.of(), "");
+        }
+        Map<String, Entry> types = new HashMap<>();
+        for (String name : properties.stringPropertyNames()) {
+            if (!name.startsWith("tp.")) {
+                continue;
+            }
+            String dataTp = typeKey(name.substring(3));
+            if (dataTp == null || dataTp.isEmpty()) {
+                continue;
+            }
+            String value = properties.getProperty(name, "");
+            int first = value.indexOf('|');
+            if (first < 0) {
+                continue;
+            }
+            int second = value.indexOf('|', first + 1);
+            String table = value.substring(0, first).strip();
+            String connectionId = (second < 0 ? value.substring(first + 1) : value.substring(first + 1, second)).strip();
+            String schema = second < 0 ? "" : value.substring(second + 1).strip();
+            if (table.isEmpty() || connectionId.isEmpty()) {
+                continue;
+            }
+            types.put(dataTp, new Entry(table, connectionId, schema));
+        }
+        return new TenantMap(
+            properties.getProperty("type.connection", ""),
+            properties.getProperty("type.schema", ""),
+            types,
+            properties.getProperty("built", ""));
+    }
+
+    // dbeaver-mm K72: tenant dosyasını atomik yazar; loadTenant ile birebir geri okunur
+    public static void saveTenant(Path file, TenantMap map) throws IOException {
+        Path parent = file.toAbsolutePath().getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Path temp = Files.createTempFile(parent, "data-tp", ".tmp");
+        try {
+            Properties properties = new Properties();
+            properties.setProperty("type.connection", emptyIfNull(map.typeConnectionId()));
+            properties.setProperty("type.schema", emptyIfNull(map.typeSchema()));
+            properties.setProperty("built", emptyIfNull(map.built()));
+            for (Map.Entry<String, Entry> e : map.types().entrySet()) {
+                String key = typeKey(e.getKey());
+                Entry entry = e.getValue();
+                if (key == null || key.isEmpty() || entry == null
+                    || entry.table() == null || entry.table().isBlank()
+                    || entry.connectionId() == null || entry.connectionId().isBlank()) {
+                    continue;
+                }
+                properties.setProperty("tp." + key,
+                    entry.table().strip() + "|" + entry.connectionId().strip() + "|" + emptyIfNull(entry.schema()).strip());
+            }
+            try (Writer writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
+                properties.store(writer, "dbeaver-mm data_tp tenant mapping");
+            }
+            try {
+                Files.move(temp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temp);
+        }
+    }
+
+    private static String emptyIfNull(String value) {
+        return value == null ? "" : value;
     }
 }
