@@ -1692,6 +1692,9 @@
         <!-- dbeaver-mm K73: where data_tp ids point, per tenant -->
         <command id="org.jkiss.dbeaver.mm.datatp.settings" categoryId="org.jkiss.dbeaver.core.util"
             name="data_tp mapping..." description="Where data_tp ids point: type table and target tables per tenant"/>
+        <!-- dbeaver-mm K77: local undo scripts written on grid Saves -->
+        <command id="org.jkiss.dbeaver.mm.undo.history" categoryId="org.jkiss.dbeaver.core.util"
+            name="Change history..." description="Undo scripts for rows changed or deleted from the grid"/>
         <!-- dbeaver-mm K49: recording only with consent, under a nickname -->
         <command id="org.jkiss.dbeaver.mm.session.consent" categoryId="org.jkiss.dbeaver.core.util"
             name="Automatic recording..." description="Turn recording on or off and pick the nickname records are kept under"/>
@@ -1703,12 +1706,17 @@
             class="org.jkiss.dbeaver.ui.controls.resultset.ids.IdApiSettings"/>
         <handler commandId="org.jkiss.dbeaver.mm.datatp.settings"
             class="org.jkiss.dbeaver.ui.data.hints.DataTpMapDialog$Handler"/>
+        <!-- dbeaver-mm K77: change history dialog -->
+        <handler commandId="org.jkiss.dbeaver.mm.undo.history"
+            class="org.jkiss.dbeaver.ui.controls.resultset.undo.UndoHistoryDialog$Handler"/>
         <handler commandId="org.jkiss.dbeaver.mm.session.consent"
             class="org.jkiss.dbeaver.ui.controls.resultset.session.RecordingConsent"/>
     </extension>
     <extension point="org.eclipse.ui.menus">
         <menuContribution allPopups="false" locationURI="menu:org.jkiss.dbeaver.mm.plus?before=support">
             <command commandId="org.jkiss.dbeaver.mm.session.toggle"/>
+            <!-- dbeaver-mm K77: undo scripts of grid changes -->
+            <command commandId="org.jkiss.dbeaver.mm.undo.history"/>
         </menuContribution>
         <!-- dbeaver-mm K53: settings go to Plus Settings, Plus keeps only the features -->
         <menuContribution allPopups="false" locationURI="menu:org.jkiss.dbeaver.mm.plus.settings?before=additions">
