@@ -39,6 +39,7 @@ import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.ui.UITask;
 import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.controls.resultset.internal.ResultSetMessages;
+import org.jkiss.dbeaver.ui.controls.resultset.undo.UndoCapture;
 import org.jkiss.dbeaver.utils.GeneralUtils;
 import org.jkiss.utils.CommonUtils;
 
@@ -124,6 +125,8 @@ class ResultSetPersister extends DBDResultSetDataUpdater<ResultSetPersister.Data
 
     @NotNull
     private final ResultSetViewer viewer;
+    // dbeaver-mm K76: collects executed changes and writes the local undo script after Save
+    private final UndoCapture undo = new UndoCapture();
     @NotNull
     private final DBDAttributeBinding[] columns;
 
@@ -424,6 +427,8 @@ class ResultSetPersister extends DBDResultSetDataUpdater<ResultSetPersister.Data
             for (DataStatementInfo stat : updateStatements) {
                 if (stat.isExecuted() && stat.row == row) {
                     reflectKeysUpdate(stat);
+                    // dbeaver-mm K76: capture old values before clearChanges releases them
+                    undo.updated(stat, stat.row, viewer);
                     row.clearChanges();
                     break;
                 }
@@ -433,21 +438,30 @@ class ResultSetPersister extends DBDResultSetDataUpdater<ResultSetPersister.Data
             for (DataStatementInfo stat : insertStatements) {
                 if (stat.isExecuted() && stat.row == row) {
                     reflectKeysUpdate(stat);
+                    // dbeaver-mm K76: capture the inserted row after generated keys were reflected
+                    undo.inserted(stat, stat.row, viewer);
                     row.setState(ResultSetRow.STATE_NORMAL);
                     break;
                 }
             }
         }
         for (ResultSetRow row : deletedRows) {
+            // dbeaver-mm K76: cascade statements share the row and come first, so capture all of them, then release the row once
+            boolean executed = false;
             for (DataStatementInfo stat : deleteStatements) {
                 if (stat.isExecuted() && stat.row == row) {
-                    model.cleanupRow(row);
-                    rowsChanged = true;
-                    break;
+                    undo.deleted(stat, stat.row, viewer);
+                    executed = true;
                 }
+            }
+            if (executed) {
+                model.cleanupRow(row);
+                rowsChanged = true;
             }
         }
 
+        // dbeaver-mm K76: write collected changes as a local undo script
+        undo.flush(viewer);
         model.refreshChangeCount();
         return rowsChanged;
     }
