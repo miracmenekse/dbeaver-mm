@@ -32,6 +32,10 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Shell;
+import org.eclipse.swt.widgets.Table;
+import org.eclipse.swt.widgets.TableColumn;
+import org.eclipse.swt.widgets.TableItem;
+import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.handlers.HandlerUtil;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
@@ -481,6 +485,10 @@ public class DataTpMapDialog extends Dialog {
                 } else if (candidates.size() > 1) {
                     DataTpStore.Entry previous = saved.get(type.getKey());
                     row.chosen = previous == null ? null : findPlace(candidates, previous);
+                } else {
+                    // dbeaver-mm K80: previous pick that still exists in allPlaces stays selected
+                    DataTpStore.Entry previous = saved.get(type.getKey());
+                    row.chosen = previous == null ? null : findPlace(allPlaces, previous);
                 }
                 built.add(row);
             }
@@ -654,6 +662,12 @@ public class DataTpMapDialog extends Dialog {
         for (Control child : rowsArea.getChildren()) {
             child.dispose();
         }
+        // dbeaver-mm K80: map a table name to its first place in allPlaces (case-insensitive)
+        Map<String, Place> placeByName = new LinkedHashMap<>();
+        for (Place place : allPlaces) {
+            placeByName.putIfAbsent(place.table().toLowerCase(Locale.ROOT), place);
+        }
+        List<String> allTableNames = allPlaces.stream().map(Place::table).toList();
         for (Row row : rows) {
             Composite line = new Composite(rowsArea, SWT.NONE);
             line.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
@@ -686,6 +700,73 @@ public class DataTpMapDialog extends Dialog {
                     schemaLabel.setText(row.chosen == null ? "-" : row.chosen.schema());
                     statusLabel.setText(status(row));
                 });
+            } else if (row.candidates.isEmpty()) {
+                // dbeaver-mm K80: not-found row gets a combo with close names + "Choose a table..."
+                Combo combo = new Combo(line, SWT.DROP_DOWN | SWT.READ_ONLY);
+                combo.add("- not found, pick a close table -");
+                List<String> closeNames = DataTpMatch.closest(
+                    row.table == null ? "" : row.table,
+                    allTableNames,
+                    10
+                );
+                List<Place> closePlaces = new ArrayList<>();
+                for (String name : closeNames) {
+                    Place place = placeByName.get(name.toLowerCase(Locale.ROOT));
+                    if (place == null) {
+                        continue;
+                    }
+                    closePlaces.add(place);
+                    combo.add(placeText(place));
+                }
+                // dbeaver-mm K80: a table picked with "Choose a table..." stays visible in the combo
+                if (row.chosen != null && !closePlaces.contains(row.chosen)) {
+                    closePlaces.add(0, row.chosen);
+                    combo.add(placeText(row.chosen), 1);
+                }
+                combo.add("Choose a table...");
+                int selected = 0;
+                for (int i = 0; i < closePlaces.size(); i++) {
+                    if (closePlaces.get(i).equals(row.chosen)) {
+                        selected = i + 1;
+                    }
+                }
+                combo.select(selected);
+                GridData comboData = new GridData(SWT.FILL, SWT.CENTER, false, false);
+                comboData.widthHint = 240;
+                combo.setLayoutData(comboData);
+                String initialSchema = row.chosen == null ? "-" : row.chosen.schema();
+                schemaLabel = label(line, initialSchema, 110);
+                Label statusLabel = label(line, status(row), 110);
+                combo.addListener(SWT.Selection, e -> {
+                    int picked = combo.getSelectionIndex();
+                    if (picked <= 0) {
+                        row.chosen = null;
+                    } else if (picked <= closePlaces.size()) {
+                        row.chosen = closePlaces.get(picked - 1);
+                    } else {
+                        // "Choose a table..."
+                        ChooseTableDialog dialog = new ChooseTableDialog(getShell(), allPlaces, row.chosen);
+                        if (dialog.open() == IDialogConstants.OK_ID) {
+                            Place pickedPlace = dialog.getSelected();
+                            if (pickedPlace != null) {
+                                row.chosen = pickedPlace;
+                                if (!closePlaces.contains(pickedPlace)) {
+                                    closePlaces.add(0, pickedPlace);
+                                    combo.add(placeText(pickedPlace), 1);
+                                }
+                            }
+                        }
+                        int reset = 0;
+                        for (int i = 0; i < closePlaces.size(); i++) {
+                            if (closePlaces.get(i).equals(row.chosen)) {
+                                reset = i + 1;
+                            }
+                        }
+                        combo.select(reset);
+                    }
+                    schemaLabel.setText(row.chosen == null ? "-" : row.chosen.schema());
+                    statusLabel.setText(status(row));
+                });
             } else {
                 label(line, row.chosen == null ? "-" : row.chosen.connectionName(), 240);
                 label(line, row.chosen == null ? "-" : row.chosen.schema(), 110);
@@ -711,10 +792,143 @@ public class DataTpMapDialog extends Dialog {
         if (row.candidates.size() > 1) {
             return "⚠ " + row.candidates.size() + " places";
         }
-        if (row.candidates.isEmpty() && row.chosen == null) {
-            return "✕ not found";
+        if (row.candidates.isEmpty()) {
+            return row.chosen == null ? "✕ not found" : "✎ picked";
         }
         return "✓";
+    }
+
+    @NotNull
+    private static String placeText(@NotNull Place place) {
+        return place.table() + " · " + place.connectionName() + " / " + place.schema();
+    }
+
+    /** dbeaver-mm K80: small dialog to pick any table from allPlaces */
+    private static final class ChooseTableDialog extends Dialog {
+        private final List<Place> places;
+        private final Place initial;
+        private Place selected;
+        private Text filterText;
+        private Table table;
+        private Label countLabel;
+
+        ChooseTableDialog(@NotNull Shell parent, @NotNull List<Place> places, @Nullable Place initial) {
+            super(parent);
+            this.places = places;
+            this.initial = initial;
+            this.selected = initial;
+        }
+
+        @Override
+        protected void configureShell(Shell shell) {
+            super.configureShell(shell);
+            shell.setText("Choose a table");
+        }
+
+        @Override
+        protected boolean isResizable() {
+            return true;
+        }
+
+        @Override
+        protected Control createDialogArea(Composite parent) {
+            Composite area = (Composite) super.createDialogArea(parent);
+            area.setLayout(new GridLayout(1, false));
+            GridData areaData = new GridData(SWT.FILL, SWT.FILL, true, true);
+            areaData.widthHint = 520;
+            areaData.heightHint = 360;
+            area.setLayoutData(areaData);
+
+            filterText = new Text(area, SWT.SEARCH | SWT.BORDER);
+            filterText.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+            filterText.setMessage("type to filter");
+
+            table = new Table(area, SWT.SINGLE | SWT.FULL_SELECTION | SWT.BORDER | SWT.V_SCROLL);
+            GridData tableData = new GridData(SWT.FILL, SWT.FILL, true, true);
+            tableData.heightHint = 260;
+            table.setLayoutData(tableData);
+            table.setHeaderVisible(true);
+            table.setLinesVisible(true);
+            TableColumn c1 = new TableColumn(table, SWT.NONE);
+            c1.setText("Table");
+            c1.setWidth(200);
+            TableColumn c2 = new TableColumn(table, SWT.NONE);
+            c2.setText("Connection");
+            c2.setWidth(180);
+            TableColumn c3 = new TableColumn(table, SWT.NONE);
+            c3.setText("Schema");
+            c3.setWidth(120);
+
+            countLabel = new Label(area, SWT.NONE);
+            countLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+
+            filterText.addListener(SWT.Modify, e -> populate(filterText.getText()));
+            table.addListener(SWT.MouseDoubleClick, e -> {
+                if (table.getSelectionIndex() >= 0) {
+                    okPressed();
+                }
+            });
+            populate("");
+            return area;
+        }
+
+        private void populate(@Nullable String filter) {
+            table.removeAll();
+            String needle = filter == null ? "" : filter.strip().toLowerCase(Locale.ROOT);
+            List<Place> matches = new ArrayList<>();
+            for (Place place : places) {
+                if (needle.isEmpty()
+                    || place.table().toLowerCase(Locale.ROOT).contains(needle)
+                    || place.connectionName().toLowerCase(Locale.ROOT).contains(needle)
+                    || place.schema().toLowerCase(Locale.ROOT).contains(needle)) {
+                    matches.add(place);
+                }
+            }
+            int total = matches.size();
+            int shown = Math.min(total, 500);
+            for (int i = 0; i < shown; i++) {
+                Place place = matches.get(i);
+                TableItem item = new TableItem(table, SWT.NONE);
+                item.setText(0, place.table());
+                item.setText(1, place.connectionName());
+                item.setText(2, place.schema());
+                item.setData(place);
+            }
+            if (total > 500) {
+                countLabel.setText("Showing 500 of " + total + ", type to narrow");
+            } else {
+                countLabel.setText(total + " of " + places.size());
+            }
+            if (selected != null) {
+                for (int i = 0; i < table.getItemCount(); i++) {
+                    if (selected.equals(table.getItem(i).getData())) {
+                        table.select(i);
+                        table.showSelection();
+                        break;
+                    }
+                }
+            }
+        }
+
+        @Override
+        protected void okPressed() {
+            int index = table.getSelectionIndex();
+            if (index >= 0) {
+                selected = (Place) table.getItem(index).getData();
+            }
+            super.okPressed();
+        }
+
+        @Override
+        protected void cancelPressed() {
+            selected = initial;
+            super.cancelPressed();
+        }
+
+        @Nullable
+        Place getSelected() {
+            return selected;
+        }
     }
 
     @Override

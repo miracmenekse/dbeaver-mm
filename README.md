@@ -281,3 +281,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K77 | 2026-10-26 | **Plus › Change history...**: lists the undo scripts (time, connection, table, change) with a preview; *Open in SQL editor* on the recorded connection, *Copy*, and a checkbox to turn undo scripts off. |
 | K78 | 2026-10-27 | Groundwork for the data_tp mapping fix: closest table names and a key that counts the same database/schema/table once (no visible change yet). |
 | K79 | 2026-10-27 | **data_tp mapping Build** opens the tenant's closed connections (those it can't open are named in the result), reads each connection once, and counts the same database/schema/table once, so a table no longer shows as dozens of places. |
+| K80 | 2026-10-27 | **data_tp mapping:** a table not found by name gets a drop-down with the 10 closest table names and *Choose a table...*, a filterable list of every table the Build found; the pick is saved like any other mapping (✎ picked). |
