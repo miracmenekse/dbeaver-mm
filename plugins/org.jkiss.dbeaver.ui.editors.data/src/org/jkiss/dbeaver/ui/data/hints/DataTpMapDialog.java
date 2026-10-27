@@ -495,7 +495,10 @@ public class DataTpMapDialog extends Dialog {
                 searched++;
                 progress.accept("Reading tables of " + container.getName() + " (" + searched + "/" + open.size() + ")...");
                 List<Place> found = new ArrayList<>();
-                collectAllPlaces(monitor, containerRoot, 2, container, found);
+                // dbeaver-mm K82: one catalog query per connection; walking every schema over SSH took hours
+                if (!queryAllPlaces(monitor, container, found)) {
+                    collectAllPlaces(monitor, containerRoot, 2, container, found);
+                }
                 String database = databaseIdentity(container);
                 for (Place place : found) {
                     unique.putIfAbsent(DataTpMatch.placeKey(database, place.schema(), place.table()), place);
@@ -554,6 +557,42 @@ public class DataTpMapDialog extends Dialog {
             }
         }
         return null;
+    }
+
+    /** dbeaver-mm K82: every table of the connection from information_schema; false when the query can't run */
+    private static boolean queryAllPlaces(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBPDataSourceContainer connection,
+        @NotNull List<Place> found
+    ) {
+        DBCExecutionContext context = DBUtils.getDefaultContext(connection.getDataSource(), true);
+        if (context == null) {
+            return false;
+        }
+        String query = "SELECT table_schema, table_name FROM information_schema.tables"
+            + " WHERE table_schema NOT IN ('pg_catalog', 'information_schema')";
+        List<Place> rows = new ArrayList<>();
+        try (DBCSession session = context.openSession(monitor, DBCExecutionPurpose.UTIL, "Read table names");
+             DBCStatement statement = session.prepareStatement(DBCStatementType.QUERY, query, false, false, false)) {
+            if (!statement.executeStatement()) {
+                return false;
+            }
+            try (DBCResultSet resultSet = statement.openResultSet()) {
+                while (resultSet != null && !monitor.isCanceled() && resultSet.nextRow()) {
+                    Object schema = resultSet.getAttributeValue(0);
+                    Object table = resultSet.getAttributeValue(1);
+                    if (table != null) {
+                        rows.add(new Place(connection.getId(), connection.getName(),
+                            schema == null ? "" : String.valueOf(schema), String.valueOf(table)));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Can't query table names of " + connection.getName(), e);
+            return false;
+        }
+        found.addAll(rows);
+        return true;
     }
 
     /** dbeaver-mm K79: every table up to two container levels below {@code container} */

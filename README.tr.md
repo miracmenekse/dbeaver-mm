@@ -290,3 +290,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K79 | 2026-10-27 | **data_tp mapping Build** tenant'ın kapalı bağlantılarını açar (açılamayanlar sonuçta adıyla yazılır), her bağlantıyı bir kez okur ve aynı veritabanı/şema/tabloyu bir kez sayar; tablo artık onlarca yer gibi görünmez. |
 | K80 | 2026-10-27 | **data_tp mapping:** adıyla bulunamayan tabloda en yakın 10 tablo adı ve *Choose a table...* (Build'in bulduğu tüm tabloların filtreli listesi) çıkar; seçim diğer eşlemeler gibi kaydedilir (✎ picked). |
 | K81 | 2026-10-27 | **data_tp mapping:** Build hangi bağlantıyı açtığını ya da okuduğunu gösterir (*Opening T3 X (3/9)...*); düğme *Stop* olur, pencere kapanınca Build durur. |
+| K82 | 2026-10-27 | **data_tp mapping:** Build her bağlantının tablolarını şemaları tek tek açmak yerine tek bir `information_schema` sorgusuyla okur; SSH üzerinden arama saatlerden saniyelere iner. |
