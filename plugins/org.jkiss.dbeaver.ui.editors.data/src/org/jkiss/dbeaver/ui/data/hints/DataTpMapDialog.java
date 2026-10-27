@@ -41,7 +41,6 @@ import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
-import org.jkiss.dbeaver.model.DBPDataSource;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.DBPEvaluationContext;
 import org.jkiss.dbeaver.model.DBUtils;
@@ -78,6 +77,8 @@ import java.util.function.Consumer;
  * connection and schema hold {@code etiya_type_value}, then "Build mapping" finds every target table
  * of every {@code data_tp} id in the tenant's connected connections. Rows with one place or a picked
  * ambiguous place are saved to the tenant's own mapping file.
+ * dbeaver-mm K87: one connection per tenant; Build searches only the checked schemas of it, and the
+ * schema of {@code etiya_type_value} is found among them.
  * <p>
  * All queries, connection opens and file reads/writes run in background jobs; the UI thread only
  * builds widgets and applies job results with {@link UIUtils#asyncExec}.
@@ -107,7 +108,8 @@ public class DataTpMapDialog extends Dialog {
     }
 
     /** dbeaver-mm K73: background build result, applied on the UI thread */
-    private record Built(List<Row> rows, List<Place> allPlaces, String message) { // dbeaver-mm K79: allPlaces
+    // dbeaver-mm K79: allPlaces; dbeaver-mm K87: typeSchema = schema etiya_type_value was read from
+    private record Built(List<Row> rows, List<Place> allPlaces, String typeSchema, String message) {
     }
 
     /** dbeaver-mm K73: background read of a tenant file */
@@ -118,7 +120,9 @@ public class DataTpMapDialog extends Dialog {
 
     private Combo tenantCombo;
     private Combo typeConnectionCombo;
-    private Combo typeSchemaCombo;
+    // dbeaver-mm K87: schemas of the selected connection, checked = searched by Build
+    private Table schemaTable;
+    private Label schemaCountLabel;
     private Button buildButton;
     private Label builtLabel;
     private Label messageLabel;
@@ -135,6 +139,11 @@ public class DataTpMapDialog extends Dialog {
     private boolean building;
     /** dbeaver-mm K81: the running build, stopped by the Stop button or by closing the dialog */
     private AbstractJob buildJob;
+    /** dbeaver-mm K87: schema list of the selected connection is loaded; Build needs it */
+    private boolean schemasReady;
+    private int schemaGeneration;
+    /** dbeaver-mm K87: schema etiya_type_value was found in by the last Build; null = keep the saved one */
+    private String foundTypeSchema;
 
     public DataTpMapDialog(@NotNull Shell shell) {
         super(shell);
@@ -170,23 +179,45 @@ public class DataTpMapDialog extends Dialog {
         area.setLayout(new GridLayout(2, false));
         GridData areaData = new GridData(SWT.FILL, SWT.FILL, true, true);
         areaData.widthHint = 720;
-        areaData.heightHint = 440;
+        areaData.heightHint = 560; // dbeaver-mm K87: room for the schema list
         area.setLayoutData(areaData);
 
         new Label(area, SWT.NONE).setText("Tenant:");
         tenantCombo = new Combo(area, SWT.DROP_DOWN | SWT.READ_ONLY);
         tenantCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
-        Composite typeRow = new Composite(area, SWT.NONE);
-        typeRow.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
-        typeRow.setLayout(new GridLayout(4, false));
-        new Label(typeRow, SWT.NONE).setText(DataTpStore.TYPE_TABLE + ":");
-        typeConnectionCombo = new Combo(typeRow, SWT.DROP_DOWN | SWT.READ_ONLY);
+        // dbeaver-mm K87: one connection of the tenant + its schemas as a check list (no etiya_type_value schema box)
+        new Label(area, SWT.NONE).setText("Connection:");
+        typeConnectionCombo = new Combo(area, SWT.DROP_DOWN | SWT.READ_ONLY);
         GridData connectionData = new GridData(SWT.FILL, SWT.CENTER, true, false);
         connectionData.widthHint = 220;
         typeConnectionCombo.setLayoutData(connectionData);
-        typeSchemaCombo = new Combo(typeRow, SWT.DROP_DOWN);
-        typeSchemaCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+
+        Label schemasLabel = new Label(area, SWT.NONE);
+        schemasLabel.setText("Schemas:");
+        schemasLabel.setLayoutData(new GridData(SWT.BEGINNING, SWT.BEGINNING, false, false));
+        Composite schemaRow = new Composite(area, SWT.NONE);
+        schemaRow.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        GridLayout schemaLayout = new GridLayout(2, false);
+        schemaLayout.marginWidth = 0;
+        schemaLayout.marginHeight = 0;
+        schemaRow.setLayout(schemaLayout);
+        schemaTable = new Table(schemaRow, SWT.CHECK | SWT.BORDER | SWT.V_SCROLL);
+        GridData schemaData = new GridData(SWT.FILL, SWT.FILL, true, false);
+        schemaData.heightHint = schemaTable.getItemHeight() * 6;
+        schemaTable.setLayoutData(schemaData);
+        Composite schemaSide = new Composite(schemaRow, SWT.NONE);
+        schemaSide.setLayoutData(new GridData(SWT.BEGINNING, SWT.BEGINNING, false, false));
+        schemaSide.setLayout(new GridLayout(1, false));
+        schemaCountLabel = new Label(schemaSide, SWT.NONE);
+        schemaCountLabel.setText("0 of 0 schemas");
+        GridData countData = new GridData(SWT.FILL, SWT.CENTER, false, false);
+        countData.widthHint = 130;
+        schemaCountLabel.setLayoutData(countData);
+        Button allButton = new Button(schemaSide, SWT.PUSH);
+        allButton.setText("All");
+        Button noneButton = new Button(schemaSide, SWT.PUSH);
+        noneButton.setText("None");
 
         Composite buildRow = new Composite(area, SWT.NONE);
         buildRow.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
@@ -217,6 +248,14 @@ public class DataTpMapDialog extends Dialog {
             }
         });
         typeConnectionCombo.addListener(SWT.Selection, e -> loadSchemas());
+        // dbeaver-mm K87: check list count and All/None
+        schemaTable.addListener(SWT.Selection, e -> {
+            if (e.detail == SWT.CHECK) {
+                updateSchemaCount();
+            }
+        });
+        allButton.addListener(SWT.Selection, e -> checkAllSchemas(true));
+        noneButton.addListener(SWT.Selection, e -> checkAllSchemas(false));
         buildButton.addListener(SWT.Selection, e -> build());
 
         TreeSet<String> tenants = new TreeSet<>();
@@ -291,8 +330,7 @@ public class DataTpMapDialog extends Dialog {
         } else if (!tenantConnections.isEmpty()) {
             typeConnectionCombo.select(0);
         }
-        typeSchemaCombo.removeAll();
-        typeSchemaCombo.setText(loaded.typeSchema() == null ? "" : loaded.typeSchema());
+        foundTypeSchema = null; // dbeaver-mm K87: saved typeSchema is kept until a Build finds one
         builtLabel.setText("last built: " + (loaded.built().isEmpty() ? "-" : loaded.built()));
 
         rows = new ArrayList<>();
@@ -306,11 +344,16 @@ public class DataTpMapDialog extends Dialog {
             rows.add(new Row(entry.getKey(), value.table(), place));
         }
         renderRows();
-        messageLabel.setText(rows.isEmpty()
-            ? "Pick the connection and schema of " + DataTpStore.TYPE_TABLE + ", then Build mapping."
-            : rows.size() + " saved types. Build mapping refreshes them.");
-        buildButton.setEnabled(!tenantConnections.isEmpty());
-        loadSchemas();
+        messageLabel.setText(idleMessage());
+        loadSchemas(); // dbeaver-mm K87: Build is enabled once the schema list is in
+    }
+
+    /** dbeaver-mm K87: message shown when nothing is running */
+    @NotNull
+    private String idleMessage() {
+        return rows.isEmpty()
+            ? "Uncheck the schemas not to search, then Build mapping."
+            : rows.size() + " saved types. Build mapping refreshes them.";
     }
 
     @Nullable
@@ -326,47 +369,163 @@ public class DataTpMapDialog extends Dialog {
         return null;
     }
 
-    /** dbeaver-mm K73: schema names of the type connection, read in the background when it is connected */
+    /** dbeaver-mm K87: opens the selected connection in the background and lists its schemas, checked from the saved choice */
     private void loadSchemas() {
         if (typeConnectionCombo == null || typeConnectionCombo.isDisposed()) {
             return;
         }
+        schemasReady = false;
+        schemaTable.removeAll();
+        updateSchemaCount();
+        if (!building) {
+            buildButton.setEnabled(false);
+        }
         int index = typeConnectionCombo.getSelectionIndex();
-        DBPDataSourceContainer container = index < 0 || index >= tenantConnections.size() ? null : tenantConnections.get(index);
-        String current = typeSchemaCombo.getText();
-        if (container == null || !container.isConnected() || container.getDataSource() == null) {
-            typeSchemaCombo.setItems(new String[0]);
-            typeSchemaCombo.setText(current);
+        if (index < 0 || index >= tenantConnections.size()) {
             return;
         }
+        final DBPDataSourceContainer container = tenantConnections.get(index);
+        final List<String> saved = map.schemas();
+        final int generation = loadGeneration;
+        final int run = ++schemaGeneration;
         new AbstractJob("Read schemas of " + container.getName()) {
             @Override
             protected IStatus run(@NotNull DBRProgressMonitor monitor) {
-                List<String> names = new ArrayList<>();
+                List<String> names = List.of();
+                String error = null;
                 try {
-                    DBSObjectContainer root = DBUtils.getAdapter(DBSObjectContainer.class, container.getDataSource());
-                    Collection<? extends DBSObject> children = root == null ? null : root.getChildren(monitor);
-                    if (children != null) {
-                        for (DBSObject child : children) {
-                            if (child instanceof DBSObjectContainer && !(child instanceof DBSEntity)) {
-                                names.add(child.getName());
+                    if (!container.isConnected()) {
+                        UIUtils.asyncExec(() -> {
+                            if (isCurrent(generation, run, index)) {
+                                messageLabel.setText("Opening " + container.getName() + "...");
                             }
-                        }
+                        });
+                        container.connect(monitor, true, true);
+                    }
+                    if (container.isConnected() && container.getDataSource() != null) {
+                        names = readSchemas(monitor, container);
+                    } else {
+                        error = "not connected";
                     }
                 } catch (Exception e) {
-                    log.debug("Can't read schemas of " + container.getName(), e);
+                    log.debug("Can't open " + container.getName(), e);
+                    error = e.getMessage();
                 }
+                final List<String> found = names;
+                final String failure = error;
                 UIUtils.asyncExec(() -> {
-                    if (typeSchemaCombo == null || typeSchemaCombo.isDisposed()
-                        || typeConnectionCombo.getSelectionIndex() != index) {
+                    if (!isCurrent(generation, run, index)) {
+                        return; // a newer tenant or connection was picked meanwhile
+                    }
+                    if (failure != null) {
+                        messageLabel.setText("Can't open " + container.getName() + ": " + failure);
                         return;
                     }
-                    typeSchemaCombo.setItems(names.toArray(new String[0]));
-                    typeSchemaCombo.setText(current);
+                    List<String> checked = DataTpStore.checkedSchemas(found, saved);
+                    for (String name : found) {
+                        TableItem item = new TableItem(schemaTable, SWT.NONE);
+                        item.setText(name);
+                        item.setChecked(checked.contains(name));
+                    }
+                    updateSchemaCount();
+                    schemasReady = !found.isEmpty();
+                    if (!building) {
+                        buildButton.setEnabled(schemasReady);
+                        messageLabel.setText(schemasReady ? idleMessage() : "No schemas in " + container.getName() + ".");
+                    }
                 });
                 return Status.OK_STATUS;
             }
         }.schedule();
+    }
+
+    /** dbeaver-mm K87: a schema list result still belongs to what is on screen */
+    private boolean isCurrent(int generation, int run, int index) {
+        return generation == loadGeneration && run == schemaGeneration
+            && schemaTable != null && !schemaTable.isDisposed()
+            && typeConnectionCombo.getSelectionIndex() == index;
+    }
+
+    /** dbeaver-mm K87: schema names from information_schema, else the navigator's top containers */
+    @NotNull
+    private static List<String> readSchemas(@NotNull DBRProgressMonitor monitor, @NotNull DBPDataSourceContainer container) {
+        List<String> names = queryStrings(monitor, container,
+            "SELECT schema_name FROM information_schema.schemata"
+                + " WHERE schema_name NOT IN ('pg_catalog', 'information_schema')"
+                + " AND schema_name NOT LIKE 'pg\\_%' ORDER BY 1");
+        if (names != null) {
+            return names;
+        }
+        names = new ArrayList<>();
+        try {
+            DBSObjectContainer root = DBUtils.getAdapter(DBSObjectContainer.class, container.getDataSource());
+            Collection<? extends DBSObject> children = root == null ? null : root.getChildren(monitor);
+            if (children != null) {
+                for (DBSObject child : children) {
+                    if (child instanceof DBSObjectContainer && !(child instanceof DBSEntity)) {
+                        names.add(child.getName());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Can't read schemas of " + container.getName(), e);
+        }
+        return names;
+    }
+
+    /** dbeaver-mm K87: first column of a catalog query; null when it can't run */
+    @Nullable
+    private static List<String> queryStrings(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBPDataSourceContainer connection,
+        @NotNull String query
+    ) {
+        DBCExecutionContext context = DBUtils.getDefaultContext(connection.getDataSource(), true);
+        if (context == null) {
+            return null;
+        }
+        List<String> values = new ArrayList<>();
+        try (DBCSession session = context.openSession(monitor, DBCExecutionPurpose.UTIL, "Read catalog");
+             DBCStatement statement = session.prepareStatement(DBCStatementType.QUERY, query, false, false, false)) {
+            if (!statement.executeStatement()) {
+                return null;
+            }
+            try (DBCResultSet resultSet = statement.openResultSet()) {
+                while (resultSet != null && !monitor.isCanceled() && resultSet.nextRow()) {
+                    Object value = resultSet.getAttributeValue(0);
+                    if (value != null) {
+                        values.add(String.valueOf(value));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Can't run catalog query on " + connection.getName(), e);
+            return null;
+        }
+        return values;
+    }
+
+    /** dbeaver-mm K87: names of the checked schemas, in list order */
+    @NotNull
+    private List<String> checkedSchemaNames() {
+        List<String> names = new ArrayList<>();
+        for (TableItem item : schemaTable.getItems()) {
+            if (item.getChecked()) {
+                names.add(item.getText());
+            }
+        }
+        return names;
+    }
+
+    private void updateSchemaCount() {
+        schemaCountLabel.setText(checkedSchemaNames().size() + " of " + schemaTable.getItemCount() + " schemas");
+    }
+
+    private void checkAllSchemas(boolean checked) {
+        for (TableItem item : schemaTable.getItems()) {
+            item.setChecked(checked);
+        }
+        updateSchemaCount();
     }
 
     /** dbeaver-mm K73: Build mapping in a background job; the type connection is opened if needed */
@@ -379,13 +538,18 @@ public class DataTpMapDialog extends Dialog {
             return;
         }
         int index = typeConnectionCombo.getSelectionIndex();
-        if (building || index < 0 || index >= tenantConnections.size()) {
-            messageLabel.setText("Pick the connection that holds " + DataTpStore.TYPE_TABLE + ".");
+        if (index < 0 || index >= tenantConnections.size()) {
+            messageLabel.setText("Pick a connection.");
+            return;
+        }
+        // dbeaver-mm K87: only the selected connection, only its checked schemas
+        final List<String> schemas = checkedSchemaNames();
+        if (schemas.isEmpty()) {
+            messageLabel.setText("Check at least one schema.");
             return;
         }
         final DBPDataSourceContainer typeConnection = tenantConnections.get(index);
-        final String typeSchema = typeSchemaCombo.getText().strip();
-        final List<DBPDataSourceContainer> connections = List.copyOf(tenantConnections);
+        final String savedTypeSchema = foundTypeSchema != null ? foundTypeSchema : map.typeSchema();
         final Map<String, DataTpStore.Entry> saved = new HashMap<>(map.types());
         final int generation = loadGeneration;
         building = true;
@@ -400,7 +564,7 @@ public class DataTpMapDialog extends Dialog {
                         messageLabel.setText(text);
                     }
                 });
-                Built result = doBuild(monitor, typeConnection, typeSchema, connections, saved, progress);
+                Built result = doBuild(monitor, typeConnection, schemas, savedTypeSchema, saved, progress);
                 UIUtils.asyncExec(() -> {
                     if (buildButton == null || buildButton.isDisposed()) {
                         return;
@@ -408,13 +572,18 @@ public class DataTpMapDialog extends Dialog {
                     building = false;
                     buildJob = null;
                     buildButton.setText("Build mapping");
-                    buildButton.setEnabled(!tenantConnections.isEmpty());
+                    buildButton.setEnabled(schemasReady); // dbeaver-mm K87
                     if (generation != loadGeneration) {
                         return; // dbeaver-mm K81: tenant changed meanwhile; drop the result, keep the button usable
+                    }
+                    if (typeConnectionCombo.getSelectionIndex() != index) {
+                        messageLabel.setText("Connection changed during Build; Build again."); // dbeaver-mm K87
+                        return;
                     }
                     if (result.rows() != null) {
                         rows = result.rows();
                         allPlaces = result.allPlaces();
+                        foundTypeSchema = result.typeSchema(); // dbeaver-mm K87: saved by OK
                         renderRows();
                     }
                     messageLabel.setText(result.message());
@@ -433,81 +602,65 @@ public class DataTpMapDialog extends Dialog {
         return super.close();
     }
 
+    /** dbeaver-mm K87: one connection, only the checked schemas; no other tenant connection is opened */
     @NotNull
     private Built doBuild(
         @NotNull DBRProgressMonitor monitor,
-        @NotNull DBPDataSourceContainer typeConnection,
-        @NotNull String typeSchema,
-        @NotNull List<DBPDataSourceContainer> connections,
+        @NotNull DBPDataSourceContainer connection,
+        @NotNull List<String> schemas,
+        @Nullable String savedTypeSchema,
         @NotNull Map<String, DataTpStore.Entry> saved,
         @NotNull Consumer<String> progress
     ) {
+        String name = connection.getName();
         try {
-            if (!typeConnection.isConnected()) {
-                progress.accept("Opening " + typeConnection.getName() + "...");
-                typeConnection.connect(monitor, true, true);
+            if (!connection.isConnected()) {
+                progress.accept("Opening " + name + "...");
+                connection.connect(monitor, true, true);
             }
-            if (!typeConnection.isConnected() || typeConnection.getDataSource() == null) {
-                return new Built(null, null, "Connection " + typeConnection.getName() + " is not connected.");
+            if (!connection.isConnected() || connection.getDataSource() == null) {
+                return new Built(null, null, null, "Connection " + name + " is not connected.");
             }
-            DBSObjectContainer root = DBUtils.getAdapter(DBSObjectContainer.class, typeConnection.getDataSource());
+            // dbeaver-mm K87: schema of etiya_type_value among the checked schemas
+            progress.accept("Finding " + DataTpStore.TYPE_TABLE + "...");
+            List<String> typeSchemas = queryStrings(monitor, connection,
+                "SELECT table_schema FROM information_schema.tables WHERE table_name = '" + DataTpStore.TYPE_TABLE
+                    + "' AND table_schema IN (" + DataTpStore.sqlList(schemas) + ") ORDER BY 1");
+            if (typeSchemas == null) {
+                return new Built(null, null, null, "Can't read tables of " + name + ".");
+            }
+            if (typeSchemas.isEmpty()) {
+                return new Built(null, null, null, "Can't find " + DataTpStore.TYPE_TABLE + " in the checked schemas.");
+            }
+            String typeSchema = typeSchemas.get(0);
+            String note = "";
+            if (typeSchemas.size() > 1) {
+                for (String candidate : typeSchemas) {
+                    if (candidate.equalsIgnoreCase(savedTypeSchema)) {
+                        typeSchema = candidate;
+                    }
+                }
+                note = " " + DataTpStore.TYPE_TABLE + " found in " + typeSchemas.size() + " schemas, used " + typeSchema + ".";
+            }
+            DBSObjectContainer root = DBUtils.getAdapter(DBSObjectContainer.class, connection.getDataSource());
             DBSEntity typeTable = root == null ? null : findTypeTable(monitor, root, typeSchema);
             if (typeTable == null) {
-                return new Built(null, null, "Can't find " + DataTpStore.TYPE_TABLE + " in "
-                    + (typeSchema.isEmpty() ? typeConnection.getName() : typeConnection.getName() + " / " + typeSchema) + ".");
+                return new Built(null, null, null, "Can't find " + DataTpStore.TYPE_TABLE + " in " + name + " / " + typeSchema + ".");
             }
             progress.accept("Reading " + DataTpStore.TYPE_TABLE + "...");
             Map<String, String> types = readTypes(monitor, typeTable);
-            // dbeaver-mm K79: open closed tenant connections; a connection that stays closed is reported
-            List<String> failed = new ArrayList<>();
-            List<DBPDataSourceContainer> open = new ArrayList<>();
-            for (int i = 0; i < connections.size(); i++) {
-                DBPDataSourceContainer container = connections.get(i);
-                if (monitor.isCanceled()) {
-                    return new Built(null, null, "Build canceled.");
-                }
-                try {
-                    if (!container.isConnected()) {
-                        progress.accept("Opening " + container.getName() + " (" + (i + 1) + "/" + connections.size() + ")...");
-                        container.connect(monitor, true, true);
-                    }
-                } catch (Exception e) {
-                    log.debug("Can't connect to " + container.getName(), e);
-                }
-                if (container.isConnected() && container.getDataSource() != null) {
-                    open.add(container);
-                } else {
-                    failed.add(container.getName());
-                }
+            if (monitor.isCanceled()) {
+                return new Built(null, null, null, "Build canceled.");
             }
-            // dbeaver-mm K79: walk every connection once; the same database/schema/table counts once
-            Map<String, Place> unique = new LinkedHashMap<>();
-            int searched = 0;
-            for (DBPDataSourceContainer container : open) {
-                if (monitor.isCanceled()) {
-                    return new Built(null, null, "Build canceled.");
-                }
-                DBSObjectContainer containerRoot = DBUtils.getAdapter(DBSObjectContainer.class, container.getDataSource());
-                if (containerRoot == null) {
-                    failed.add(container.getName()); // dbeaver-mm K79: no silent skip
-                    continue;
-                }
-                searched++;
-                progress.accept("Reading tables of " + container.getName() + " (" + searched + "/" + open.size() + ")...");
-                List<Place> found = new ArrayList<>();
-                // dbeaver-mm K82: one catalog query per connection; walking every schema over SSH took hours
-                if (!queryAllPlaces(monitor, container, found)) {
-                    collectAllPlaces(monitor, containerRoot, 2, container, found);
-                }
-                String database = databaseIdentity(container);
-                for (Place place : found) {
-                    unique.putIfAbsent(DataTpMatch.placeKey(database, place.schema(), place.table()), place);
-                }
+            progress.accept("Reading tables of " + schemas.size() + " schemas of " + name + "...");
+            List<Place> found = new ArrayList<>();
+            if (!queryAllPlaces(monitor, connection, schemas, found)) {
+                return new Built(null, null, null, "Can't read tables of " + name + ".");
             }
             if (monitor.isCanceled()) {
-                return new Built(null, null, "Build canceled.");
+                return new Built(null, null, null, "Build canceled.");
             }
-            List<Place> allPlaces = List.copyOf(unique.values());
+            List<Place> allPlaces = List.copyOf(found);
             Map<String, List<Place>> byTable = new HashMap<>();
             for (Place place : allPlaces) {
                 byTable.computeIfAbsent(place.table().toLowerCase(Locale.ROOT), k -> new ArrayList<>()).add(place);
@@ -533,17 +686,14 @@ public class DataTpMapDialog extends Dialog {
             }
             long mapped = built.stream().filter(r -> r.chosen != null).count();
             String message = "Built " + built.size() + " data_tp ids, " + mapped
-                + " mapped in 1 place or by an earlier choice. Searched " + searched + " connections.";
-            if (!failed.isEmpty()) {
-                message += " Couldn't open: " + String.join(", ", failed) + ".";
-            }
-            return new Built(built, allPlaces, message);
+                + " mapped in 1 place or by an earlier choice. Searched " + schemas.size() + " schemas of " + name + "." + note;
+            return new Built(built, allPlaces, typeSchema, message);
         } catch (DBException e) {
             log.debug("Can't build data_tp mapping", e);
-            return new Built(null, null, "Can't connect to " + typeConnection.getName() + ": " + e.getMessage());
+            return new Built(null, null, null, "Can't connect to " + name + ": " + e.getMessage());
         } catch (Throwable e) {
             log.debug("Can't build data_tp mapping", e);
-            return new Built(null, null, "Build failed: " + e.getMessage());
+            return new Built(null, null, null, "Build failed: " + e.getMessage());
         }
     }
 
@@ -563,6 +713,7 @@ public class DataTpMapDialog extends Dialog {
     private static boolean queryAllPlaces(
         @NotNull DBRProgressMonitor monitor,
         @NotNull DBPDataSourceContainer connection,
+        @NotNull List<String> schemas,
         @NotNull List<Place> found
     ) {
         DBCExecutionContext context = DBUtils.getDefaultContext(connection.getDataSource(), true);
@@ -570,7 +721,8 @@ public class DataTpMapDialog extends Dialog {
             return false;
         }
         String query = "SELECT table_schema, table_name FROM information_schema.tables"
-            + " WHERE table_schema NOT IN ('pg_catalog', 'information_schema')";
+            + " WHERE table_schema NOT IN ('pg_catalog', 'information_schema')"
+            + " AND table_schema IN (" + DataTpStore.sqlList(schemas) + ")"; // dbeaver-mm K87: checked schemas only
         List<Place> rows = new ArrayList<>();
         try (DBCSession session = context.openSession(monitor, DBCExecutionPurpose.UTIL, "Read table names");
              DBCStatement statement = session.prepareStatement(DBCStatementType.QUERY, query, false, false, false)) {
@@ -595,65 +747,37 @@ public class DataTpMapDialog extends Dialog {
         return true;
     }
 
-    /** dbeaver-mm K79: every table up to two container levels below {@code container} */
-    private static void collectAllPlaces(
-        @NotNull DBRProgressMonitor monitor,
-        @NotNull DBSObjectContainer container,
-        int depth,
-        @NotNull DBPDataSourceContainer connection,
-        @NotNull List<Place> found
-    ) {
-        try {
-            Collection<? extends DBSObject> children = container.getChildren(monitor);
-            if (children == null) {
-                return;
-            }
-            for (DBSObject child : children) {
-                if (monitor.isCanceled()) {
-                    return;
-                }
-                if (child instanceof DBSEntity entity) {
-                    found.add(placeOf(entity, connection));
-                } else if (depth > 0 && child instanceof DBSObjectContainer sub) {
-                    collectAllPlaces(monitor, sub, depth - 1, connection, found);
-                }
-            }
-        } catch (Exception e) {
-            log.debug("Can't read tables of " + connection.getName(), e);
-        }
-    }
-
-    /** dbeaver-mm K79: the database a connection points to (URL, else host:port/database) */
-    @NotNull
-    private static String databaseIdentity(@NotNull DBPDataSourceContainer connection) {
-        var config = connection.getConnectionConfiguration();
-        String url = config.getUrl();
-        if (url != null && !url.isBlank()) {
-            return url;
-        }
-        return config.getHostName() + ":" + config.getHostPort() + "/" + config.getDatabaseName();
-    }
-
-    @NotNull
-    private static Place placeOf(@NotNull DBSEntity entity, @NotNull DBPDataSourceContainer connection) {
-        DBSObject parent = entity.getParentObject();
-        String schema = parent == null || parent instanceof DBPDataSource ? "" : parent.getName();
-        return new Place(connection.getId(), connection.getName(), schema, entity.getName());
-    }
-
-    /** dbeaver-mm K73: the type table in {@code schema} (or below the root when the schema is empty) */
+    /**
+     * dbeaver-mm K73: the type table in {@code schema}.
+     * dbeaver-mm K87: the schema may be a root child or one level below (PostgreSQL: root -> database -> schema);
+     * no search outside it, so an unchecked schema's copy is never read.
+     */
     @Nullable
     private static DBSEntity findTypeTable(
         @NotNull DBRProgressMonitor monitor,
         @NotNull DBSObjectContainer root,
         @NotNull String schema
     ) throws Exception {
-        if (!schema.isEmpty()) {
-            Collection<? extends DBSObject> children = root.getChildren(monitor);
-            if (children != null) {
-                for (DBSObject child : children) {
-                    if (child instanceof DBSObjectContainer container && child.getName().equalsIgnoreCase(schema)) {
-                        DBSEntity entity = findTable(monitor, container, DataTpStore.TYPE_TABLE, 2);
+        Collection<? extends DBSObject> children = root.getChildren(monitor);
+        if (children == null) {
+            return null;
+        }
+        for (DBSObject child : children) {
+            if (child instanceof DBSObjectContainer container && !(child instanceof DBSEntity)) {
+                if (child.getName().equalsIgnoreCase(schema)) {
+                    DBSEntity entity = findTable(monitor, container, DataTpStore.TYPE_TABLE, 0);
+                    if (entity != null) {
+                        return entity;
+                    }
+                }
+                Collection<? extends DBSObject> grandChildren = container.getChildren(monitor);
+                if (grandChildren == null) {
+                    continue;
+                }
+                for (DBSObject grandChild : grandChildren) {
+                    if (grandChild instanceof DBSObjectContainer sub && !(grandChild instanceof DBSEntity)
+                        && grandChild.getName().equalsIgnoreCase(schema)) {
+                        DBSEntity entity = findTable(monitor, sub, DataTpStore.TYPE_TABLE, 0);
                         if (entity != null) {
                             return entity;
                         }
@@ -661,7 +785,7 @@ public class DataTpMapDialog extends Dialog {
                 }
             }
         }
-        return findTable(monitor, root, DataTpStore.TYPE_TABLE, 2);
+        return null;
     }
 
     @Nullable
@@ -878,6 +1002,46 @@ public class DataTpMapDialog extends Dialog {
         return place.table() + " · " + place.connectionName() + " / " + place.schema();
     }
 
+    // dbeaver-mm K87: saves the checked schemas too
+    @Override
+    protected void okPressed() {
+        final String savedTenant = tenant;
+        int index = typeConnectionCombo == null || typeConnectionCombo.isDisposed() ? -1 : typeConnectionCombo.getSelectionIndex();
+        final String typeConnectionId = index < 0 || index >= tenantConnections.size()
+            ? "" : tenantConnections.get(index).getId();
+        // dbeaver-mm K87: schema found by the last Build, else the saved one
+        final String typeSchema = foundTypeSchema != null ? foundTypeSchema : map.typeSchema();
+        // dbeaver-mm K87: all checked = empty list (schemas added later come checked); list not loaded = keep saved
+        final List<String> checked = schemaTable == null || schemaTable.isDisposed() ? List.of() : checkedSchemaNames();
+        final List<String> schemas = !schemasReady ? map.schemas()
+            : checked.size() == schemaTable.getItemCount() ? List.of() : checked;
+        final Map<String, DataTpStore.Entry> types = new LinkedHashMap<>();
+        for (Row row : rows) {
+            if (row.chosen != null) {
+                types.put(row.dataTp, new DataTpStore.Entry(row.chosen.table(), row.chosen.connectionId(), row.chosen.schema()));
+            }
+        }
+        final String built = LocalDateTime.now().format(BUILT_FORMAT);
+        super.okPressed();
+        if (savedTenant.isEmpty()) {
+            return;
+        }
+        final Path file = DataTpStore.tenantFile(DataTpStore.tenantDir(), savedTenant);
+        final DataTpStore.TenantMap tenantMap = new DataTpStore.TenantMap(typeConnectionId, typeSchema, types, built, schemas);
+        new AbstractJob("Save data_tp mapping of " + savedTenant) {
+            @Override
+            protected IStatus run(@NotNull DBRProgressMonitor monitor) {
+                try {
+                    DataTpStore.saveTenant(file, tenantMap);
+                    DataTpLabels.invalidate();
+                } catch (Exception e) {
+                    log.error("Can't save data_tp mapping of " + savedTenant, e);
+                }
+                return Status.OK_STATUS;
+            }
+        }.schedule();
+    }
+
     /** dbeaver-mm K80: small dialog to pick any table from allPlaces */
     private static final class ChooseTableDialog extends Dialog {
         private final List<Place> places;
@@ -1004,39 +1168,5 @@ public class DataTpMapDialog extends Dialog {
         Place getSelected() {
             return selected;
         }
-    }
-
-    @Override
-    protected void okPressed() {
-        final String savedTenant = tenant;
-        int index = typeConnectionCombo == null || typeConnectionCombo.isDisposed() ? -1 : typeConnectionCombo.getSelectionIndex();
-        final String typeConnectionId = index < 0 || index >= tenantConnections.size()
-            ? "" : tenantConnections.get(index).getId();
-        final String typeSchema = typeSchemaCombo == null || typeSchemaCombo.isDisposed() ? "" : typeSchemaCombo.getText().strip();
-        final Map<String, DataTpStore.Entry> types = new LinkedHashMap<>();
-        for (Row row : rows) {
-            if (row.chosen != null) {
-                types.put(row.dataTp, new DataTpStore.Entry(row.chosen.table(), row.chosen.connectionId(), row.chosen.schema()));
-            }
-        }
-        final String built = LocalDateTime.now().format(BUILT_FORMAT);
-        super.okPressed();
-        if (savedTenant.isEmpty()) {
-            return;
-        }
-        final Path file = DataTpStore.tenantFile(DataTpStore.tenantDir(), savedTenant);
-        final DataTpStore.TenantMap tenantMap = new DataTpStore.TenantMap(typeConnectionId, typeSchema, types, built);
-        new AbstractJob("Save data_tp mapping of " + savedTenant) {
-            @Override
-            protected IStatus run(@NotNull DBRProgressMonitor monitor) {
-                try {
-                    DataTpStore.saveTenant(file, tenantMap);
-                    DataTpLabels.invalidate();
-                } catch (Exception e) {
-                    log.error("Can't save data_tp mapping of " + savedTenant, e);
-                }
-                return Status.OK_STATUS;
-            }
-        }.schedule();
     }
 }
