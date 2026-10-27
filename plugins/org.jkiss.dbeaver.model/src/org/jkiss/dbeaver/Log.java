@@ -413,7 +413,8 @@ public class Log {
                 if (message == null) {
                     logWritten = writeEclipseLog(GeneralUtils.makeExceptionStatus(severity, t));
                 } else {
-                    logWritten = writeEclipseLog(GeneralUtils.makeExceptionStatus(severity, message.toString(), t));
+                    // dbeaver-mm K85: secrets in the message are masked in .metadata/.log
+                    logWritten = writeEclipseLog(GeneralUtils.makeExceptionStatus(severity, LogMask.mask(message.toString()), t));
                 }
             }
         }
@@ -436,7 +437,7 @@ public class Log {
         return new Status(
             severity,
             ModelPreferences.PLUGIN_ID,
-            message == null ? null : message.toString());
+            message == null ? null : LogMask.mask(message.toString())); // dbeaver-mm K85: secrets are masked
     }
 
     public static void addListener(Listener listener) {

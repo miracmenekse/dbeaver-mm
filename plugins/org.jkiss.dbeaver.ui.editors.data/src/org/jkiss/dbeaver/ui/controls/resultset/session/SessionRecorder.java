@@ -201,7 +201,8 @@ public final class SessionRecorder {
         }
         String json = "{\"t\":" + str(LocalDateTime.now().toString()) + ",\"user\":" + str(nickname) + ",\"session\":" + str(name) + ",\"type\":" + str(type) +
             ",\"conn\":" + str(conn) + ",\"target\":" + str(target) + ",\"detail\":" + str(detail) + "}\n";
-        if (!QUEUE.offer(new Line(json, light, session))) {
+        // dbeaver-mm K85: registered secrets (connection names, hosts, users...) are masked in records
+        if (!QUEUE.offer(new Line(org.jkiss.dbeaver.LogMask.mask(json), light, session))) {
             DROPPED.incrementAndGet();
         }
     }

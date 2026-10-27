@@ -22,9 +22,15 @@ import org.eclipse.core.runtime.Platform;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.program.Program;
 import org.eclipse.ui.handlers.HandlerUtil;
+import org.jkiss.dbeaver.Log;
+import org.jkiss.dbeaver.LogMask;
+import org.jkiss.dbeaver.model.app.DBPProject;
+import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.utils.GeneralUtils;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,6 +51,8 @@ import java.util.zip.ZipOutputStream;
  */
 public class ProblemReportHandler extends AbstractHandler {
 
+    private static final Log log = Log.getLog(ProblemReportHandler.class); // dbeaver-mm K85
+
     private static final int PREVIOUS_SESSIONS = 3;
 
     @Override
@@ -53,6 +61,7 @@ public class ProblemReportHandler extends AbstractHandler {
         Path home = Path.of(System.getProperty("user.home"));
         Path folder = Files.isDirectory(home.resolve("Desktop")) ? home.resolve("Desktop") : home;
         Path zip = folder.resolve("dbeaver-mm-report-" + stamp + ".zip");
+        registerSecrets();
         try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(zip))) {
             out.putNextEntry(new ZipEntry("info.txt"));
             out.write(info().getBytes(StandardCharsets.UTF_8));
@@ -105,7 +114,24 @@ public class ProblemReportHandler extends AbstractHandler {
             return;
         }
         out.putNextEntry(new ZipEntry(file.getFileName().toString()));
-        Files.copy(file, out);
+        // dbeaver-mm K85: lines are masked (aliases instead of connection names, users, hosts, passwords).
+        // InputStreamReader replaces undecodable bytes instead of throwing, so a binary file can't break the report.
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(Files.newInputStream(file), StandardCharsets.UTF_8))) {
+            for (String line; (line = reader.readLine()) != null; ) {
+                out.write((LogMask.mask(line) + "\n").getBytes(StandardCharsets.UTF_8));
+            }
+        }
         out.closeEntry();
+    }
+
+    /** dbeaver-mm K85: loading every project's connections registers their names, hosts and users for masking. */
+    private static void registerSecrets() {
+        try {
+            for (DBPProject project : DBWorkbench.getPlatform().getWorkspace().getProjects()) {
+                project.getDataSourceRegistry().getDataSources();
+            }
+        } catch (Throwable e) {
+            log.warn("Can't load connections for masking the problem report", e);
+        }
     }
 }

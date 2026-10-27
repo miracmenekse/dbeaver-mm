@@ -659,6 +659,12 @@ public class DBPConnectionConfiguration implements DBPObject {
         userName = GeneralUtils.replaceVariables(userName, variableResolver);
         userPassword = GeneralUtils.replaceVariables(userPassword, variableResolver);
         url = GeneralUtils.replaceVariables(url, variableResolver);
+        // dbeaver-mm K84: resolved values bypass the setters, register them for log masking too
+        org.jkiss.dbeaver.LogMask.register("host", hostName);
+        org.jkiss.dbeaver.LogMask.register("host", serverName);
+        org.jkiss.dbeaver.LogMask.register("db", databaseName);
+        org.jkiss.dbeaver.LogMask.register("user", userName);
+        org.jkiss.dbeaver.LogMask.register("password", userPassword);
 
         resolveDynamicVariablesInMap(this.properties, variableResolver);
         resolveDynamicVariablesInMap(this.authProperties, variableResolver);
