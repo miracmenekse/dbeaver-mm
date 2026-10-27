@@ -64,6 +64,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeSet;
 
@@ -101,7 +102,7 @@ public class DataTpMapDialog extends Dialog {
     }
 
     /** dbeaver-mm K73: background build result, applied on the UI thread */
-    private record Built(List<Row> rows, String message) {
+    private record Built(List<Row> rows, List<Place> allPlaces, String message) { // dbeaver-mm K79: allPlaces
     }
 
     /** dbeaver-mm K73: background read of a tenant file */
@@ -122,6 +123,8 @@ public class DataTpMapDialog extends Dialog {
     private List<DBPDataSourceContainer> tenantConnections = List.of();
     private DataTpStore.TenantMap map = new DataTpStore.TenantMap("", "", Map.of(), "");
     private List<Row> rows = new ArrayList<>();
+    /** dbeaver-mm K79: every table found by the last build (one per database/schema/table) */
+    private List<Place> allPlaces = List.of();
     private String tenant = "";
     private int loadGeneration;
     private boolean building;
@@ -286,6 +289,7 @@ public class DataTpMapDialog extends Dialog {
         builtLabel.setText("last built: " + (loaded.built().isEmpty() ? "-" : loaded.built()));
 
         rows = new ArrayList<>();
+        allPlaces = List.of(); // dbeaver-mm K79
         for (Map.Entry<String, DataTpStore.Entry> entry : loaded.types().entrySet()) {
             DataTpStore.Entry value = entry.getValue();
             DBPDataSourceContainer container = containerById(value.connectionId());
@@ -385,6 +389,7 @@ public class DataTpMapDialog extends Dialog {
                     buildButton.setEnabled(!tenantConnections.isEmpty());
                     if (result.rows() != null) {
                         rows = result.rows();
+                        allPlaces = result.allPlaces();
                         renderRows();
                     }
                     messageLabel.setText(result.message());
@@ -407,31 +412,68 @@ public class DataTpMapDialog extends Dialog {
                 typeConnection.connect(monitor, true, true);
             }
             if (!typeConnection.isConnected() || typeConnection.getDataSource() == null) {
-                return new Built(null, "Connection " + typeConnection.getName() + " is not connected.");
+                return new Built(null, null, "Connection " + typeConnection.getName() + " is not connected.");
             }
             DBSObjectContainer root = DBUtils.getAdapter(DBSObjectContainer.class, typeConnection.getDataSource());
             DBSEntity typeTable = root == null ? null : findTypeTable(monitor, root, typeSchema);
             if (typeTable == null) {
-                return new Built(null, "Can't find " + DataTpStore.TYPE_TABLE + " in "
+                return new Built(null, null, "Can't find " + DataTpStore.TYPE_TABLE + " in "
                     + (typeSchema.isEmpty() ? typeConnection.getName() : typeConnection.getName() + " / " + typeSchema) + ".");
             }
             Map<String, String> types = readTypes(monitor, typeTable);
+            // dbeaver-mm K79: open closed tenant connections; a connection that stays closed is reported
+            List<String> failed = new ArrayList<>();
+            List<DBPDataSourceContainer> open = new ArrayList<>();
+            for (DBPDataSourceContainer container : connections) {
+                if (monitor.isCanceled()) {
+                    return new Built(null, null, "Build canceled.");
+                }
+                try {
+                    if (!container.isConnected()) {
+                        container.connect(monitor, true, true);
+                    }
+                } catch (Exception e) {
+                    log.debug("Can't connect to " + container.getName(), e);
+                }
+                if (container.isConnected() && container.getDataSource() != null) {
+                    open.add(container);
+                } else {
+                    failed.add(container.getName());
+                }
+            }
+            // dbeaver-mm K79: walk every connection once; the same database/schema/table counts once
+            Map<String, Place> unique = new LinkedHashMap<>();
+            int searched = 0;
+            for (DBPDataSourceContainer container : open) {
+                if (monitor.isCanceled()) {
+                    return new Built(null, null, "Build canceled.");
+                }
+                DBSObjectContainer containerRoot = DBUtils.getAdapter(DBSObjectContainer.class, container.getDataSource());
+                if (containerRoot == null) {
+                    failed.add(container.getName()); // dbeaver-mm K79: no silent skip
+                    continue;
+                }
+                searched++;
+                List<Place> found = new ArrayList<>();
+                collectAllPlaces(monitor, containerRoot, 2, container, found);
+                String database = databaseIdentity(container);
+                for (Place place : found) {
+                    unique.putIfAbsent(DataTpMatch.placeKey(database, place.schema(), place.table()), place);
+                }
+            }
+            if (monitor.isCanceled()) {
+                return new Built(null, null, "Build canceled.");
+            }
+            List<Place> allPlaces = List.copyOf(unique.values());
+            Map<String, List<Place>> byTable = new HashMap<>();
+            for (Place place : allPlaces) {
+                byTable.computeIfAbsent(place.table().toLowerCase(Locale.ROOT), k -> new ArrayList<>()).add(place);
+            }
             List<Row> built = new ArrayList<>();
             for (Map.Entry<String, String> type : types.entrySet()) {
                 String table = type.getValue();
-                List<Place> candidates = new ArrayList<>();
-                for (DBPDataSourceContainer container : connections) {
-                    if (monitor.isCanceled()) {
-                        return new Built(null, "Build canceled.");
-                    }
-                    if (!container.isConnected() || container.getDataSource() == null) {
-                        continue;
-                    }
-                    DBSObjectContainer containerRoot = DBUtils.getAdapter(DBSObjectContainer.class, container.getDataSource());
-                    if (containerRoot != null) {
-                        collectPlaces(monitor, containerRoot, table, 2, container, candidates);
-                    }
-                }
+                List<Place> candidates = table == null
+                    ? List.of() : byTable.getOrDefault(table.toLowerCase(Locale.ROOT), List.of());
                 Row row = new Row(type.getKey(), table, null);
                 row.candidates = candidates;
                 if (candidates.size() == 1) {
@@ -442,15 +484,19 @@ public class DataTpMapDialog extends Dialog {
                 }
                 built.add(row);
             }
-            long found = built.stream().filter(r -> r.chosen != null).count();
-            return new Built(built, "Built " + built.size() + " data_tp ids, " + found
-                + " mapped in 1 place or by an earlier choice. Pick a place where there are several.");
+            long mapped = built.stream().filter(r -> r.chosen != null).count();
+            String message = "Built " + built.size() + " data_tp ids, " + mapped
+                + " mapped in 1 place or by an earlier choice. Searched " + searched + " connections.";
+            if (!failed.isEmpty()) {
+                message += " Couldn't open: " + String.join(", ", failed) + ".";
+            }
+            return new Built(built, allPlaces, message);
         } catch (DBException e) {
             log.debug("Can't build data_tp mapping", e);
-            return new Built(null, "Can't connect to " + typeConnection.getName() + ": " + e.getMessage());
+            return new Built(null, null, "Can't connect to " + typeConnection.getName() + ": " + e.getMessage());
         } catch (Throwable e) {
             log.debug("Can't build data_tp mapping", e);
-            return new Built(null, "Build failed: " + e.getMessage());
+            return new Built(null, null, "Build failed: " + e.getMessage());
         }
     }
 
@@ -466,11 +512,10 @@ public class DataTpMapDialog extends Dialog {
         return null;
     }
 
-    /** dbeaver-mm K73: every table named {@code table} two container levels below {@code root} */
-    private static void collectPlaces(
+    /** dbeaver-mm K79: every table up to two container levels below {@code container} */
+    private static void collectAllPlaces(
         @NotNull DBRProgressMonitor monitor,
         @NotNull DBSObjectContainer container,
-        @NotNull String table,
         int depth,
         @NotNull DBPDataSourceContainer connection,
         @NotNull List<Place> found
@@ -481,23 +526,29 @@ public class DataTpMapDialog extends Dialog {
                 return;
             }
             for (DBSObject child : children) {
-                if (child instanceof DBSEntity entity && entity.getName().equalsIgnoreCase(table)) {
-                    found.add(placeOf(entity, connection));
+                if (monitor.isCanceled()) {
+                    return;
                 }
-            }
-            if (depth > 0) {
-                for (DBSObject child : children) {
-                    if (monitor.isCanceled()) {
-                        return;
-                    }
-                    if (child instanceof DBSObjectContainer sub && !(child instanceof DBSEntity)) {
-                        collectPlaces(monitor, sub, table, depth - 1, connection, found);
-                    }
+                if (child instanceof DBSEntity entity) {
+                    found.add(placeOf(entity, connection));
+                } else if (depth > 0 && child instanceof DBSObjectContainer sub) {
+                    collectAllPlaces(monitor, sub, depth - 1, connection, found);
                 }
             }
         } catch (Exception e) {
-            log.debug("Can't look up " + table + " in " + connection.getName(), e);
+            log.debug("Can't read tables of " + connection.getName(), e);
         }
+    }
+
+    /** dbeaver-mm K79: the database a connection points to (URL, else host:port/database) */
+    @NotNull
+    private static String databaseIdentity(@NotNull DBPDataSourceContainer connection) {
+        var config = connection.getConnectionConfiguration();
+        String url = config.getUrl();
+        if (url != null && !url.isBlank()) {
+            return url;
+        }
+        return config.getHostName() + ":" + config.getHostPort() + "/" + config.getDatabaseName();
     }
 
     @NotNull
