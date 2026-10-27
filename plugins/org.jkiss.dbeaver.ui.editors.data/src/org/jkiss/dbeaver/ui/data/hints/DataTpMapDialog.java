@@ -71,6 +71,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeSet;
+import java.util.function.Consumer;
 
 /**
  * dbeaver-mm K73: Plus Settings &gt; data_tp mapping... For the selected tenant the user says which
@@ -132,6 +133,8 @@ public class DataTpMapDialog extends Dialog {
     private String tenant = "";
     private int loadGeneration;
     private boolean building;
+    /** dbeaver-mm K81: the running build, stopped by the Stop button or by closing the dialog */
+    private AbstractJob buildJob;
 
     public DataTpMapDialog(@NotNull Shell shell) {
         super(shell);
@@ -368,6 +371,13 @@ public class DataTpMapDialog extends Dialog {
 
     /** dbeaver-mm K73: Build mapping in a background job; the type connection is opened if needed */
     private void build() {
+        if (building) {
+            if (buildJob != null) {
+                buildJob.cancel(); // dbeaver-mm K81
+                messageLabel.setText("Stopping...");
+            }
+            return;
+        }
         int index = typeConnectionCombo.getSelectionIndex();
         if (building || index < 0 || index >= tenantConnections.size()) {
             messageLabel.setText("Pick the connection that holds " + DataTpStore.TYPE_TABLE + ".");
@@ -379,18 +389,29 @@ public class DataTpMapDialog extends Dialog {
         final Map<String, DataTpStore.Entry> saved = new HashMap<>(map.types());
         final int generation = loadGeneration;
         building = true;
-        buildButton.setEnabled(false);
+        buildButton.setText("Stop");
         messageLabel.setText("Building mapping...");
-        new AbstractJob("Build data_tp mapping") {
+        buildJob = new AbstractJob("Build data_tp mapping") {
             @Override
             protected IStatus run(@NotNull DBRProgressMonitor monitor) {
-                Built result = doBuild(monitor, typeConnection, typeSchema, connections, saved);
+                // dbeaver-mm K81: show which step and connection the build is on
+                Consumer<String> progress = text -> UIUtils.asyncExec(() -> {
+                    if (generation == loadGeneration && building && messageLabel != null && !messageLabel.isDisposed()) {
+                        messageLabel.setText(text);
+                    }
+                });
+                Built result = doBuild(monitor, typeConnection, typeSchema, connections, saved, progress);
                 UIUtils.asyncExec(() -> {
-                    if (generation != loadGeneration || buildButton == null || buildButton.isDisposed()) {
+                    if (buildButton == null || buildButton.isDisposed()) {
                         return;
                     }
                     building = false;
+                    buildJob = null;
+                    buildButton.setText("Build mapping");
                     buildButton.setEnabled(!tenantConnections.isEmpty());
+                    if (generation != loadGeneration) {
+                        return; // dbeaver-mm K81: tenant changed meanwhile; drop the result, keep the button usable
+                    }
                     if (result.rows() != null) {
                         rows = result.rows();
                         allPlaces = result.allPlaces();
@@ -400,7 +421,16 @@ public class DataTpMapDialog extends Dialog {
                 });
                 return Status.OK_STATUS;
             }
-        }.schedule();
+        };
+        buildJob.schedule();
+    }
+
+    @Override
+    public boolean close() {
+        if (buildJob != null) {
+            buildJob.cancel(); // dbeaver-mm K81: don't keep opening connections after the dialog is gone
+        }
+        return super.close();
     }
 
     @NotNull
@@ -409,10 +439,12 @@ public class DataTpMapDialog extends Dialog {
         @NotNull DBPDataSourceContainer typeConnection,
         @NotNull String typeSchema,
         @NotNull List<DBPDataSourceContainer> connections,
-        @NotNull Map<String, DataTpStore.Entry> saved
+        @NotNull Map<String, DataTpStore.Entry> saved,
+        @NotNull Consumer<String> progress
     ) {
         try {
             if (!typeConnection.isConnected()) {
+                progress.accept("Opening " + typeConnection.getName() + "...");
                 typeConnection.connect(monitor, true, true);
             }
             if (!typeConnection.isConnected() || typeConnection.getDataSource() == null) {
@@ -424,16 +456,19 @@ public class DataTpMapDialog extends Dialog {
                 return new Built(null, null, "Can't find " + DataTpStore.TYPE_TABLE + " in "
                     + (typeSchema.isEmpty() ? typeConnection.getName() : typeConnection.getName() + " / " + typeSchema) + ".");
             }
+            progress.accept("Reading " + DataTpStore.TYPE_TABLE + "...");
             Map<String, String> types = readTypes(monitor, typeTable);
             // dbeaver-mm K79: open closed tenant connections; a connection that stays closed is reported
             List<String> failed = new ArrayList<>();
             List<DBPDataSourceContainer> open = new ArrayList<>();
-            for (DBPDataSourceContainer container : connections) {
+            for (int i = 0; i < connections.size(); i++) {
+                DBPDataSourceContainer container = connections.get(i);
                 if (monitor.isCanceled()) {
                     return new Built(null, null, "Build canceled.");
                 }
                 try {
                     if (!container.isConnected()) {
+                        progress.accept("Opening " + container.getName() + " (" + (i + 1) + "/" + connections.size() + ")...");
                         container.connect(monitor, true, true);
                     }
                 } catch (Exception e) {
@@ -458,6 +493,7 @@ public class DataTpMapDialog extends Dialog {
                     continue;
                 }
                 searched++;
+                progress.accept("Reading tables of " + container.getName() + " (" + searched + "/" + open.size() + ")...");
                 List<Place> found = new ArrayList<>();
                 collectAllPlaces(monitor, containerRoot, 2, container, found);
                 String database = databaseIdentity(container);
