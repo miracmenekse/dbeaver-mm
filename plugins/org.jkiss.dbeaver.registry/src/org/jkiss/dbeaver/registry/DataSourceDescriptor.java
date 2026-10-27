@@ -421,6 +421,7 @@ public class DataSourceDescriptor
 
     public void setName(@NotNull String name) {
         this.name = name;
+        org.jkiss.dbeaver.LogMask.register("connection", name); // dbeaver-mm K84: connection name is masked in logs
     }
 
     @Nullable

@@ -88,8 +88,9 @@ public class CoreApplicationActivator extends AbstractUIPlugin {
                 Bundle bundle = event.getBundle();
                 if (event.getType() == BundleEvent.STARTED) {
                     if (bundle.getState() == Bundle.ACTIVE) {
-                        message = "> Start " + OsgiUtils.getBundleName(bundle) +
-                            " [" + bundle.getSymbolicName() + " " + bundle.getVersion() + "]";
+                        // dbeaver-mm K84: no "> Start" line per bundle (log noise)
+                        //message = "> Start " + OsgiUtils.getBundleName(bundle) +
+                        //    " [" + bundle.getSymbolicName() + " " + bundle.getVersion() + "]";
                         activatedBundles.add(bundle.getSymbolicName());
                     }
                 } else if (event.getType() == BundleEvent.STOPPING) {

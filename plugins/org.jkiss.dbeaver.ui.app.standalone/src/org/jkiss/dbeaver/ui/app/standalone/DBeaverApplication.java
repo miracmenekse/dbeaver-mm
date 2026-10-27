@@ -693,8 +693,10 @@ public class DBeaverApplication extends DesktopApplicationImpl implements DBPApp
             debugWriter = new LogOutputStream(debugLogFile);
             oldSystemOut = System.out;
             oldSystemErr = System.err;
-            System.setOut(new PrintStream(new ProxyPrintStream(debugWriter, oldSystemOut)));
-            System.setErr(new PrintStream(new ProxyPrintStream(debugWriter, oldSystemErr)));
+            // dbeaver-mm K84: one shared masking stream, secrets are replaced by aliases line by line
+            OutputStream maskedWriter = org.jkiss.dbeaver.LogMask.lineMasking(debugWriter);
+            System.setOut(new PrintStream(new ProxyPrintStream(maskedWriter, oldSystemOut)));
+            System.setErr(new PrintStream(new ProxyPrintStream(maskedWriter, oldSystemErr)));
         } catch (IOException e) {
             e.printStackTrace(System.err);
         }

@@ -196,6 +196,7 @@ public class DBPConnectionConfiguration implements DBPObject {
 
     public void setHostName(@Nullable String hostName) {
         this.hostName = hostName;
+        org.jkiss.dbeaver.LogMask.register("host", hostName); // dbeaver-mm K84: secret is masked in logs
     }
 
     @Nullable
@@ -214,6 +215,7 @@ public class DBPConnectionConfiguration implements DBPObject {
 
     public void setServerName(@Nullable String serverName) {
         this.serverName = serverName;
+        org.jkiss.dbeaver.LogMask.register("host", serverName); // dbeaver-mm K84: secret is masked in logs
     }
 
     @Nullable
@@ -223,6 +225,7 @@ public class DBPConnectionConfiguration implements DBPObject {
 
     public void setDatabaseName(@Nullable String databaseName) {
         this.databaseName = databaseName;
+        org.jkiss.dbeaver.LogMask.register("db", databaseName); // dbeaver-mm K84: secret is masked in logs
     }
 
     @Nullable
@@ -241,6 +244,7 @@ public class DBPConnectionConfiguration implements DBPObject {
 
     public void setUserName(@Nullable String userName) {
         this.userName = userName;
+        org.jkiss.dbeaver.LogMask.register("user", userName); // dbeaver-mm K84: secret is masked in logs
     }
 
     @Nullable
@@ -250,6 +254,7 @@ public class DBPConnectionConfiguration implements DBPObject {
 
     public void setUserPassword(@Nullable String userPassword) {
         this.userPassword = userPassword;
+        org.jkiss.dbeaver.LogMask.register("password", userPassword); // dbeaver-mm K84: secret is masked in logs
     }
 
     ////////////////////////////////////////////////////

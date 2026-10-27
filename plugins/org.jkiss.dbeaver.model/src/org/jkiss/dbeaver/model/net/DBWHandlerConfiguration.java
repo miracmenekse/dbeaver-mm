@@ -148,6 +148,7 @@ public class DBWHandlerConfiguration {
 
     public void setUserName(@Nullable String userName) {
         this.userName = userName;
+        org.jkiss.dbeaver.LogMask.register("user", userName); // dbeaver-mm K84: secret is masked in logs
     }
 
     @Nullable
@@ -157,6 +158,7 @@ public class DBWHandlerConfiguration {
 
     public void setPassword(@Nullable String password) {
         this.password = password;
+        org.jkiss.dbeaver.LogMask.register("password", password); // dbeaver-mm K84: secret is masked in logs
     }
 
     public boolean isSavePassword() {
@@ -199,6 +201,8 @@ public class DBWHandlerConfiguration {
         } else {
             this.properties.put(name, value);
         }
+        // dbeaver-mm K84: tunnel host is masked in logs
+        if (PROP_HOST.equals(name) && value != null) org.jkiss.dbeaver.LogMask.register("host", value.toString());
     }
 
     @NotNull
@@ -209,6 +213,8 @@ public class DBWHandlerConfiguration {
     public void setProperties(@NotNull Map<String, Object> properties) {
         this.properties.clear();
         this.properties.putAll(properties);
+        Object host = this.properties.get(PROP_HOST); // dbeaver-mm K84: tunnel host is masked in logs
+        if (host != null) org.jkiss.dbeaver.LogMask.register("host", host.toString());
     }
 
     @Nullable
