@@ -291,3 +291,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K80 | 2026-10-27 | **data_tp mapping:** adıyla bulunamayan tabloda en yakın 10 tablo adı ve *Choose a table...* (Build'in bulduğu tüm tabloların filtreli listesi) çıkar; seçim diğer eşlemeler gibi kaydedilir (✎ picked). |
 | K81 | 2026-10-27 | **data_tp mapping:** Build hangi bağlantıyı açtığını ya da okuduğunu gösterir (*Opening T3 X (3/9)...*); düğme *Stop* olur, pencere kapanınca Build durur. |
 | K82 | 2026-10-27 | **data_tp mapping:** Build her bağlantının tablolarını şemaları tek tek açmak yerine tek bir `information_schema` sorgusuyla okur; SSH üzerinden arama saatlerden saniyelere iner. |
+| K83 | 2026-10-27 | Log gizliliği için altyapı: `LogMask` log metnindeki bağlantı adlarını, kullanıcıları, host, veritabanı, şifre, IP ve e-postaları kararlı takma adlarla (`user#1`, `ip#1`, `***`) değiştirir; henüz log yazımına bağlanmadı (görünür değişiklik yok). |
