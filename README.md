@@ -279,3 +279,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K75 | 2026-10-26 | Groundwork for undo scripts of grid changes: builds the reverse SQL (re-insert deleted rows, restore old values, remove inserted rows) and keeps scripts in `~/.dbeaver-mm/geri-al/` for 30 days (no visible change yet). |
 | K76 | 2026-10-26 | **Undo script after Save:** every Save in a table grid keeps a script that reverses it and shows a notification; clicking it opens the script in the SQL editor (not run automatically). |
 | K77 | 2026-10-26 | **Plus › Change history...**: lists the undo scripts (time, connection, table, change) with a preview; *Open in SQL editor* on the recorded connection, *Copy*, and a checkbox to turn undo scripts off. |
+| K78 | 2026-10-27 | Groundwork for the data_tp mapping fix: closest table names and a key that counts the same database/schema/table once (no visible change yet). |

@@ -286,3 +286,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K75 | 2026-10-26 | Grid değişiklikleri için geri alma betiği altyapısı: ters SQL'i üretir (silinen satırları geri ekler, eski değerleri geri yazar, eklenen satırları siler) ve betikleri 30 gün `~/.dbeaver-mm/geri-al/` altında tutar (henüz görünür değişiklik yok). |
 | K76 | 2026-10-26 | **Save sonrası geri alma betiği:** tablo grid'indeki her Save onu tersine çeviren bir betik tutar ve bildirim gösterir; tıklanınca betik SQL editöründe açılır (kendiliğinden çalışmaz). |
 | K77 | 2026-10-26 | **Plus › Change history...**: geri alma betiklerini (zaman, bağlantı, tablo, değişiklik) önizlemeyle listeler; kaydedilen bağlantıda *Open in SQL editor*, *Copy* ve geri alma betiklerini kapatan onay kutusu. |
+| K78 | 2026-10-27 | data_tp eşleme düzeltmesi için altyapı: en yakın tablo adları ve aynı veritabanı/şema/tabloyu bir kez sayan anahtar (henüz görünür değişiklik yok). |
