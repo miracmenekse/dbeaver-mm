@@ -54,6 +54,7 @@ import org.jkiss.dbeaver.model.exec.DBCStatement;
 import org.jkiss.dbeaver.model.exec.DBCStatementType;
 import org.jkiss.dbeaver.model.runtime.AbstractJob;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
+import org.jkiss.dbeaver.model.runtime.VoidProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSEntity;
 import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.model.struct.DBSObjectContainer;
@@ -66,11 +67,16 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
 /**
@@ -119,6 +125,9 @@ public class DataTpMapDialog extends Dialog {
     private Combo tenantCombo;
     private Combo typeConnectionCombo;
     private Combo typeSchemaCombo;
+    // dbeaver-mm K90: Build searches only the connections checked here
+    private Table connectionsTable;
+    private Label connectionCountLabel;
     private Button buildButton;
     private Label builtLabel;
     private Label messageLabel;
@@ -177,6 +186,26 @@ public class DataTpMapDialog extends Dialog {
         tenantCombo = new Combo(area, SWT.DROP_DOWN | SWT.READ_ONLY);
         tenantCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
+        // dbeaver-mm K90: connection checklist below the tenant row
+        Composite connectionsRow = new Composite(area, SWT.NONE);
+        connectionsRow.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, false, 2, 1));
+        connectionsRow.setLayout(new GridLayout(3, false));
+        new Label(connectionsRow, SWT.NONE).setText("Connections:");
+        connectionsTable = new Table(connectionsRow, SWT.CHECK | SWT.BORDER | SWT.V_SCROLL);
+        GridData connectionsData = new GridData(SWT.FILL, SWT.FILL, true, false);
+        connectionsData.heightHint = 120;
+        connectionsTable.setLayoutData(connectionsData);
+        Composite connectionsSide = new Composite(connectionsRow, SWT.NONE);
+        connectionsSide.setLayoutData(new GridData(SWT.RIGHT, SWT.CENTER, false, false));
+        connectionsSide.setLayout(new GridLayout(1, false));
+        connectionCountLabel = new Label(connectionsSide, SWT.NONE);
+        Composite connectionsButtons = new Composite(connectionsSide, SWT.NONE);
+        connectionsButtons.setLayout(new GridLayout(2, false));
+        Button allButton = new Button(connectionsButtons, SWT.PUSH);
+        allButton.setText("All");
+        Button noneButton = new Button(connectionsButtons, SWT.PUSH);
+        noneButton.setText("None");
+
         Composite typeRow = new Composite(area, SWT.NONE);
         typeRow.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
         typeRow.setLayout(new GridLayout(4, false));
@@ -216,6 +245,9 @@ public class DataTpMapDialog extends Dialog {
                 refreshTenant(tenantCombo.getItem(index));
             }
         });
+        connectionsTable.addListener(SWT.Selection, e -> updateConnectionCount());
+        allButton.addListener(SWT.Selection, e -> setAllConnections(true));
+        noneButton.addListener(SWT.Selection, e -> setAllConnections(false));
         typeConnectionCombo.addListener(SWT.Selection, e -> loadSchemas());
         buildButton.addListener(SWT.Selection, e -> build());
 
@@ -246,6 +278,41 @@ public class DataTpMapDialog extends Dialog {
         List<DBPDataSourceContainer> result = new ArrayList<>();
         for (DBPDataSourceContainer container : allConnections) {
             if (DataTpStore.tenantOf(container.getName()).equals(tenantId)) {
+                result.add(container);
+            }
+        }
+        return result;
+    }
+
+    /** dbeaver-mm K90: "<checked> of <total> connections" next to the checklist */
+    private void updateConnectionCount() {
+        if (connectionsTable == null || connectionsTable.isDisposed()
+            || connectionCountLabel == null || connectionCountLabel.isDisposed()) {
+            return;
+        }
+        int checked = 0;
+        for (TableItem item : connectionsTable.getItems()) {
+            if (item.getChecked()) {
+                checked++;
+            }
+        }
+        connectionCountLabel.setText(checked + " of " + connectionsTable.getItemCount() + " connections");
+    }
+
+    /** dbeaver-mm K90: All / None buttons */
+    private void setAllConnections(boolean checked) {
+        for (TableItem item : connectionsTable.getItems()) {
+            item.setChecked(checked);
+        }
+        updateConnectionCount();
+    }
+
+    /** dbeaver-mm K90: the currently checked connections, in list order */
+    @NotNull
+    private List<DBPDataSourceContainer> checkedConnections() {
+        List<DBPDataSourceContainer> result = new ArrayList<>();
+        for (TableItem item : connectionsTable.getItems()) {
+            if (item.getChecked() && item.getData() instanceof DBPDataSourceContainer container) {
                 result.add(container);
             }
         }
@@ -294,6 +361,21 @@ public class DataTpMapDialog extends Dialog {
         typeSchemaCombo.removeAll();
         typeSchemaCombo.setText(loaded.typeSchema() == null ? "" : loaded.typeSchema());
         builtLabel.setText("last built: " + (loaded.built().isEmpty() ? "-" : loaded.built()));
+
+        // dbeaver-mm K90: saved selection, empty saved list means every tenant connection
+        connectionsTable.removeAll();
+        List<String> ids = new ArrayList<>();
+        for (DBPDataSourceContainer container : tenantConnections) {
+            ids.add(container.getId());
+        }
+        Set<String> checked = new HashSet<>(DataTpStore.checked(ids, loaded.connections()));
+        for (DBPDataSourceContainer container : tenantConnections) {
+            TableItem item = new TableItem(connectionsTable, SWT.NONE);
+            item.setText(container.getName());
+            item.setData(container);
+            item.setChecked(checked.contains(container.getId()));
+        }
+        updateConnectionCount();
 
         rows = new ArrayList<>();
         allPlaces = List.of(); // dbeaver-mm K79
@@ -383,9 +465,15 @@ public class DataTpMapDialog extends Dialog {
             messageLabel.setText("Pick the connection that holds " + DataTpStore.TYPE_TABLE + ".");
             return;
         }
+        // dbeaver-mm K90: Build searches only the checked connections (the type connection is used anyway)
+        final List<DBPDataSourceContainer> checkedConnections = checkedConnections();
+        if (checkedConnections.isEmpty()) {
+            messageLabel.setText("Check at least one connection.");
+            return;
+        }
         final DBPDataSourceContainer typeConnection = tenantConnections.get(index);
         final String typeSchema = typeSchemaCombo.getText().strip();
-        final List<DBPDataSourceContainer> connections = List.copyOf(tenantConnections);
+        final List<DBPDataSourceContainer> connections = List.copyOf(checkedConnections);
         final Map<String, DataTpStore.Entry> saved = new HashMap<>(map.types());
         final int generation = loadGeneration;
         building = true;
@@ -461,48 +549,76 @@ public class DataTpMapDialog extends Dialog {
             // dbeaver-mm K79: open closed tenant connections; a connection that stays closed is reported
             List<String> failed = new ArrayList<>();
             List<DBPDataSourceContainer> open = new ArrayList<>();
-            for (int i = 0; i < connections.size(); i++) {
-                DBPDataSourceContainer container = connections.get(i);
-                if (monitor.isCanceled()) {
-                    return new Built(null, null, "Build canceled.");
-                }
-                try {
-                    if (!container.isConnected()) {
-                        progress.accept("Opening " + container.getName() + " (" + (i + 1) + "/" + connections.size() + ")...");
-                        container.connect(monitor, true, true);
-                    }
-                } catch (Exception e) {
-                    log.debug("Can't connect to " + container.getName(), e);
-                }
-                if (container.isConnected() && container.getDataSource() != null) {
-                    open.add(container);
-                } else {
-                    failed.add(container.getName());
-                }
-            }
-            // dbeaver-mm K79: walk every connection once; the same database/schema/table counts once
             Map<String, Place> unique = new LinkedHashMap<>();
             int searched = 0;
-            for (DBPDataSourceContainer container : open) {
-                if (monitor.isCanceled()) {
+            // dbeaver-mm K90: closed connections are opened in parallel, at most six at a time
+            ExecutorService executor = Executors.newFixedThreadPool(Math.min(6, Math.max(1, connections.size())));
+            try {
+                List<Future<?>> openTasks = new ArrayList<>();
+                for (DBPDataSourceContainer container : connections) {
+                    openTasks.add(executor.submit(() -> {
+                        try {
+                            if (!container.isConnected()) {
+                                container.connect(new VoidProgressMonitor(), true, true);
+                            }
+                        } catch (Exception e) {
+                            log.debug("Can't connect to " + container.getName(), e);
+                        }
+                    }));
+                }
+                if (!awaitAll(openTasks, monitor, progress, "Opening connections")) {
                     return new Built(null, null, "Build canceled.");
                 }
-                DBSObjectContainer containerRoot = DBUtils.getAdapter(DBSObjectContainer.class, container.getDataSource());
-                if (containerRoot == null) {
-                    failed.add(container.getName()); // dbeaver-mm K79: no silent skip
-                    continue;
+                for (DBPDataSourceContainer container : connections) {
+                    if (container.isConnected() && container.getDataSource() != null) {
+                        open.add(container);
+                    } else {
+                        failed.add(container.getName());
+                    }
                 }
-                searched++;
-                progress.accept("Reading tables of " + container.getName() + " (" + searched + "/" + open.size() + ")...");
-                List<Place> found = new ArrayList<>();
-                // dbeaver-mm K82: one catalog query per connection; walking every schema over SSH took hours
-                if (!queryAllPlaces(monitor, container, found)) {
-                    collectAllPlaces(monitor, containerRoot, 2, container, found);
+                // dbeaver-mm K90: table lists are read in parallel too; results keep the checked order
+                List<Future<List<Place>>> tableTasks = new ArrayList<>();
+                for (DBPDataSourceContainer container : open) {
+                    tableTasks.add(executor.submit(() -> {
+                        DBSObjectContainer containerRoot =
+                            DBUtils.getAdapter(DBSObjectContainer.class, container.getDataSource());
+                        if (containerRoot == null) {
+                            return null; // dbeaver-mm K79: no silent skip
+                        }
+                        List<Place> found = new ArrayList<>();
+                        DBRProgressMonitor queryMonitor = new VoidProgressMonitor();
+                        // dbeaver-mm K82: one catalog query per connection; walking every schema over SSH took hours
+                        if (!queryAllPlaces(queryMonitor, container, found)) {
+                            collectAllPlaces(queryMonitor, containerRoot, 2, container, found);
+                        }
+                        return found;
+                    }));
                 }
-                String database = databaseIdentity(container);
-                for (Place place : found) {
-                    unique.putIfAbsent(DataTpMatch.placeKey(database, place.schema(), place.table()), place);
+                if (!awaitAll(tableTasks, monitor, progress, "Reading tables")) {
+                    return new Built(null, null, "Build canceled.");
                 }
+                // dbeaver-mm K79: walk every connection once; the same database/schema/table counts once
+                for (int i = 0; i < open.size(); i++) {
+                    DBPDataSourceContainer container = open.get(i);
+                    List<Place> found;
+                    try {
+                        found = tableTasks.get(i).get();
+                    } catch (Exception e) {
+                        log.debug("Can't read tables of " + container.getName(), e);
+                        found = null;
+                    }
+                    if (found == null) {
+                        failed.add(container.getName());
+                        continue;
+                    }
+                    searched++;
+                    String database = databaseIdentity(container);
+                    for (Place place : found) {
+                        unique.putIfAbsent(DataTpMatch.placeKey(database, place.schema(), place.table()), place);
+                    }
+                }
+            } finally {
+                executor.shutdownNow(); // dbeaver-mm K90
             }
             if (monitor.isCanceled()) {
                 return new Built(null, null, "Build canceled.");
@@ -544,6 +660,40 @@ public class DataTpMapDialog extends Dialog {
         } catch (Throwable e) {
             log.debug("Can't build data_tp mapping", e);
             return new Built(null, null, "Build failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * dbeaver-mm K90: waits for the parallel tasks, reports progress and polls the cancel flag every 200 ms.
+     * Returns false when the build was canceled.
+     */
+    private static boolean awaitAll(
+        @NotNull List<? extends Future<?>> tasks,
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull Consumer<String> progress,
+        @NotNull String action
+    ) {
+        int total = tasks.size();
+        while (true) {
+            int done = 0;
+            for (Future<?> task : tasks) {
+                if (task.isDone()) {
+                    done++;
+                }
+            }
+            progress.accept(action + " (" + done + "/" + total + ")...");
+            if (done == total) {
+                return true;
+            }
+            if (monitor.isCanceled()) {
+                return false;
+            }
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
         }
     }
 
@@ -878,6 +1028,59 @@ public class DataTpMapDialog extends Dialog {
         return place.table() + " · " + place.connectionName() + " / " + place.schema();
     }
 
+    @Override
+    protected void okPressed() {
+        final String savedTenant = tenant;
+        int index = typeConnectionCombo == null || typeConnectionCombo.isDisposed() ? -1 : typeConnectionCombo.getSelectionIndex();
+        final String typeConnectionId = index < 0 || index >= tenantConnections.size()
+            ? "" : tenantConnections.get(index).getId();
+        final String typeSchema = typeSchemaCombo == null || typeSchemaCombo.isDisposed() ? "" : typeSchemaCombo.getText().strip();
+        final Map<String, DataTpStore.Entry> types = new LinkedHashMap<>();
+        for (Row row : rows) {
+            if (row.chosen != null) {
+                types.put(row.dataTp, new DataTpStore.Entry(row.chosen.table(), row.chosen.connectionId(), row.chosen.schema()));
+            }
+        }
+        // dbeaver-mm K90: save the checked selection; all checked means an empty list (new connections later count too)
+        int total = 0;
+        int checkedCount = 0;
+        final List<String> checkedIds = new ArrayList<>();
+        if (connectionsTable != null && !connectionsTable.isDisposed()) {
+            for (TableItem item : connectionsTable.getItems()) {
+                total++;
+                if (item.getChecked()) {
+                    checkedCount++;
+                    if (item.getData() instanceof DBPDataSourceContainer container) {
+                        checkedIds.add(container.getId());
+                    }
+                }
+            }
+        }
+        final List<String> searchConnections = total > 0 && checkedCount == total
+            ? List.of()
+            : checkedIds.isEmpty() ? map.connections() : checkedIds;
+        final String built = LocalDateTime.now().format(BUILT_FORMAT);
+        super.okPressed();
+        if (savedTenant.isEmpty()) {
+            return;
+        }
+        final Path file = DataTpStore.tenantFile(DataTpStore.tenantDir(), savedTenant);
+        final DataTpStore.TenantMap tenantMap =
+            new DataTpStore.TenantMap(typeConnectionId, typeSchema, types, built, searchConnections);
+        new AbstractJob("Save data_tp mapping of " + savedTenant) {
+            @Override
+            protected IStatus run(@NotNull DBRProgressMonitor monitor) {
+                try {
+                    DataTpStore.saveTenant(file, tenantMap);
+                    DataTpLabels.invalidate();
+                } catch (Exception e) {
+                    log.error("Can't save data_tp mapping of " + savedTenant, e);
+                }
+                return Status.OK_STATUS;
+            }
+        }.schedule();
+    }
+
     /** dbeaver-mm K80: small dialog to pick any table from allPlaces */
     private static final class ChooseTableDialog extends Dialog {
         private final List<Place> places;
@@ -1004,39 +1207,5 @@ public class DataTpMapDialog extends Dialog {
         Place getSelected() {
             return selected;
         }
-    }
-
-    @Override
-    protected void okPressed() {
-        final String savedTenant = tenant;
-        int index = typeConnectionCombo == null || typeConnectionCombo.isDisposed() ? -1 : typeConnectionCombo.getSelectionIndex();
-        final String typeConnectionId = index < 0 || index >= tenantConnections.size()
-            ? "" : tenantConnections.get(index).getId();
-        final String typeSchema = typeSchemaCombo == null || typeSchemaCombo.isDisposed() ? "" : typeSchemaCombo.getText().strip();
-        final Map<String, DataTpStore.Entry> types = new LinkedHashMap<>();
-        for (Row row : rows) {
-            if (row.chosen != null) {
-                types.put(row.dataTp, new DataTpStore.Entry(row.chosen.table(), row.chosen.connectionId(), row.chosen.schema()));
-            }
-        }
-        final String built = LocalDateTime.now().format(BUILT_FORMAT);
-        super.okPressed();
-        if (savedTenant.isEmpty()) {
-            return;
-        }
-        final Path file = DataTpStore.tenantFile(DataTpStore.tenantDir(), savedTenant);
-        final DataTpStore.TenantMap tenantMap = new DataTpStore.TenantMap(typeConnectionId, typeSchema, types, built);
-        new AbstractJob("Save data_tp mapping of " + savedTenant) {
-            @Override
-            protected IStatus run(@NotNull DBRProgressMonitor monitor) {
-                try {
-                    DataTpStore.saveTenant(file, tenantMap);
-                    DataTpLabels.invalidate();
-                } catch (Exception e) {
-                    log.error("Can't save data_tp mapping of " + savedTenant, e);
-                }
-                return Status.OK_STATUS;
-            }
-        }.schedule();
     }
 }
