@@ -323,6 +323,10 @@ public class ResultSetRowColorHelper {
         if (!applyGroupColumnSort || !striping.isSortByGroupColumns()) {
             return;
         }
+        // dbeaver-mm K91: a column sort chosen by the user wins over the group column sort
+        if (model.getDataFilter().hasOrdering()) {
+            return;
+        }
         List<ResultSetRow> curRows = model.getAllRows();
         curRows.sort((r1, r2) -> compareRowsForGroupStriping(r1, r2, groupBindings));
         for (int i = 0; i < curRows.size(); i++) {
