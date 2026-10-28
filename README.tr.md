@@ -300,3 +300,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K89 | 2026-10-28 | data_tp Build bağlantı seçimi için altyapı: tenant eşleme dosyası hangi bağlantılarda aranacağını hatırlar (`search.connections`, boş = hepsi); henüz görünür değişiklik yok. |
 | K90 | 2026-10-28 | **data_tp eşlemesi, bağlantı seçimi:** tenant'ın altında bağlantıları işaretli liste olarak gelir ("N of M connections", All/None; ilk seferde hepsi işaretli, seçim hatırlanır). Build yalnız işaretlileri açar, 6'şar paralel; tablo listelerini de paralel okur: bağlantıları sırayla açmak yerine en yavaş bağlantı kadar sürer. |
 | K91 | 2026-10-28 | Satırlar gruplanmışken sütun sıralaması çalışır: grup sütununa göre sıralama (K3'ten beri varsayılan açık) kullanıcının sütun başlığından seçtiği sıralamayı artık ezmez. |
+| K92 | 2026-10-28 | `data_tp` / `row_id` etiketleri tip sütununun adı `data_tp_id` olduğunda da çalışır. |

@@ -293,3 +293,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K89 | 2026-10-28 | Groundwork for choosing data_tp Build connections: the tenant mapping file remembers which connections to search (`search.connections`, empty = all); no visible change yet. |
 | K90 | 2026-10-28 | **data_tp mapping, choose the connections:** under the tenant, its connections come as a checked list ("N of M connections", All/None; all checked the first time, the choice is remembered). Build opens only the checked ones, six at a time in parallel, and reads their table lists in parallel too: about as long as the slowest connection instead of one after another. |
 | K91 | 2026-10-28 | Sorting a column works while rows are grouped: the group column sort (on by default since K3) no longer overrides a sort the user picked by clicking a column header. |
+| K92 | 2026-10-28 | `data_tp` / `row_id` labels also work when the type column is named `data_tp_id`. |

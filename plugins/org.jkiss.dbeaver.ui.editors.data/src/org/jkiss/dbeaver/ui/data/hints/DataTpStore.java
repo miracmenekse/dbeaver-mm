@@ -108,8 +108,9 @@ public final class DataTpStore {
         return checked;
     }
 
+    // dbeaver-mm K92: some tables name the column data_tp_id
     public static boolean isDataTp(String columnName) {
-        return DATA_TP.equalsIgnoreCase(columnName);
+        return DATA_TP.equalsIgnoreCase(columnName) || (DATA_TP + "_id").equalsIgnoreCase(columnName);
     }
 
     public static boolean isRowId(String columnName) {
