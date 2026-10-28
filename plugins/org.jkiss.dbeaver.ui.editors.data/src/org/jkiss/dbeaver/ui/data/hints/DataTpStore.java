@@ -26,11 +26,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 /**
  * dbeaver-mm K68: data_tp column pair recognition and connection target mapping store.
@@ -56,10 +60,52 @@ public final class DataTpStore {
     }
 
     // dbeaver-mm K72: tenant dosyasının içeriği
-    public record TenantMap(String typeConnectionId, String typeSchema, Map<String, Entry> types, String built) {
+    // dbeaver-mm K89: connections = Build'de kullanılacak bağlantılar (boş = hepsi)
+    public record TenantMap(String typeConnectionId, String typeSchema, Map<String, Entry> types, String built,
+                            List<String> connections) {
         public TenantMap {
             types = types == null ? Map.of() : Map.copyOf(types);
+            // dbeaver-mm K89: kırpılır, boşlar atlanır, harf duyarsız tekrardan ilk yazım kalır
+            List<String> clean = new ArrayList<>();
+            Set<String> seen = new HashSet<>();
+            if (connections != null) {
+                for (String connection : connections) {
+                    String stripped = connection == null ? "" : connection.strip();
+                    if (!stripped.isEmpty() && seen.add(stripped.toLowerCase(Locale.ROOT))) {
+                        clean.add(stripped);
+                    }
+                }
+            }
+            connections = List.copyOf(clean);
         }
+
+        // dbeaver-mm K89: eski 4 parçalı kurucu; bağlantı listesi boş (= hepsi)
+        public TenantMap(String typeConnectionId, String typeSchema, Map<String, Entry> types, String built) {
+            this(typeConnectionId, typeSchema, types, built, List.of());
+        }
+    }
+
+    // dbeaver-mm K89: kayıt boşsa hepsi; değilse kayıttakiler (harf duyarsız), all'ın sırası ve yazımıyla
+    public static List<String> checked(List<String> all, List<String> saved) {
+        if (all == null) {
+            return List.of();
+        }
+        if (saved == null || saved.isEmpty()) {
+            return new ArrayList<>(all);
+        }
+        Set<String> keys = new HashSet<>();
+        for (String connection : saved) {
+            if (connection != null) {
+                keys.add(connection.strip().toLowerCase(Locale.ROOT));
+            }
+        }
+        List<String> checked = new ArrayList<>();
+        for (String connection : all) {
+            if (connection != null && keys.contains(connection.strip().toLowerCase(Locale.ROOT))) {
+                checked.add(connection);
+            }
+        }
+        return checked;
     }
 
     public static boolean isDataTp(String columnName) {
@@ -181,7 +227,9 @@ public final class DataTpStore {
             properties.getProperty("type.connection", ""),
             properties.getProperty("type.schema", ""),
             types,
-            properties.getProperty("built", ""));
+            properties.getProperty("built", ""),
+            // dbeaver-mm K89: search.connections=a,b; temizlik kurucuda
+            Arrays.asList(properties.getProperty("search.connections", "").split(",")));
     }
 
     // dbeaver-mm K72: tenant dosyasını atomik yazar; loadTenant ile birebir geri okunur
@@ -196,6 +244,7 @@ public final class DataTpStore {
             properties.setProperty("type.connection", emptyIfNull(map.typeConnectionId()));
             properties.setProperty("type.schema", emptyIfNull(map.typeSchema()));
             properties.setProperty("built", emptyIfNull(map.built()));
+            properties.setProperty("search.connections", String.join(",", map.connections())); // dbeaver-mm K89
             for (Map.Entry<String, Entry> e : map.types().entrySet()) {
                 String key = typeKey(e.getKey());
                 Entry entry = e.getValue();
