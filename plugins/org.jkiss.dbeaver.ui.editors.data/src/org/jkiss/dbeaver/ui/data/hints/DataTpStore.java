@@ -26,16 +26,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 
 /**
  * dbeaver-mm K68: data_tp column pair recognition and connection target mapping store.
@@ -61,70 +56,10 @@ public final class DataTpStore {
     }
 
     // dbeaver-mm K72: tenant dosyasının içeriği
-    // dbeaver-mm K86: schemas = aranacak şemalar (boş = hepsi)
-    public record TenantMap(String typeConnectionId, String typeSchema, Map<String, Entry> types, String built,
-                            List<String> schemas) {
+    public record TenantMap(String typeConnectionId, String typeSchema, Map<String, Entry> types, String built) {
         public TenantMap {
             types = types == null ? Map.of() : Map.copyOf(types);
-            // dbeaver-mm K86: kırpılır, boşlar atlanır, harf duyarsız tekrardan ilk yazım kalır
-            List<String> clean = new ArrayList<>();
-            Set<String> seen = new HashSet<>();
-            if (schemas != null) {
-                for (String schema : schemas) {
-                    String stripped = schema == null ? "" : schema.strip();
-                    if (!stripped.isEmpty() && seen.add(stripped.toLowerCase(Locale.ROOT))) {
-                        clean.add(stripped);
-                    }
-                }
-            }
-            schemas = List.copyOf(clean);
         }
-
-        // dbeaver-mm K86: eski 4 parçalı kurucu; şema listesi boş (= hepsi)
-        public TenantMap(String typeConnectionId, String typeSchema, Map<String, Entry> types, String built) {
-            this(typeConnectionId, typeSchema, types, built, List.of());
-        }
-    }
-
-    // dbeaver-mm K86: kayıt boşsa hepsi; değilse kayıttakiler (harf duyarsız), all'ın sırası ve yazımıyla
-    public static List<String> checkedSchemas(List<String> all, List<String> saved) {
-        if (all == null) {
-            return List.of();
-        }
-        if (saved == null || saved.isEmpty()) {
-            return new ArrayList<>(all);
-        }
-        Set<String> keys = new HashSet<>();
-        for (String schema : saved) {
-            if (schema != null) {
-                keys.add(schema.strip().toLowerCase(Locale.ROOT));
-            }
-        }
-        List<String> checked = new ArrayList<>();
-        for (String schema : all) {
-            if (schema != null && keys.contains(schema.strip().toLowerCase(Locale.ROOT))) {
-                checked.add(schema);
-            }
-        }
-        return checked;
-    }
-
-    // dbeaver-mm K86: SQL IN listesi; tek tırnak kaçar, null/boş atlanır
-    public static String sqlList(Collection<String> values) {
-        if (values == null) {
-            return "";
-        }
-        StringBuilder sql = new StringBuilder();
-        for (String value : values) {
-            if (value == null || value.isBlank()) {
-                continue;
-            }
-            if (sql.length() > 0) {
-                sql.append(", ");
-            }
-            sql.append('\'').append(value.replace("'", "''")).append('\'');
-        }
-        return sql.toString();
     }
 
     public static boolean isDataTp(String columnName) {
@@ -246,9 +181,7 @@ public final class DataTpStore {
             properties.getProperty("type.connection", ""),
             properties.getProperty("type.schema", ""),
             types,
-            properties.getProperty("built", ""),
-            // dbeaver-mm K86: search.schemas=a,b; temizlik kurucuda
-            Arrays.asList(properties.getProperty("search.schemas", "").split(",")));
+            properties.getProperty("built", ""));
     }
 
     // dbeaver-mm K72: tenant dosyasını atomik yazar; loadTenant ile birebir geri okunur
@@ -263,7 +196,6 @@ public final class DataTpStore {
             properties.setProperty("type.connection", emptyIfNull(map.typeConnectionId()));
             properties.setProperty("type.schema", emptyIfNull(map.typeSchema()));
             properties.setProperty("built", emptyIfNull(map.built()));
-            properties.setProperty("search.schemas", String.join(",", map.schemas())); // dbeaver-mm K86
             for (Map.Entry<String, Entry> e : map.types().entrySet()) {
                 String key = typeKey(e.getKey());
                 Entry entry = e.getValue();
