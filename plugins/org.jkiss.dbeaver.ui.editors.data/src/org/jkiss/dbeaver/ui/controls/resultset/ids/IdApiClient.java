@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.io.Reader;
 import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -35,9 +34,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * dbeaver-mm K39: calls the id API without any script, for machines where bash/PowerShell can't run.
@@ -52,7 +48,6 @@ class IdApiClient {
     static final Path CONFIG = DIR.resolve("id-api.properties");
     private static final Path TOKEN = DIR.resolve("token");
     private static final Duration TIMEOUT = Duration.ofSeconds(15);
-    private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
 
     /** K53: the file handed out with the install, next to dbeaver.exe; null when there is none. */
     @Nullable
@@ -90,91 +85,24 @@ class IdApiClient {
     @NotNull
     static String generate(int count, @NotNull String table, @NotNull String domain) throws IOException, InterruptedException {
         Properties config = load();
-        String url = require(config, "generate.url")
+        String url = ApiAuth.require(config, "generate.url")
             .replace("{count}", String.valueOf(count))
             .replace("{table}", URLEncoder.encode(table, StandardCharsets.UTF_8))
             .replace("{domain}", URLEncoder.encode(domain, StandardCharsets.UTF_8));
 
-        if (!Files.isRegularFile(TOKEN) || Files.size(TOKEN) == 0) {
-            login(config);
-        }
-        HttpResponse<String> response = call(config, url);
-        if (response.statusCode() == 401 || response.statusCode() == 403) {
-            login(config);
-            response = call(config, url);
-        }
+        // dbeaver-mm K98: token handling (login, 401/403 retry) is shared in ApiAuth
+        HttpResponse<String> response = ApiAuth.send(config, TOKEN, token -> {
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).timeout(TIMEOUT)
+                .header("Authorization", "Bearer " + token);
+            ApiAuth.addHeaders(config, "generate.header.", request);
+            String method = config.getProperty("generate.method", "GET").strip().toUpperCase(Locale.ROOT);
+            String body = config.getProperty("generate.body");
+            request.method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
+            return request.build();
+        }, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
             throw new IOException("ID API HTTP " + response.statusCode() + "\n" + response.body());
         }
         return response.body();
-    }
-
-    @NotNull
-    private static HttpResponse<String> call(@NotNull Properties config, @NotNull String url) throws IOException, InterruptedException {
-        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).timeout(TIMEOUT)
-            .header("Authorization", "Bearer " + Files.readString(TOKEN).strip());
-        addHeaders(config, "generate.header.", request);
-        String method = config.getProperty("generate.method", "GET").strip().toUpperCase();
-        String body = config.getProperty("generate.body");
-        request.method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
-        return HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
-    }
-
-    private static void login(@NotNull Properties config) throws IOException, InterruptedException {
-        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(require(config, "login.url"))).timeout(TIMEOUT)
-            .header("Content-Type", config.getProperty("login.contentType", "application/x-www-form-urlencoded").strip())
-            .POST(HttpRequest.BodyPublishers.ofString(loginBody(config)));
-        addHeaders(config, "login.header.", request);
-        HttpResponse<String> response = HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
-        String field = config.getProperty("token.field", "access_token").strip();
-        String token = response.statusCode() == 200 ? jsonString(response.body(), field) : null;
-        if (token == null) {
-            throw new IOException("Login failed (HTTP " + response.statusCode() + "), check user name / password under Plus Settings > ID API account" + "\n" + response.body());
-        }
-        Files.writeString(TOKEN, token);
-    }
-
-    /** K52: {user} / {password} in login.body come from login.user / login.password, encoded for the body's type. */
-    @NotNull
-    static String loginBody(@NotNull Properties config) throws IOException {
-        boolean json = config.getProperty("login.contentType", "").contains("json");
-        String body = require(config, "login.body");
-        for (String name : new String[]{"user", "password"}) {
-            String value = config.getProperty("login." + name, "");
-            body = body.replace("{" + name + "}", json
-                ? org.jkiss.dbeaver.model.data.json.JSONUtils.escapeJsonString(value)
-                : URLEncoder.encode(value, StandardCharsets.UTF_8));
-        }
-        return body;
-    }
-
-    private static final Set<String> RESTRICTED_HEADERS = Set.of("connection", "content-length", "expect", "host", "upgrade");
-
-    private static void addHeaders(@NotNull Properties config, @NotNull String prefix, @NotNull HttpRequest.Builder request) {
-        for (String key : config.stringPropertyNames()) {
-            if (!key.startsWith(prefix)) {
-                continue;
-            }
-            String name = key.substring(prefix.length());
-            // dbeaver-mm K56: Java's HttpClient sets these itself and throws on them (copied from browser requests)
-            if (!RESTRICTED_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
-                request.header(name, config.getProperty(key).strip());
-            }
-        }
-    }
-
-    @NotNull
-    private static String require(@NotNull Properties config, @NotNull String key) throws IOException {
-        String value = config.getProperty(key);
-        if (value == null || value.isBlank()) {
-            throw new IOException(key + " is missing in id-api.properties (next to dbeaver.exe or in " + CONFIG.getParent() + ")");
-        }
-        return value.strip();
-    }
-
-    /** {@code {"access_token":"abc",...}} -> abc; null when the field isn't there. */
-    static String jsonString(@NotNull String json, @NotNull String field) {
-        Matcher matcher = Pattern.compile("\"" + Pattern.quote(field) + "\"\\s*:\\s*\"([^\"]+)\"").matcher(json);
-        return matcher.find() ? matcher.group(1) : null;
     }
 }
