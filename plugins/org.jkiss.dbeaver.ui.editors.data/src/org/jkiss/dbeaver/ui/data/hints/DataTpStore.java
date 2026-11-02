@@ -126,15 +126,26 @@ public final class DataTpStore {
         }
         int dataTpIndex = -1;
         boolean hasRowId = false;
+        // dbeaver-mm K93: birden fazla tip sütunu olursa ilk tip sütunu esas alınır
         for (int i = 0; i < columnNames.size(); i++) {
             String columnName = columnNames.get(i);
-            if (isDataTp(columnName)) {
+            if (dataTpIndex < 0 && isDataTp(columnName)) {
                 dataTpIndex = i;
             } else if (isRowId(columnName)) {
                 hasRowId = true;
             }
         }
         return hasRowId ? dataTpIndex : -1;
+    }
+
+    /**
+     * dbeaver-mm K93: sütun data_tp/row_id çiftinden biri mi (çiftin listede mevcut olması şartıyla).
+     */
+    public static boolean isPairColumn(String columnName, List<String> columnNames) {
+        if (columnName == null || columnNames == null) {
+            return false;
+        }
+        return (isDataTp(columnName) || isRowId(columnName)) && dataTpIndex(columnNames) >= 0;
     }
 
     public static String tableKey(String tableName) {

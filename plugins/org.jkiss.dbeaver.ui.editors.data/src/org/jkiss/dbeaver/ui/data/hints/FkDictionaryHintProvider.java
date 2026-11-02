@@ -144,7 +144,8 @@ public class FkDictionaryHintProvider implements DBDCellHintProvider {
         DBDAttributeBinding dataTp = null;
         DBDAttributeBinding rowId = null;
         for (DBDAttributeBinding attr : attributes) {
-            if (DataTpStore.isDataTp(attr.getName())) {
+            // dbeaver-mm K93: yalnız ilk tip sütunu data_tp olarak seçilir; ikinci tip sütunu row_id dalına düşmez
+            if (dataTp == null && DataTpStore.isDataTp(attr.getName())) {
                 dataTp = attr;
             } else if (DataTpStore.isRowId(attr.getName())) {
                 rowId = attr;

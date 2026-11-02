@@ -2796,7 +2796,7 @@ public class SpreadsheetPresentation extends AbstractPresentation
                     DBPDataKind dataKind = attr.getDataKind();
                     if ((rightJustifyNumbers && dataKind == DBPDataKind.NUMERIC) ||
                         (rightJustifyDateTime && dataKind == DBPDataKind.DATETIME)) {
-                        if (isSimpleAttribute(attr)) {
+                        if (isSimpleAttribute(attr) && !isDataTpPairColumn(attr)) {
                             return ALIGN_RIGHT;
                         }
                     }
@@ -3160,6 +3160,20 @@ public class SpreadsheetPresentation extends AbstractPresentation
             backgroundDefault = null;
             foregroundDefault = null;
         }
+    }
+
+    // dbeaver-mm K93: data_tp/row_id çifti sola hizalanır, tip sütunu hep ilki
+    private boolean isDataTpPairColumn(@NotNull DBDAttributeBinding attr) {
+        String name = attr.getName();
+        if (!org.jkiss.dbeaver.ui.data.hints.DataTpStore.isDataTp(name)
+            && !org.jkiss.dbeaver.ui.data.hints.DataTpStore.isRowId(name)) {
+            return false;
+        }
+        List<String> names = new ArrayList<>();
+        for (DBDAttributeBinding attribute : controller.getModel().getAttributes()) {
+            names.add(attribute.getName());
+        }
+        return org.jkiss.dbeaver.ui.data.hints.DataTpStore.isPairColumn(name, names);
     }
 
     // Simple attribute is attribute which is not a part of FK or PK
