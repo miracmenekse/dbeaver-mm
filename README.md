@@ -301,3 +301,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K98 | 2026-11-02 | Groundwork for the deploy service: the ID API token handling (login, retry after 401/403) moves to a shared class; the ID API behaves the same; no visible change. |
 | K99 | 2026-11-02 | Groundwork for the deploy service: the version lookup and the deploy call are ready as shared code; no visible change. |
 | K100 | 2026-11-02 | Groundwork for the deploy service: a local record of sent packages (task, repository, SQL fingerprint, version, time) for the repeat-send warning; no visible change. |
+| K101 | 2026-11-02 | Groundwork for the deploy service: the send window for one repository group (fields from the package, version, warnings, SQL editable for this send only); not opened from the panel yet, no visible change. |
