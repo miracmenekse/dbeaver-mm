@@ -305,3 +305,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K100 | 2026-11-02 | Groundwork for the deploy service: a local record of sent packages (task, repository, SQL fingerprint, version, time) for the repeat-send warning; no visible change. |
 | K101 | 2026-11-02 | Groundwork for the deploy service: the send window for one repository group (fields from the package, version, warnings, SQL editable for this send only); not opened from the panel yet, no visible change. |
 | K102 | 2026-11-02 | *Send...* in the Conf Packages panel sends each schema of a package to its repository, one window per schema (Send, Skip, Cancel), when the deploy service is set up in the settings file; the copy buttons stay as they were. |
+| K103 | 2026-11-02 | Repository mapping also matches a schema name prefix: a key may be the full schema name or a prefix ending in `_`, so one entry can cover all tenants of a schema family instead of one line per tenant. |

@@ -312,3 +312,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K100 | 2026-11-02 | Servis gönderimi için altyapı: gönderilen paketlerin yerel kaydı (task, repository, SQL parmak izi, sürüm, zaman); tekrar gönderim uyarısı için; görünür değişiklik yok. |
 | K101 | 2026-11-02 | Servis gönderimi için altyapı: tek repository grubunun gönderim penceresi (alanlar paketten, sürüm, uyarılar, SQL yalnız bu gönderim için düzenlenebilir); panelden henüz açılmıyor, görünür değişiklik yok. |
 | K102 | 2026-11-02 | Conf Packages panelinde *Send...*: ayar dosyasında gönderim servisi kuruluysa paketin her şemasını repository'sine, şema başına bir pencereyle (Send, Skip, Cancel) gönderir; kopyala düğmeleri aynen kalır. |
+| K103 | 2026-11-02 | Repository eşlemesinde anahtar şemanın tamamı ya da `_` ile biten bir ön eki olabilir; böylece aynı şema ailesindeki her tenant için ayrı satır gerekmez. |

@@ -60,10 +60,36 @@ public final class DeployRequest {
         return m.find() ? m.group(1) : null;
     }
 
-    /** Repository for a schema from deploy.repo.&lt;schema&gt;, or an empty string. */
+    /**
+     * Repository for a schema: the exact deploy.repo.&lt;schema&gt; first, otherwise the longest
+     * deploy.repo.&lt;key&gt; whose key is a prefix of the schema followed by "_". Blank values never match.
+     */
+    // dbeaver-mm K103: repository mapping also matches a schema name prefix (tenant suffix)
     public static String repoFor(Properties config, String schema) {
-        String value = config.getProperty("deploy.repo." + schema);
-        return value == null ? "" : value.strip();
+        if (schema == null || schema.isEmpty()) {
+            return "";
+        }
+        String exact = config.getProperty("deploy.repo." + schema);
+        if (exact != null && !exact.isBlank()) {
+            return exact.strip();
+        }
+        String best = "";
+        int bestLength = 0;
+        for (String key : config.stringPropertyNames()) {
+            if (!key.startsWith("deploy.repo.")) {
+                continue;
+            }
+            String name = key.substring("deploy.repo.".length());
+            String value = config.getProperty(key);
+            if (name.isEmpty() || value == null || value.isBlank()) {
+                continue;
+            }
+            if (schema.startsWith(name + "_") && name.length() > bestLength) {
+                best = value.strip();
+                bestLength = name.length();
+            }
+        }
+        return best;
     }
 
     /** All repository choices: deploy.repo.* values and deploy.repos, unique and sorted. */
