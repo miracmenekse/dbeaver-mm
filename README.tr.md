@@ -313,3 +313,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K101 | 2026-11-02 | Servis gönderimi için altyapı: tek repository grubunun gönderim penceresi (alanlar paketten, sürüm, uyarılar, SQL yalnız bu gönderim için düzenlenebilir); panelden henüz açılmıyor, görünür değişiklik yok. |
 | K102 | 2026-11-02 | Conf Packages panelinde *Send...*: ayar dosyasında gönderim servisi kuruluysa paketin her şemasını repository'sine, şema başına bir pencereyle (Send, Skip, Cancel) gönderir; kopyala düğmeleri aynen kalır. |
 | K103 | 2026-11-02 | Repository eşlemesinde anahtar şemanın tamamı ya da `_` ile biten bir ön eki olabilir; böylece aynı şema ailesindeki her tenant için ayrı satır gerekmez. |
+| K104 | 2026-11-02 | Paketin repository'si bağlantı adından okunur (tenant ön ekinden sonraki kısım); ad repository'den farklıysa tek satır `deploy.repo.<ad>` yeter. |

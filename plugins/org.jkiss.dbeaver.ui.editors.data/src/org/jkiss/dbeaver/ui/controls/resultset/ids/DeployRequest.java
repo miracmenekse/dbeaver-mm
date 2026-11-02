@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.net.URLEncoder;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collection;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
@@ -36,6 +37,8 @@ public final class DeployRequest {
     private static final Pattern TASK = Pattern.compile("[A-Za-z][A-Za-z0-9_]*-\\d+");
     private static final Pattern UNSAFE_FILE_CHARS = Pattern.compile("[^A-Za-z0-9_.-]");
     private static final Pattern QUOTED = Pattern.compile("\"([^\"]*)\"");
+    private static final Pattern NON_WORD_RUN = Pattern.compile("[^\\p{L}\\p{N}]+");
+    private static final Pattern EDGE_DASH = Pattern.compile("^-+|-+$");
     private static final Set<String> DML = Set.of("INSERT", "UPDATE", "DELETE", "MERGE");
     private static final Set<String> DDL = Set.of(
         "CREATE", "ALTER", "DROP", "TRUNCATE", "COMMENT", "GRANT", "REVOKE", "RENAME");
@@ -90,6 +93,38 @@ public final class DeployRequest {
             }
         }
         return best;
+    }
+
+    /**
+     * Repository from an open connection name: the part after the first whitespace run, lower case,
+     * non-letter-digit runs as "-". deploy.repo.&lt;that part&gt; wins when it has a value.
+     */
+    // dbeaver-mm K104: repository comes from the open connection name
+    public static String repoFromConnection(Properties config, String connectionName) {
+        if (connectionName == null || connectionName.isBlank()) {
+            return "";
+        }
+        String[] parts = connectionName.strip().split("\\s+", 2);
+        if (parts.length < 2) {
+            return "";
+        }
+        String name = NON_WORD_RUN.matcher(parts[1].toLowerCase(Locale.ROOT)).replaceAll("-");
+        name = EDGE_DASH.matcher(name).replaceAll("");
+        if (name.isEmpty()) {
+            return "";
+        }
+        String mapped = config.getProperty("deploy.repo." + name);
+        return mapped != null && !mapped.isBlank() ? mapped.strip() : name;
+    }
+
+    /** The one repository shared by all given connections, or "" when none or several differ. */
+    // dbeaver-mm K104: connections that disagree give no guess
+    public static String commonRepo(Collection<String> repos) {
+        Set<String> found = new TreeSet<>();
+        for (String repo : repos) {
+            addOption(found, repo);
+        }
+        return found.size() == 1 ? found.iterator().next() : "";
     }
 
     /** All repository choices: deploy.repo.* values and deploy.repos, unique and sorted. */
