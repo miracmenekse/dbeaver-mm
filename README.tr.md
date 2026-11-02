@@ -306,3 +306,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K95 | 2026-11-02 | **data_tp eşlemesi, tenant'lar birbirinin seçimini kullanır:** eşlemesi olmayan tenant, en son Build alınan tenant'ın tip bağlantısı, şeması ve işaretli bağlantılarıyla başlar (adla eşleşir, `T3 PCM` → `T1 PCM`); Build çözülemeyen tabloları tablo adıyla ondan doldurur, `↻ from T3` yazar ve değiştirilebilir. Emin olunamayan eşleşmeler seçilmeden kalır. |
 | K97 | 2026-11-02 | Conf paketini servise göndermek için altyapı: saf istek yardımcıları (URL doldurma, sürüm çözme, repository seçimi, dosya adı, DDL/DML denetimi, multipart gövde); görünür değişiklik yok. |
 | K98 | 2026-11-02 | Servis gönderimi için altyapı: ID API token işi (giriş, 401/403 sonrası yeniden deneme) ortak bir sınıfa taşındı; ID API aynı davranır; görünür değişiklik yok. |
+| K99 | 2026-11-02 | Servis gönderimi için altyapı: sürüm sorgusu ve gönderim çağrısı ortak kodda hazır; görünür değişiklik yok. |

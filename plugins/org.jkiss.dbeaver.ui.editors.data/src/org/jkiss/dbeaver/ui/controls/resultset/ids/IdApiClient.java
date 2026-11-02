@@ -41,7 +41,7 @@ import java.util.Properties;
  * {@code ~/.dbeaver-mm/id-api.properties}. Same flow as id-api.sh:
  * the token is kept in {@code ~/.dbeaver-mm/token}; on 401/403 the client logs in again and retries once.
  */
-class IdApiClient {
+public class IdApiClient {
 
     private static final Path DIR = Path.of(System.getProperty("user.home"), ".dbeaver-mm");
     // K53: the user's own file holds login.user / login.password (and may override anything shared)
@@ -62,7 +62,7 @@ class IdApiClient {
 
     /** Shared file first, then the user's own on top of it. */
     @NotNull
-    static Properties load() {
+    public static Properties load() {
         Properties config = new Properties();
         Path shared = sharedConfig();
         for (Path file : shared == null ? List.of(CONFIG) : List.of(shared, CONFIG)) {
@@ -73,6 +73,11 @@ class IdApiClient {
             }
         }
         return config;
+    }
+
+    /** dbeaver-mm K99: the token file shared by the ID API and the deploy calls. */
+    public static Path tokenFile() {
+        return TOKEN;
     }
 
     /** The handed-out file is in place (it has generate.url). */
