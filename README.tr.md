@@ -302,3 +302,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K91 | 2026-10-28 | Satırlar gruplanmışken sütun sıralaması çalışır: grup sütununa göre sıralama (K3'ten beri varsayılan açık) kullanıcının sütun başlığından seçtiği sıralamayı artık ezmez. |
 | K92 | 2026-10-28 | `data_tp` / `row_id` etiketleri tip sütununun adı `data_tp_id` olduğunda da çalışır. |
 | K93 | 2026-11-02 | `data_tp` / `row_id` etiketleri sayısal sütunlarda da görünür: grid etiketleri yalnız sola hizalı hücrelerde çizdiği için çift, FK sütunları gibi sola hizalanır. Tabloda hem `data_tp` hem `data_tp_id` varsa ilki kullanılır. |
+| K94 | 2026-11-02 | Başka bir tablo açılınca ya da yenilenince `data_tp` / `row_id` etiketleri kaybolmaz; yenileme, açık tüm sekmelerin etiketlerini silmek yerine yalnız kendi satırlarını yeniden okur. |

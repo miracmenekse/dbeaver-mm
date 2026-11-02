@@ -162,6 +162,35 @@ public final class DataTpLabels {
     }
 
     /**
+     * dbeaver-mm K94: forgets the row labels of {@code rows} only, so a refresh of one result set
+     * makes those labels read again without touching the labels of other grids.
+     * Called from the fetch job instead of {@link #invalidate()}, which stays for the dialogs.
+     */
+    public static void forgetRows(
+        @Nullable DBDAttributeBinding dataTp,
+        @Nullable DBDAttributeBinding rowId,
+        @NotNull Collection<? extends DBDValueRow> rows
+    ) {
+        if (dataTp == null || rowId == null) {
+            return;
+        }
+        int tpIndex = dataTp.getOrdinalPosition();
+        int idIndex = rowId.getOrdinalPosition();
+        for (DBDValueRow row : rows) {
+            Object[] values = row.getValues();
+            if (tpIndex < 0 || idIndex < 0 || tpIndex >= values.length || idIndex >= values.length
+                || DBUtils.isNullValue(values[idIndex])) {
+                continue;
+            }
+            DataTpStore.Entry target = getEntry(dataTp, values[tpIndex]);
+            // dbeaver-mm K94: only pairs this result carries are dropped
+            if (target != null) {
+                ROWS.remove(rowKey(target, values[idIndex]));
+            }
+        }
+    }
+
+    /**
      * dbeaver-mm K70: loads the descriptions of the target rows of {@code rows}, one dictionary query
      * (IN list) per target table and chunk. Called from the fetch job after {@link #prefetchTypes}.
      */

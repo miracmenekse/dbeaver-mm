@@ -295,3 +295,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K91 | 2026-10-28 | Sorting a column works while rows are grouped: the group column sort (on by default since K3) no longer overrides a sort the user picked by clicking a column header. |
 | K92 | 2026-10-28 | `data_tp` / `row_id` labels also work when the type column is named `data_tp_id`. |
 | K93 | 2026-11-02 | `data_tp` / `row_id` labels now show on numeric columns: the pair is left aligned like FK columns, because the grid paints labels only in left aligned cells. If a table has both `data_tp` and `data_tp_id`, the first one is used. |
+| K94 | 2026-11-02 | `data_tp` / `row_id` labels stay when you open or refresh another table; a refresh now re-reads only its own rows instead of clearing the labels of every open tab. |

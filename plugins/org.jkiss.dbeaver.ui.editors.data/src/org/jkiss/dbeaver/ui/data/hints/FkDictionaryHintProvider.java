@@ -137,8 +137,6 @@ public class FkDictionaryHintProvider implements DBDCellHintProvider {
     ) {
         if (cleanupCache) {
             FkDictionaryLabels.invalidateLabels();
-            // dbeaver-mm K69
-            DataTpLabels.invalidate();
         }
         // dbeaver-mm K69: the pair's target table names, once per connection
         DBDAttributeBinding dataTp = null;
@@ -153,6 +151,10 @@ public class FkDictionaryHintProvider implements DBDCellHintProvider {
         }
         if (dataTp != null && rowId != null) {
             DataTpLabels.prefetchTypes(monitor, dataTp);
+            // dbeaver-mm K94: a refresh makes only this result's labels read again, other grids keep theirs
+            if (cleanupCache) {
+                DataTpLabels.forgetRows(dataTp, rowId, rows);
+            }
             // dbeaver-mm K70: then the target rows' descriptions, grouped by target table
             DataTpLabels.prefetchRows(monitor, dataTp, rowId, rows);
         }
