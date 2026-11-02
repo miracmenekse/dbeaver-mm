@@ -195,6 +195,8 @@ yapıştırırsın.
   onlarla birlikte silebilirsin. Silinecekler kırmızı, onlara bağlı kalanlar turuncu görünür.
 - Bir satırın FK değeri, aynı paketteki gösterdiği satırla aynı arka plan rengini alır.
 
+**Send... ile gönderme.** Ayar dosyasında gönderim adresleri doluysa paneldeki kopyala düğmelerinin yanında *Send...* görünür; dosya boşsa görünmez ve kopyala düğmeleri eskisi gibidir. *Send...* sürümü bir kez alır, sonra her şema için sırayla bir pencere açar (1/2, 2/2). Pencerede Jira ID, Repository, Description ve SQL paketten dolu gelir ve değiştirilebilir. **Send** o şemayı gönderir; **Skip** o şemayı atlar ve sıradakine geçer; **Cancel** kalan şemaları göndermeden bitirir. Son olarak gönderilen, atlanan ve gönderilmeyen şemaları gösteren bir özet çıkar. Pencerede yaptığın SQL değişikliği yalnızca o gönderime gider; paket dosyası değişmez. Aynı içerik daha önce gönderildiyse pencere bunu yazar ve varsayılan düğme **Skip** olur.
+
 ## Oturum kaydı ve sorun raporu
 
 **Sürekli kayıt.** dbeaver-mm; tablo açma, filtreleme, DML/DDL, conf paketi değişiklikleri ve ID getirme adımlarını

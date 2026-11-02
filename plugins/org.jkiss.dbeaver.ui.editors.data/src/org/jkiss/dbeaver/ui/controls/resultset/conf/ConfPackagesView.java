@@ -55,6 +55,8 @@ import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.ui.DBeaverIcons;
 import org.jkiss.dbeaver.ui.UIIcon;
 import org.jkiss.dbeaver.ui.UIUtils;
+import org.jkiss.dbeaver.ui.controls.resultset.ids.DeployCalls;
+import org.jkiss.dbeaver.ui.controls.resultset.ids.IdApiClient;
 import org.jkiss.dbeaver.ui.data.hints.FkDictionaryLabels;
 
 import java.nio.file.Files;
@@ -79,6 +81,8 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
     private Composite rowsArea;
     private Text sqlText;
     private Composite copyBar;
+    // dbeaver-mm K102: deploy settings, read once per refresh; the Send... button shows only when they are set
+    private Properties deployConfig = new Properties();
     private CTabFolder tabs;
     private CTabItem rowsTab;
 
@@ -194,6 +198,8 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         if (taskTable.isDisposed()) {
             return;
         }
+        // dbeaver-mm K102: one read of the settings file per refresh, not per button rebuild
+        deployConfig = IdApiClient.load();
         String selected = selectedTask();
         Path folder = ConfPackages.folder();
         DateFormat format = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
@@ -318,6 +324,15 @@ public class ConfPackagesView extends ViewPart implements IResourceChangeListene
         scripts.forEach((schema, script) -> addCopyButton(
             schema.isEmpty() ? (scripts.size() > 1 ? "Copy (no schema)" : "Copy script") : "Copy " + schema,
             script));
+        // dbeaver-mm K102: Send... after the copy buttons, only when the deploy service is set up
+        if (currentTask != null && !scripts.isEmpty() && DeployCalls.isConfigured(deployConfig)) {
+            String task = currentTask;
+            Button send = new Button(copyBar, SWT.PUSH);
+            send.setText("Send...");
+            send.setToolTipText("Send each schema to its repository, one window per schema");
+            send.addListener(SWT.Selection, e -> ConfDeployFlow.start(getSite().getShell(), task,
+                ConfPackages.readDescription(task), scripts, !currentLinks.isEmpty()));
+        }
         copyBar.getParent().layout(true, true);
     }
 

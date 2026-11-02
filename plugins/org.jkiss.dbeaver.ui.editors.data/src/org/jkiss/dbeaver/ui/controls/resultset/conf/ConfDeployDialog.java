@@ -197,9 +197,9 @@ public class ConfDeployDialog extends Dialog {
     @Override
     protected void createButtonsForButtonBar(Composite parent) {
         cancelButton = createButton(parent, IDialogConstants.CANCEL_ID, IDialogConstants.CANCEL_LABEL, false);
-        // A same-content send already exists: Skip is the default, so Enter does not send it again
+        // A send can't be undone: Send is never the default button, so Enter in a field doesn't send
         skipButton = createButton(parent, SKIP_ID, "Skip", draft.sentBefore() != null);
-        sendButton = createButton(parent, IDialogConstants.OK_ID, "Send", draft.sentBefore() == null);
+        sendButton = createButton(parent, IDialogConstants.OK_ID, "Send", false);
     }
 
     @Override
@@ -274,8 +274,13 @@ public class ConfDeployDialog extends Dialog {
         }
         String problem = problem();
         String message = problem != null ? problem : sendFailure;
+        boolean changed = !message.equals(errorLabel.getText());
         errorLabel.setText(message);
         setShown(errorLabel, !message.isEmpty());
+        if (changed) {
+            // A longer message needs more lines than the label had
+            errorLabel.getParent().layout(true, true);
+        }
         // The earlier send refers to the package content it was sent with; once that is edited it no longer applies
         boolean sameContent = taskText.getText().strip().equals(draft.task())
             && repoCombo.getText().strip().equals(draft.repo())

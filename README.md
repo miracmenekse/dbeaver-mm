@@ -65,7 +65,9 @@ no separate rule engine, so it stays a thin layer over upstream DBeaver.
   it (unchecked); while it is open the panel shows rows to delete in red, rows left pointing at them amber. With
   several schemas the panel separates them with a line and a title (e.g. *PCM confs*). Copy buttons put the package's script on the clipboard,
   one per schema it writes to (e.g. *Copy pcm*, *Copy domain_config*) plus *Copy all*, without the description line.
-  Copied scripts run without FK errors: DELETEs child tables first, INSERTs parent rows first, then UPDATEs.
+  Copied scripts run without FK errors: DELETEs child tables first, INSERTs parent rows first, then UPDATEs. When the deploy service is set up in the settings file, *Send...* appears too: one window per schema
+  (Jira ID, repository, description and SQL prefilled) with Send, Skip and Cancel. SQL edits in that window are sent only,
+  not written to the package.
 * **Easier reading:** Group rows by a column in two alternating colors. The navigator shows tables directly and puts
   views, indexes and other objects into one *Other objects* node.
 * **Freeze recorder:** When the window stops responding for a second or more, how long and where it hung is written to `~/.dbeaver-mm/donma.log`; freezes of 2 s or more also show a notification afterwards (off in *Preferences › User Interface › Notifications › UI freeze*). A small *Working: …* label in the bottom-right corner shows a background job that has run for over a second, so waiting is no longer mistaken for a freeze. *Plus › Create Problem Report* zips version info, the freeze log and the error logs of the last sessions onto the desktop, to send to whoever looks into the problem; nothing is sent automatically. The debug log shows aliases instead of secrets (`connection#1`, `host#1`, `user#1`, `db#1`, `ip#1`; passwords `***`), and no longer lists every plug-in start (`> Start`). The Eclipse error log messages and session records use the same aliases, and the problem report masks every file before zipping it.
@@ -302,3 +304,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K99 | 2026-11-02 | Groundwork for the deploy service: the version lookup and the deploy call are ready as shared code; no visible change. |
 | K100 | 2026-11-02 | Groundwork for the deploy service: a local record of sent packages (task, repository, SQL fingerprint, version, time) for the repeat-send warning; no visible change. |
 | K101 | 2026-11-02 | Groundwork for the deploy service: the send window for one repository group (fields from the package, version, warnings, SQL editable for this send only); not opened from the panel yet, no visible change. |
+| K102 | 2026-11-02 | *Send...* in the Conf Packages panel sends each schema of a package to its repository, one window per schema (Send, Skip, Cancel), when the deploy service is set up in the settings file; the copy buttons stay as they were. |

@@ -75,7 +75,9 @@ ya da ayrı bir kural motoru gerekmez. Böylece fork, upstream DBeaver'ın üzer
   tabloda gösterir; pencere açıkken panel silinecekleri kırmızı, onlara bağlı kalanları turuncu gösterir. Birden
   fazla şema varsa panel bunları çizgi ve başlıkla ayırır (ör. *PCM confs*). Kopyala butonları paketin betiğini panoya alır: yazdığı her
   şema için bir buton (ör. *Copy pcm*, *Copy domain_config*) ve *Copy all*; açıklama satırı hariç.
-  Kopyalanan betik FK hatası vermeden çalışır: DELETE'ler önce alt tablolar, INSERT'ler önce üst satırlar, sonra UPDATE'ler.
+  Kopyalanan betik FK hatası vermeden çalışır: DELETE'ler önce alt tablolar, INSERT'ler önce üst satırlar, sonra UPDATE'ler. Gönderim adresleri ayar dosyasında doluysa *Send...* de görünür: her şema için bir pencere
+  (Jira ID, repository, açıklama ve SQL dolu gelir) ve Send, Skip, Cancel düğmeleri. Pencerede yapılan SQL değişikliği
+  yalnızca o gönderime gider, pakete yazılmaz.
 * **Daha kolay okuma:** Satırlar bir kolona göre iki renkle gruplanabilir. Gezgin tabloları doğrudan gösterir;
   view, index ve diğer nesneler tek bir *Other objects* düğümünde toplanır.
 * **Donma kaydedici:** Pencere bir saniye ya da daha uzun cevap vermezse ne kadar ve nerede takıldığı `~/.dbeaver-mm/donma.log` dosyasına yazılır; 2 sn ve üstü donmalar ardından bildirim de gösterir (*Preferences › User Interface › Notifications › UI freeze* ile kapanır). Bir saniyeden uzun süren arka plan işi sağ altta küçük bir *Working: …* etiketiyle görünür; bekleme artık donma sanılmaz. *Plus › Create Problem Report* sürüm bilgisini, donma kaydını ve son oturumların hata log'larını masaüstüne zip olarak koyar; sorunu inceleyecek kişiye gönderilir, hiçbir şey kendiliğinden gönderilmez. Debug log'da gizli değerler yerine takma adlar görünür (`connection#1`, `host#1`, `user#1`, `db#1`, `ip#1`; şifreler `***`), her eklenti açılışı için yazılan `> Start` satırları artık yok. Eclipse hata log'u iletileri ve oturum kayıtları da aynı takma adları kullanır; sorun raporu her dosyayı zipe koymadan önce maskeler.
@@ -309,3 +311,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K99 | 2026-11-02 | Servis gönderimi için altyapı: sürüm sorgusu ve gönderim çağrısı ortak kodda hazır; görünür değişiklik yok. |
 | K100 | 2026-11-02 | Servis gönderimi için altyapı: gönderilen paketlerin yerel kaydı (task, repository, SQL parmak izi, sürüm, zaman); tekrar gönderim uyarısı için; görünür değişiklik yok. |
 | K101 | 2026-11-02 | Servis gönderimi için altyapı: tek repository grubunun gönderim penceresi (alanlar paketten, sürüm, uyarılar, SQL yalnız bu gönderim için düzenlenebilir); panelden henüz açılmıyor, görünür değişiklik yok. |
+| K102 | 2026-11-02 | Conf Packages panelinde *Send...*: ayar dosyasında gönderim servisi kuruluysa paketin her şemasını repository'sine, şema başına bir pencereyle (Send, Skip, Cancel) gönderir; kopyala düğmeleri aynen kalır. |
