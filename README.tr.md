@@ -307,3 +307,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K97 | 2026-11-02 | Conf paketini servise göndermek için altyapı: saf istek yardımcıları (URL doldurma, sürüm çözme, repository seçimi, dosya adı, DDL/DML denetimi, multipart gövde); görünür değişiklik yok. |
 | K98 | 2026-11-02 | Servis gönderimi için altyapı: ID API token işi (giriş, 401/403 sonrası yeniden deneme) ortak bir sınıfa taşındı; ID API aynı davranır; görünür değişiklik yok. |
 | K99 | 2026-11-02 | Servis gönderimi için altyapı: sürüm sorgusu ve gönderim çağrısı ortak kodda hazır; görünür değişiklik yok. |
+| K100 | 2026-11-02 | Servis gönderimi için altyapı: gönderilen paketlerin yerel kaydı (task, repository, SQL parmak izi, sürüm, zaman); tekrar gönderim uyarısı için; görünür değişiklik yok. |
