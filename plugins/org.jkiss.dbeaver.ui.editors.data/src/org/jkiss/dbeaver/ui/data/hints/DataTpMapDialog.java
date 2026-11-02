@@ -104,6 +104,9 @@ public class DataTpMapDialog extends Dialog {
         final String table;
         List<Place> candidates = List.of();
         Place chosen;
+        // dbeaver-mm K95: the place taken from another tenant, and that tenant
+        Place carriedPlace;
+        String carriedFrom;
 
         Row(String dataTp, String table, Place chosen) {
             this.dataTp = dataTp;
@@ -117,7 +120,8 @@ public class DataTpMapDialog extends Dialog {
     }
 
     /** dbeaver-mm K73: background read of a tenant file */
-    private record Loaded(DataTpStore.TenantMap map) {
+    // dbeaver-mm K95: donors = other tenants' saved mappings, most recent first
+    private record Loaded(DataTpStore.TenantMap map, Map<String, DataTpStore.TenantMap> donors) {
     }
 
     private final List<DBPDataSourceContainer> allConnections = new ArrayList<>();
@@ -136,6 +140,8 @@ public class DataTpMapDialog extends Dialog {
 
     private List<DBPDataSourceContainer> tenantConnections = List.of();
     private DataTpStore.TenantMap map = new DataTpStore.TenantMap("", "", Map.of(), "");
+    // dbeaver-mm K95: other tenants' saved mappings, read with the tenant file
+    private Map<String, DataTpStore.TenantMap> donors = Map.of();
     private List<Row> rows = new ArrayList<>();
     /** dbeaver-mm K79: every table found by the last build (one per database/schema/table) */
     private List<Place> allPlaces = List.of();
@@ -329,11 +335,14 @@ public class DataTpMapDialog extends Dialog {
         new AbstractJob("Read data_tp mapping of " + tenantId) {
             @Override
             protected IStatus run(@NotNull DBRProgressMonitor monitor) {
-                Loaded loaded = new Loaded(DataTpStore.loadTenant(file));
+                // dbeaver-mm K95: other tenants are read here, off the UI thread
+                Loaded loaded = new Loaded(DataTpStore.loadTenant(file),
+                    DataTpStore.otherTenants(DataTpStore.tenantDir(), tenantId));
                 UIUtils.asyncExec(() -> {
                     if (generation != loadGeneration || tenantCombo == null || tenantCombo.isDisposed()) {
                         return;
                     }
+                    donors = loaded.donors(); // dbeaver-mm K95
                     applyTenant(loaded.map());
                 });
                 return Status.OK_STATUS;
@@ -377,6 +386,19 @@ public class DataTpMapDialog extends Dialog {
         }
         updateConnectionCount();
 
+        // dbeaver-mm K95: a tenant without types starts from the most recent other tenant that has some
+        // (OK writes "built" even without a Build, so an empty file counts as new and is no donor)
+        String carriedFrom = null;
+        if (loaded.types().isEmpty()) {
+            for (Map.Entry<String, DataTpStore.TenantMap> donor : donors.entrySet()) {
+                if (!donor.getValue().types().isEmpty()) {
+                    carrySettings(donor.getKey(), donor.getValue());
+                    carriedFrom = donor.getKey();
+                    break;
+                }
+            }
+        }
+
         rows = new ArrayList<>();
         allPlaces = List.of(); // dbeaver-mm K79
         for (Map.Entry<String, DataTpStore.Entry> entry : loaded.types().entrySet()) {
@@ -385,14 +407,51 @@ public class DataTpMapDialog extends Dialog {
             Place place = new Place(value.connectionId(),
                 container == null ? value.connectionId() : container.getName(),
                 value.schema() == null ? "" : value.schema(), value.table());
-            rows.add(new Row(entry.getKey(), value.table(), place));
+            // dbeaver-mm K95: a saved source name is the table name the row was built with
+            String source = value.source();
+            rows.add(new Row(entry.getKey(), source.isEmpty() ? value.table() : source, place));
         }
         renderRows();
         messageLabel.setText(rows.isEmpty()
             ? "Pick the connection and schema of " + DataTpStore.TYPE_TABLE + ", then Build mapping."
             : rows.size() + " saved types. Build mapping refreshes them.");
+        if (carriedFrom != null) {
+            messageLabel.setText("Settings carried from " + carriedFrom + ". Build mapping to continue."); // dbeaver-mm K95
+        }
         buildButton.setEnabled(!tenantConnections.isEmpty());
         loadSchemas();
+    }
+
+    /** dbeaver-mm K95: copies the connection, schema and checked connections of a donor tenant (matched by name suffix) */
+    private void carrySettings(@NotNull String donorTenant, @NotNull DataTpStore.TenantMap donor) {
+        List<String> names = new ArrayList<>();
+        for (DBPDataSourceContainer container : tenantConnections) {
+            names.add(container.getName());
+        }
+        DBPDataSourceContainer donorConnection = containerById(donor.typeConnectionId());
+        int selected = donorConnection == null ? -1 : DataTpCarry.mapConnection(donorConnection.getName(), names);
+        if (selected >= 0) {
+            typeConnectionCombo.select(selected);
+        }
+        typeSchemaCombo.setText(DataTpCarry.swapTenant(donor.typeSchema(), donorTenant, tenant));
+        if (!donor.connections().isEmpty() && connectionsTable != null && !connectionsTable.isDisposed()) {
+            Set<Integer> wanted = new HashSet<>();
+            for (String id : donor.connections()) {
+                DBPDataSourceContainer donorContainer = containerById(id);
+                int index = donorContainer == null ? -1 : DataTpCarry.mapConnection(donorContainer.getName(), names);
+                if (index >= 0) {
+                    wanted.add(index);
+                }
+            }
+            // nothing matched: keep the current checklist (every connection)
+            if (!wanted.isEmpty()) {
+                TableItem[] items = connectionsTable.getItems();
+                for (int i = 0; i < items.length; i++) {
+                    items[i].setChecked(wanted.contains(i));
+                }
+            }
+            updateConnectionCount();
+        }
     }
 
     @Nullable
@@ -475,6 +534,8 @@ public class DataTpMapDialog extends Dialog {
         final String typeSchema = typeSchemaCombo.getText().strip();
         final List<DBPDataSourceContainer> connections = List.copyOf(checkedConnections);
         final Map<String, DataTpStore.Entry> saved = new HashMap<>(map.types());
+        final Map<String, DataTpStore.TenantMap> donorMaps = donors; // dbeaver-mm K95
+        final String buildTenant = tenant; // dbeaver-mm K95
         final int generation = loadGeneration;
         building = true;
         buildButton.setText("Stop");
@@ -488,7 +549,8 @@ public class DataTpMapDialog extends Dialog {
                         messageLabel.setText(text);
                     }
                 });
-                Built result = doBuild(monitor, typeConnection, typeSchema, connections, saved, progress);
+                Built result = doBuild(monitor, typeConnection, typeSchema, connections, saved, progress,
+                    donorMaps, buildTenant); // dbeaver-mm K95
                 UIUtils.asyncExec(() -> {
                     if (buildButton == null || buildButton.isDisposed()) {
                         return;
@@ -528,7 +590,9 @@ public class DataTpMapDialog extends Dialog {
         @NotNull String typeSchema,
         @NotNull List<DBPDataSourceContainer> connections,
         @NotNull Map<String, DataTpStore.Entry> saved,
-        @NotNull Consumer<String> progress
+        @NotNull Consumer<String> progress,
+        @NotNull Map<String, DataTpStore.TenantMap> donorMaps, // dbeaver-mm K95
+        @NotNull String buildTenant // dbeaver-mm K95
     ) {
         try {
             if (!typeConnection.isConnected()) {
@@ -647,9 +711,41 @@ public class DataTpMapDialog extends Dialog {
                 }
                 built.add(row);
             }
-            long mapped = built.stream().filter(r -> r.chosen != null).count();
+            // dbeaver-mm K95: an unresolved row takes the place its most recent donor tenant used, if that is unambiguous
+            int carried = 0;
+            for (Row row : built) {
+                if (row.chosen != null || row.table == null || row.candidates.size() == 1) {
+                    continue;
+                }
+                List<Place> pool = row.candidates.isEmpty() ? allPlaces : row.candidates;
+                List<DataTpCarry.Place> carryPool = new ArrayList<>();
+                for (Place place : pool) {
+                    carryPool.add(new DataTpCarry.Place(place.connectionName(), place.schema(), place.table()));
+                }
+                for (Map.Entry<String, DataTpStore.TenantMap> donor : donorMaps.entrySet()) {
+                    DataTpStore.Entry entry = DataTpCarry.donorEntry(donor.getValue(), row.table);
+                    DBPDataSourceContainer entryContainer = entry == null ? null : containerById(entry.connectionId());
+                    if (entryContainer == null) {
+                        continue;
+                    }
+                    int index = DataTpCarry.pickIndex(
+                        new DataTpCarry.Place(entryContainer.getName(), entry.schema(), entry.table()),
+                        donor.getKey(), buildTenant, carryPool);
+                    if (index >= 0) {
+                        row.chosen = pool.get(index);
+                        row.carriedPlace = row.chosen;
+                        row.carriedFrom = donor.getKey();
+                        carried++;
+                        break;
+                    }
+                }
+            }
+            long mapped = built.stream().filter(r -> r.chosen != null && r.carriedPlace == null).count();
             String message = "Built " + built.size() + " data_tp ids, " + mapped
                 + " mapped in 1 place or by an earlier choice. Searched " + searched + " connections.";
+            if (carried > 0) {
+                message += " " + carried + " carried from other tenants."; // dbeaver-mm K95
+            }
             if (!failed.isEmpty()) {
                 message += " Couldn't open: " + String.join(", ", failed) + ".";
             }
@@ -1014,6 +1110,9 @@ public class DataTpMapDialog extends Dialog {
 
     @NotNull
     private static String status(@NotNull Row row) {
+        if (row.carriedPlace != null && row.carriedPlace.equals(row.chosen)) {
+            return "↻ from " + row.carriedFrom; // dbeaver-mm K95
+        }
         if (row.candidates.size() > 1) {
             return "⚠ " + row.candidates.size() + " places";
         }
@@ -1038,7 +1137,8 @@ public class DataTpMapDialog extends Dialog {
         final Map<String, DataTpStore.Entry> types = new LinkedHashMap<>();
         for (Row row : rows) {
             if (row.chosen != null) {
-                types.put(row.dataTp, new DataTpStore.Entry(row.chosen.table(), row.chosen.connectionId(), row.chosen.schema()));
+                // dbeaver-mm K95: the row's source name is saved with the chosen place
+                types.put(row.dataTp, new DataTpStore.Entry(row.chosen.table(), row.chosen.connectionId(), row.chosen.schema(), row.table == null ? "" : row.table));
             }
         }
         // dbeaver-mm K90: save the checked selection; all checked means an empty list (new connections later count too)

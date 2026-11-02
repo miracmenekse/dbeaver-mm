@@ -30,11 +30,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * dbeaver-mm K68: data_tp column pair recognition and connection target mapping store.
@@ -56,7 +58,16 @@ public final class DataTpStore {
     }
 
     // dbeaver-mm K72: eşlenen hedef tablo (tablo, bağlantı ve şema)
-    public record Entry(String table, String connectionId, String schema) {
+    // dbeaver-mm K95: source = Build'de kullanılan data_tp tablo adı (boş = bilinmiyor, eski kayıt)
+    public record Entry(String table, String connectionId, String schema, String source) {
+        public Entry {
+            source = source == null ? "" : source;
+        }
+
+        // dbeaver-mm K95: eski 3 parçalı kurucu; kaynak bilinmiyor
+        public Entry(String table, String connectionId, String schema) {
+            this(table, connectionId, schema, "");
+        }
     }
 
     // dbeaver-mm K72: tenant dosyasının içeriği
@@ -233,7 +244,9 @@ public final class DataTpStore {
             if (table.isEmpty() || connectionId.isEmpty()) {
                 continue;
             }
-            types.put(dataTp, new Entry(table, connectionId, schema));
+            // dbeaver-mm K95: src.<data_tp>=kaynak tablo adı; eski dosyada yok
+            String source = properties.getProperty("src." + dataTp, "").strip();
+            types.put(dataTp, new Entry(table, connectionId, schema, source));
         }
         return new TenantMap(
             properties.getProperty("type.connection", ""),
@@ -267,6 +280,10 @@ public final class DataTpStore {
                 }
                 properties.setProperty("tp." + key,
                     entry.table().strip() + "|" + entry.connectionId().strip() + "|" + emptyIfNull(entry.schema()).strip());
+                // dbeaver-mm K95: kaynak ad, tenant'lar arası taşıma için
+                if (!emptyIfNull(entry.source()).isBlank()) {
+                    properties.setProperty("src." + key, entry.source().strip());
+                }
             }
             try (Writer writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
                 properties.store(writer, "dbeaver-mm data_tp tenant mapping");
@@ -279,6 +296,36 @@ public final class DataTpStore {
         } finally {
             Files.deleteIfExists(temp);
         }
+    }
+
+    // dbeaver-mm K95: bu tenant dışındaki, Build almış tenant dosyaları; en yeni Build önce; asla fırlatmaz
+    public static Map<String, TenantMap> otherTenants(Path dir, String tenant) {
+        Map<String, TenantMap> found = new LinkedHashMap<>();
+        if (dir == null) {
+            return found;
+        }
+        String own = tenantFile(dir, tenant).getFileName().toString();
+        List<Map.Entry<String, TenantMap>> maps = new ArrayList<>();
+        try (Stream<Path> files = Files.list(dir)) {
+            for (Path file : files.toList()) {
+                String name = file.getFileName().toString();
+                if (!name.endsWith(".properties") || name.equals(own)) {
+                    continue;
+                }
+                TenantMap map = loadTenant(file);
+                if (map.built().isEmpty()) {
+                    continue;
+                }
+                maps.add(Map.entry(name.substring(0, name.length() - ".properties".length()), map));
+            }
+        } catch (IOException | RuntimeException e) {
+            return new LinkedHashMap<>();
+        }
+        maps.sort((a, b) -> b.getValue().built().compareTo(a.getValue().built()));
+        for (Map.Entry<String, TenantMap> e : maps) {
+            found.put(e.getKey(), e.getValue());
+        }
+        return found;
     }
 
     private static String emptyIfNull(String value) {
