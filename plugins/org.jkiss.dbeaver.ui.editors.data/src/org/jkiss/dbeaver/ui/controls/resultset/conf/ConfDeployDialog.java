@@ -253,7 +253,8 @@ public class ConfDeployDialog extends Dialog {
             return "Jira ID must look like ABC-123";
         }
         if (repoCombo.getText().isBlank()) {
-            return "Choose a repository";
+            // dbeaver-mm K107: the list lives in Plus Settings
+            return "Choose a repository (list: Plus Settings > Send repositories...)";
         }
         if (descriptionText.getText().isBlank()) {
             return "Description is empty";

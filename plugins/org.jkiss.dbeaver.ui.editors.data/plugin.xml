@@ -1698,6 +1698,9 @@
         <!-- dbeaver-mm K49: recording only with consent, under a nickname -->
         <command id="org.jkiss.dbeaver.mm.session.consent" categoryId="org.jkiss.dbeaver.core.util"
             name="Automatic recording..." description="Turn recording on or off and pick the nickname records are kept under"/>
+        <!-- dbeaver-mm K107: repository per connection, for Send... -->
+        <command id="org.jkiss.dbeaver.mm.deploy.repos" categoryId="org.jkiss.dbeaver.core.util"
+            name="Send repositories..." description="Which repository each connection's conf packages are sent to"/>
     </extension>
     <extension point="org.eclipse.ui.handlers">
         <handler commandId="org.jkiss.dbeaver.mm.session.toggle"
@@ -1711,6 +1714,9 @@
             class="org.jkiss.dbeaver.ui.controls.resultset.undo.UndoHistoryDialog$Handler"/>
         <handler commandId="org.jkiss.dbeaver.mm.session.consent"
             class="org.jkiss.dbeaver.ui.controls.resultset.session.RecordingConsent"/>
+        <!-- dbeaver-mm K107: repository list dialog -->
+        <handler commandId="org.jkiss.dbeaver.mm.deploy.repos"
+            class="org.jkiss.dbeaver.ui.controls.resultset.ids.DeployRepoSettings"/>
     </extension>
     <extension point="org.eclipse.ui.menus">
         <menuContribution allPopups="false" locationURI="menu:org.jkiss.dbeaver.mm.plus?before=support">
@@ -1721,6 +1727,8 @@
         <!-- dbeaver-mm K53: settings go to Plus Settings, Plus keeps only the features -->
         <menuContribution allPopups="false" locationURI="menu:org.jkiss.dbeaver.mm.plus.settings?before=additions">
             <command commandId="org.jkiss.dbeaver.mm.idapi.settings"/>
+            <!-- dbeaver-mm K107: right under ID API account... -->
+            <command commandId="org.jkiss.dbeaver.mm.deploy.repos"/>
             <command commandId="org.jkiss.dbeaver.mm.datatp.settings"/>
             <command commandId="org.jkiss.dbeaver.mm.session.consent" style="toggle"/>
         </menuContribution>
