@@ -315,3 +315,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K103 | 2026-11-02 | Repository eşlemesinde anahtar şemanın tamamı ya da `_` ile biten bir ön eki olabilir; böylece aynı şema ailesindeki her tenant için ayrı satır gerekmez. |
 | K104 | 2026-11-02 | Paketin repository'si bağlantı adından okunur (tenant ön ekinden sonraki kısım); ad repository'den farklıysa tek satır `deploy.repo.<ad>` yeter. |
 | K105 | 2026-11-02 | *Send...* repository'yi şemayı içeren açık bağlantının adından alır; bağlantılar açılmaz. Açık bağlantı yoksa ya da farklı sonuç veriyorsa şema eşlemesine düşer. |
+| K106 | 2026-11-02 | Repository yalnız bağlantı adı kayıtlı repository listesindeyse (ya da doğrudan bir repository adıysa) gelir; listede olmayan bağlantı için tahmin yapılmaz. |

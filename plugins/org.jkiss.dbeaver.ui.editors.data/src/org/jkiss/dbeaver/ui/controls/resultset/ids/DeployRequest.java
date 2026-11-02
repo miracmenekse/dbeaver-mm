@@ -24,8 +24,10 @@ import java.util.Collection;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,7 +40,9 @@ public final class DeployRequest {
     private static final Pattern UNSAFE_FILE_CHARS = Pattern.compile("[^A-Za-z0-9_.-]");
     private static final Pattern QUOTED = Pattern.compile("\"([^\"]*)\"");
     private static final Pattern NON_WORD_RUN = Pattern.compile("[^\\p{L}\\p{N}]+");
+    private static final Pattern WHITESPACE_RUN = Pattern.compile("\\s+");
     private static final Pattern EDGE_DASH = Pattern.compile("^-+|-+$");
+    private static final String REPO_PREFIX = "deploy.repo.";
     private static final Set<String> DML = Set.of("INSERT", "UPDATE", "DELETE", "MERGE");
     private static final Set<String> DDL = Set.of(
         "CREATE", "ALTER", "DROP", "TRUNCATE", "COMMENT", "GRANT", "REVOKE", "RENAME");
@@ -96,11 +100,11 @@ public final class DeployRequest {
     }
 
     /**
-     * Repository from an open connection name: the part after the first whitespace run, lower case,
-     * non-letter-digit runs as "-". deploy.repo.&lt;that part&gt; wins when it has a value.
+     * Part of a connection name after the tenant: the text after the first whitespace run, lower case,
+     * non-letter-digit runs as "-", edge dashes removed. "" when there is no such text.
      */
-    // dbeaver-mm K104: repository comes from the open connection name
-    public static String repoFromConnection(Properties config, String connectionName) {
+    // dbeaver-mm K106: connection part parsing, moved out of repoFromConnection
+    public static String connectionPart(String connectionName) {
         if (connectionName == null || connectionName.isBlank()) {
             return "";
         }
@@ -109,12 +113,76 @@ public final class DeployRequest {
             return "";
         }
         String name = NON_WORD_RUN.matcher(parts[1].toLowerCase(Locale.ROOT)).replaceAll("-");
-        name = EDGE_DASH.matcher(name).replaceAll("");
-        if (name.isEmpty()) {
+        return EDGE_DASH.matcher(name).replaceAll("");
+    }
+
+    /**
+     * Repository for an open connection name: deploy.repo.&lt;part&gt; when it has a value, otherwise the
+     * part itself when it is one of the repository options. Unlisted names give "" (no guess).
+     */
+    // dbeaver-mm K104: repository comes from the open connection name
+    // dbeaver-mm K106: only a listed name or a saved entry gives a repository
+    public static String repoFromConnection(Properties config, String connectionName) {
+        String part = connectionPart(connectionName);
+        if (part.isEmpty()) {
             return "";
         }
-        String mapped = config.getProperty("deploy.repo." + name);
-        return mapped != null && !mapped.isBlank() ? mapped.strip() : name;
+        String mapped = config.getProperty(REPO_PREFIX + part);
+        if (mapped != null && !mapped.isBlank()) {
+            return mapped.strip();
+        }
+        return repoOptions(config).contains(part) ? part : "";
+    }
+
+    /** Key of a repository list row as typed: trimmed, lower case, whitespace runs as "-". */
+    // dbeaver-mm K106: row key for deploy.repo.<key>
+    public static String repoKey(String name) {
+        if (name == null) {
+            return "";
+        }
+        return WHITESPACE_RUN.matcher(name.strip().toLowerCase(Locale.ROOT)).replaceAll("-");
+    }
+
+    /**
+     * Rows of the repository list: saved deploy.repo.* entries with a value, plus the given connection
+     * parts with an empty value. Sorted by key.
+     */
+    // dbeaver-mm K106: blank saved entries and empty parts are not listed
+    public static Map<String, String> repoRows(Properties config, Collection<String> parts) {
+        Map<String, String> rows = new TreeMap<>();
+        for (String key : config.stringPropertyNames()) {
+            String value = config.getProperty(key);
+            if (key.startsWith(REPO_PREFIX) && value != null && !value.isBlank()) {
+                rows.put(key.substring(REPO_PREFIX.length()), value.strip());
+            }
+        }
+        for (String part : parts) {
+            if (part != null && !part.isEmpty()) {
+                rows.putIfAbsent(part, "");
+            }
+        }
+        return rows;
+    }
+
+    /**
+     * Writes the edited rows into own. A filled row sets its entry. A blank row clears the entry only when
+     * merged holds it, so a shared entry is hidden without adding an empty one. Other keys are not touched.
+     */
+    // dbeaver-mm K106: row keys are normalized with repoKey
+    public static void applyRepoRows(Properties own, Properties merged, Map<String, String> rows) {
+        for (Map.Entry<String, String> row : rows.entrySet()) {
+            String name = repoKey(row.getKey());
+            if (name.isEmpty()) {
+                continue;
+            }
+            String key = REPO_PREFIX + name;
+            String value = row.getValue() == null ? "" : row.getValue().strip();
+            if (!value.isEmpty()) {
+                own.setProperty(key, value);
+            } else if (merged.containsKey(key)) {
+                own.setProperty(key, "");
+            }
+        }
     }
 
     /** The one repository shared by all given connections, or "" when none or several differ. */

@@ -308,3 +308,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K103 | 2026-11-02 | Repository mapping also matches a schema name prefix: a key may be the full schema name or a prefix ending in `_`, so one entry can cover all tenants of a schema family instead of one line per tenant. |
 | K104 | 2026-11-02 | The repository for a package is read from the name of its connection (the part after the tenant prefix), so a single `deploy.repo.<name>` line is only needed when that name differs from the repository. |
 | K105 | 2026-11-02 | *Send...* takes the repository from the name of the open connection that holds the schema; connections are not opened. If no open connection, or several disagreeing ones, hold it, the schema mapping is used instead. |
+| K106 | 2026-11-02 | The repository comes from a connection name only when that name is in the saved repository list (or is a repository itself); unlisted connections give no guess. |
