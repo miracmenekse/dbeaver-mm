@@ -124,7 +124,7 @@ once metadata arrives.
 
 ## 🚀 Quick Start
 
-**Windows, no build:** download `dbeaver-mm-windows-x64.zip` from [Releases](https://github.com/miracmenekse/dbeaver-mm/releases), unzip it and double-click `dbeaver\dbeaver.exe`. Java is bundled. If SmartScreen warns, choose *More info → Run anyway*.
+**Windows, no build:** download `dbeaver-mm-windows-x64.zip` from [Releases](https://github.com/miracmenekse/dbeaver-mm/releases), unzip it and double-click `dbeaver\dbeaver.exe`. Java is bundled. If SmartScreen warns, choose *More info → Run anyway*. Step-by-step setup in Turkish (moving existing connections, the Fetch IDs file, updating): [docs/KURULUM.md](docs/KURULUM.md).
 
 **Building from source:**
 
@@ -312,3 +312,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K107 | 2026-11-02 | *Plus Settings › Send repositories...* lists each connection (by the name after its tenant) with its repository; the list is filled by hand and is kept in your own settings file, and the Repository box in *Send...* picks from it. |
 | K108 | 2026-11-12 | *Add changes to conf package* skips statements the package already has, so adding a set that includes an earlier change no longer writes it twice; the status line tells how many were already there. |
 | K109 | 2026-11-10 | **Fetch IDs on Windows** never runs `id-api.sh`: an `id-api.properties` without `generate.url` now says what is missing instead of failing with a `/bin/bash` path error. New template `docs/id-api.properties.example` for preparing the handed-out file (or moving an old `id-api.sh` into it). |
+| K110 | 2026-11-10 | **Setup notes for sharing releases**: new `docs/KURULUM.md` (download, moving existing DBeaver connections, the Fetch IDs file, updating, uninstalling, troubleshooting, and what the person sharing it hands out). Every release page now shows short install steps from `.github/release-notes.md`. |
