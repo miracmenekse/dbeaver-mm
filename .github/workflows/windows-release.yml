@@ -62,4 +62,4 @@ jobs:
           gh release create "$TAG" dbeaver-mm-windows-x64.zip \
             -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "dbeaver-mm $TAG" \
-            --notes "Windows: zip'i cikar, dbeaver klasorundeki dbeaver.exe'ye cift tikla. Java gerekmez."
+            --notes-file dbeaver/.github/release-notes.md

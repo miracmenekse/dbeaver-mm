@@ -19,7 +19,8 @@ görüntüleriyle anlatır. Görüntüler örnek bir `pcm` şemasıyla (teklifle
 
 ## Başlarken
 
-Kurulum yoktur: zip'i çıkarıp çalıştırırsın, Java içinde gelir.
+Kurulum yoktur: zip'i çıkarıp çalıştırırsın, Java içinde gelir. Bağlantı taşıma, Fetch IDs dosyası ve güncelleme dahil
+adım adım anlatım: [Kurulum Rehberi](KURULUM.md).
 
 1. [Releases sayfasından](https://github.com/miracmenekse/dbeaver-mm/releases/latest) `dbeaver-mm-windows-x64.zip`
    dosyasını indir (yaklaşık 143 MB).

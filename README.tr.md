@@ -133,7 +133,7 @@ açıklama kendiliğinden görünür.
 
 ## 🚀 Hızlı Başlangıç ve Kurulum
 
-**Windows, derlemeden:** [Releases](https://github.com/miracmenekse/dbeaver-mm/releases) sayfasından `dbeaver-mm-windows-x64.zip` dosyasını indir, çıkar ve `dbeaver\dbeaver.exe` dosyasına çift tıkla. Java içinde gelir. SmartScreen uyarırsa *Ek bilgi → Yine de çalıştır* de.
+**Windows, derlemeden:** [Releases](https://github.com/miracmenekse/dbeaver-mm/releases) sayfasından `dbeaver-mm-windows-x64.zip` dosyasını indir, çıkar ve `dbeaver\dbeaver.exe` dosyasına çift tıkla. Java içinde gelir. SmartScreen uyarırsa *Ek bilgi → Yine de çalıştır* de. Adım adım kurulum (var olan bağlantıları taşıma, Fetch IDs dosyası, güncelleme): [docs/KURULUM.md](docs/KURULUM.md).
 
 **Kaynaktan derleme:**
 
@@ -318,3 +318,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K106 | 2026-11-02 | Repository yalnız bağlantı adı kayıtlı repository listesindeyse (ya da doğrudan bir repository adıysa) gelir; listede olmayan bağlantı için tahmin yapılmaz. |
 | K107 | 2026-11-02 | *Plus Settings › Send repositories...* her bağlantıyı (tenant adından sonraki kısım) repository'siyle listeler; liste elle doldurulur, kendi ayar dosyanda tutulur ve *Send...* içindeki Repository kutusu buradan seçilir. |
 | K108 | 2026-11-10 | **Windows'ta Fetch IDs** `id-api.sh`'yi hiç çalıştırmaz: `generate.url` olmayan bir `id-api.properties` artık `/bin/bash` yol hatası yerine eksik olanı söyler. Dağıtılan dosyayı hazırlamak (ya da eski bir `id-api.sh`'yi ona taşımak) için yeni şablon `docs/id-api.properties.example`. |
+| K109 | 2026-11-10 | **Release paylaşımı için kurulum notları**: yeni `docs/KURULUM.md` (indirme, var olan DBeaver bağlantılarını taşıma, Fetch IDs dosyası, güncelleme, kaldırma, sorun giderme ve dağıtan kişinin vereceği dosyalar). Her release sayfası artık `.github/release-notes.md`'deki kısa kurulum adımlarını gösterir. |
