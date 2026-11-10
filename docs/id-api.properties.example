@@ -1,0 +1,20 @@
+# dbeaver-mm: template for the id-api.properties that is handed out to users (Fetch IDs)
+# Fill in the <...> parts from your working Postman / curl requests, save it as id-api.properties
+# and give that file to users: they put it next to dbeaver.exe (or pick it with
+# Plus Settings > ID API account... > Import...) and type only their own user name and password there.
+# Never put a user name or password in the handed-out file: {user} and {password} are filled in by DBeaver.
+# This file stays outside GitHub once it has real addresses in it.
+
+# Login request (the token is read from the JSON field named in token.field)
+login.url=https://<auth-host>/realms/<realm>/protocol/openid-connect/token
+login.contentType=application/x-www-form-urlencoded
+login.body=grant_type=password&client_id=<client-id>&username={user}&password={password}
+token.field=access_token
+# Extra login headers, one line each: login.header.<Name>=<value>
+
+# ID request: {count}, {table} and {domain} are filled in by DBeaver
+generate.url=https://<api-host>/id/generate?count={count}&table={table}&domain={domain}
+generate.method=GET
+# Extra headers, one line each (Authorization is added by DBeaver; Connection, Host and similar are skipped):
+generate.header.Accept=application/json, text/plain, */*
+# generate.header.<Name>=<value>

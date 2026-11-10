@@ -140,7 +140,10 @@ satırlar için ID alınır.
 **Dosyayı dağıtan kişi için.** Dosya GitHub'da yoktur, elden verilir. Kendi çalışan dosyandan bir kopya hazırla:
 kopyada senin kullanıcı adın ve şifren olmasın; giriş gövdesinde onların yerinde `{user}` ve `{password}` yazsın
 (DBeaver bunları her kullanıcının girdikleriyle doldurur). Kopyanın adı tam olarak `id-api.properties` olsun ve
-kullanıcıya yalnızca bu dosyayı ver. Kullanıcıdan başka bir şey istenmez.
+kullanıcıya yalnızca bu dosyayı ver. Kullanıcıdan başka bir şey istenmez. Sıfırdan hazırlıyorsan ya da eski bir
+`id-api.sh`'den taşıyorsan [`id-api.properties.example`](id-api.properties.example) şablonunu kullan: curl'deki adres,
+gövde ve `-H` header'ları ilgili satırlara gider, `$1 $2 $3` yerine `{count} {table} {domain}` yazılır. Windows'ta
+`id-api.sh` hiç çalıştırılmaz; ayarlar yalnızca bu dosyadan okunur.
 
 **Kullanım.**
 
@@ -231,6 +234,7 @@ kişiye gönder. Rapor SQL metni, tablo adları ve sunucu adresleri içerebilir;
 | "Windows bilgisayarınızı korudu" | **Ek bilgi › Yine de çalıştır**. Dosya imzasız olduğu için normaldir. |
 | FK hücresinde açıklama görünmüyor | Kolonun gerçekten bir FK (ya da sanal FK) olduğundan emin ol. Açıklama kolonunu başlıktaki **⋯** ile seç. |
 | *Fetch IDs*: `isn't set up` | `id-api.properties` dosyası `dbeaver.exe`'nin yanında değil. Dosyayı veren kişiye sor ya da *Plus Settings › ID API account... › Import...* ile seç. |
+| *Fetch IDs*: `/bin/bash: C:Users...: No such file or directory` | Eski sürüm, Linux'tan kopyalanan `id-api.sh`'yi çalıştırmaya çalışıyor. `id-api.properties`'te `generate.url` yok: dosyayı [şablona](id-api.properties.example) göre doldur ya da dağıtılan dosyayı koy. K108'den sonra bu durumda `isn't set up` hatası çıkar. |
 | *Fetch IDs*: `Login failed` | Kullanıcı adı ya da şifre yanlış: *Plus Settings › ID API account...* ile yeniden gir. |
 | *Fetch IDs* menüde soluk | Tabloda boş ID'li yeni satır yok ya da tablonun tek kolonlu bir anahtarı yok. |
 | DBeaver bir süre cevap vermiyor | Sağ altta *Working: …* varsa iş sürüyor, bekle. Tekrarlıyorsa *Plus › Create Problem Report* ile zip'i gönder. |

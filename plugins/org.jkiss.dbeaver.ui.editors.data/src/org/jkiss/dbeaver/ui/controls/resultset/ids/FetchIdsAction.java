@@ -39,6 +39,7 @@ import org.jkiss.dbeaver.ui.controls.resultset.ResultSetRow;
 import org.jkiss.dbeaver.ui.controls.resultset.ResultSetValueController;
 import org.jkiss.dbeaver.ui.controls.resultset.ResultSetViewer;
 import org.jkiss.dbeaver.ui.data.IValueController;
+import org.jkiss.dbeaver.utils.RuntimeUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -215,8 +216,11 @@ public class FetchIdsAction extends Action {
         if (IdApiClient.isConfigured()) {
             return parseIds(IdApiClient.generate(count, table, domain));
         }
-        if (!Files.isRegularFile(SCRIPT)) {
-            throw new IOException("Fetch IDs isn't set up: put the id-api.properties you were given next to dbeaver.exe");
+        // dbeaver-mm K108: Windows never runs the script; an id-api.sh copied over from Linux used to fail with
+        // "/bin/bash: C:Users...: No such file or directory" (bash drops the backslashes of the path)
+        if (RuntimeUtils.isWindows() || !Files.isRegularFile(SCRIPT)) {
+            throw new IOException("Fetch IDs isn't set up: put the id-api.properties you were given next to dbeaver.exe"
+                + " (generate.url is missing). On Windows id-api.sh is not used.");
         }
         Process process = new ProcessBuilder("bash", SCRIPT.toString(), String.valueOf(count), table, domain).start();
         // The output is one short JSON line, it fits in the pipe buffer until the process ends
