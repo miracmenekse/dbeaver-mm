@@ -450,37 +450,7 @@ public final class ConfPackages {
     /** Statements split on ';' outside quotes, stripped; blank and comment-only pieces dropped. */
     @NotNull
     public static List<String> splitStatements(@NotNull String sql) {
-        List<String> result = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        char quote = 0;
-        for (int i = 0; i < sql.length(); i++) {
-            char c = sql.charAt(i);
-            if (quote != 0) {
-                quote = c == quote ? 0 : quote;
-            } else if (c == '\'' || c == '"') {
-                quote = c;
-            } else if (c == '-' && i + 1 < sql.length() && sql.charAt(i + 1) == '-') {
-                int eol = sql.indexOf('\n', i);
-                eol = eol < 0 ? sql.length() : eol;
-                current.append(sql, i, eol);
-                i = eol - 1;
-                continue;
-            } else if (c == ';') {
-                addStatement(result, current);
-                continue;
-            }
-            current.append(c);
-        }
-        addStatement(result, current);
-        return result;
-    }
-
-    private static void addStatement(@NotNull List<String> result, @NotNull StringBuilder current) {
-        String statement = current.toString().strip();
-        current.setLength(0);
-        if (!statement.replaceAll("(?m)^\\s*--.*$", "").isBlank()) {
-            result.add(statement);
-        }
+        return ConfDedupe.split(sql);
     }
 
     /**

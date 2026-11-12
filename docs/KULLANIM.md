@@ -172,7 +172,8 @@ yapıştırırsın.
 3. *Task ID* ve *Description* gir. Daha önceki task'lar açılır listede durur.
 4. *Discard the changes in the grid afterwards* işaretli kalırsa tablodaki değişiklikler eklendikten sonra geri
    alınır; veritabanına hiçbir şey yazılmaz.
-5. **OK**. Altta "n statements added to TASK-….sql" görünür.
+5. **OK**. Altta "n statements added to TASK-….sql" görünür. Pakette zaten olan ifadeler tekrar eklenmez
+   (", m already there"); hepsi varsa dosya değişmez ve "All n statements are already in TASK-…" yazar.
 
 ![Add changes to conf package penceresi](rehber/11-pakete-ekle.png)
 

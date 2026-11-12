@@ -66,11 +66,22 @@ public class AddToConfPackageAction extends Action {
                 return;
             }
             String sql = SQLUtils.generateScript(viewer.getDataSource(), actions.toArray(new DBEPersistAction[0]), false);
-            Path file = ConfPackages.append(dialog.task, dialog.description, sql);
+            List<String> fresh = ConfDedupe.missing(ConfPackages.read(dialog.task), sql);
+            int total = ConfDedupe.split(sql).size();
+            if (fresh.isEmpty()) {
+                if (dialog.discard) {
+                    viewer.rejectChanges();
+                }
+                viewer.setStatus("All " + total + " statements are already in " + dialog.task, DBPMessageType.INFORMATION);
+                return;
+            }
+            Path file = ConfPackages.append(dialog.task, dialog.description, String.join(";\n", fresh) + ";");
             if (dialog.discard) {
                 viewer.rejectChanges();
             }
-            viewer.setStatus(actions.size() + " statements added to " + file.getFileName(), DBPMessageType.INFORMATION);
+            int skipped = total - fresh.size();
+            viewer.setStatus(fresh.size() + " statements added to " + file.getFileName()
+                + (skipped > 0 ? ", " + skipped + " already there" : ""), DBPMessageType.INFORMATION);
         } catch (Exception e) {
             DBWorkbench.getPlatformUI().showError("Conf package", "Changes could not be added to the conf package", e);
         }
