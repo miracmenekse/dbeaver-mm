@@ -48,12 +48,15 @@ import org.jkiss.dbeaver.model.struct.rdb.DBSCatalog;
 import org.jkiss.dbeaver.model.struct.rdb.DBSSchema;
 import org.jkiss.dbeaver.model.virtual.DBVEntity;
 import org.jkiss.dbeaver.model.virtual.DBVUtils;
+import org.jkiss.dbeaver.ui.inlinefkpicker.fed.FedResolve;
 import org.jkiss.utils.CommonUtils;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The single class that touches DBeaver metadata / query APIs for the inline FK picker.
@@ -178,6 +181,91 @@ public final class InlineFkService {
             }
             if (all) {
                 result.add(container);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * dbeaver-mm K120: tablo referanslarını bağlantılara çözer.
+     * <p>
+     * Her {@code [kod.]tablo} için kod verilmişse yalnız o kısa kodlu bağlantıda, verilmemişse
+     * havuzdaki bağlı bağlantıların metadata önbelleğinde aranır. Veri okunmaz, bağlantı açılmaz.
+     * Tek/hatırlanan aday {@link FedResolve#pick} ile seçilir; belirsiz tablolar tüm adaylarıyla
+     * döner, kararı çağıran sorar. Çözülemeyen tablolar sonuçta yer almaz.
+     */
+    @NotNull
+    public static Map<String, List<DBPDataSourceContainer>> resolveTableConnections(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull List<String> tableRefs,
+        @NotNull List<DBPDataSourceContainer> pool
+    ) {
+        Map<String, List<DBPDataSourceContainer>> result = new LinkedHashMap<>();
+        if (tableRefs.isEmpty()) {
+            return result;
+        }
+        Map<String, DBPDataSourceContainer> byId = new LinkedHashMap<>();
+        for (DBPDataSourceContainer container : pool) {
+            byId.put(container.getId(), container);
+        }
+        Map<String, List<String>> candidateIds = new LinkedHashMap<>();
+        for (String ref : tableRefs) {
+            String code = null;
+            String table = ref;
+            int dot = ref.lastIndexOf('.');
+            if (dot > 0 && dot < ref.length() - 1) {
+                code = ref.substring(0, dot);
+                table = ref.substring(dot + 1);
+            }
+            List<DBPDataSourceContainer> candidates = new ArrayList<>();
+            if (code != null) {
+                // K120: kod varsa yalnız o bağlantıya bakılır
+                DBPDataSourceContainer container = findByShortCode(code);
+                if (container != null && container.isConnected()
+                    && resolveEntity(monitor, DBUtils.getDefaultContext(container.getDataSource(), false), table) != null) {
+                    candidates.add(container);
+                }
+            } else {
+                // K120: kod yoksa havuzdaki bağlı bağlantıların metadata önbelleği taranır
+                for (DBPDataSourceContainer container : pool) {
+                    if (!container.isConnected()) {
+                        continue;
+                    }
+                    DBCExecutionContext context = DBUtils.getDefaultContext(container.getDataSource(), false);
+                    if (resolveEntity(monitor, context, table) != null) {
+                        candidates.add(container);
+                    }
+                }
+            }
+            if (candidates.isEmpty()) {
+                continue;
+            }
+            List<String> ids = new ArrayList<>(candidates.size());
+            for (DBPDataSourceContainer container : candidates) {
+                ids.add(container.getId());
+            }
+            candidateIds.put(ref, ids);
+        }
+        // K120: tek/hatırlanan adayları seç; belirsizler tüm adaylarıyla çağırana kalır
+        Map<String, String> picked = FedResolve.pick(candidateIds, Map.of());
+        for (Map.Entry<String, List<String>> entry : candidateIds.entrySet()) {
+            String chosen = picked.get(entry.getKey());
+            if (chosen != null) {
+                DBPDataSourceContainer container = byId.get(chosen);
+                if (container != null) {
+                    result.put(entry.getKey(), List.of(container));
+                }
+            } else {
+                List<DBPDataSourceContainer> candidates = new ArrayList<>();
+                for (String id : entry.getValue()) {
+                    DBPDataSourceContainer container = byId.get(id);
+                    if (container != null) {
+                        candidates.add(container);
+                    }
+                }
+                if (!candidates.isEmpty()) {
+                    result.put(entry.getKey(), candidates);
+                }
             }
         }
         return result;

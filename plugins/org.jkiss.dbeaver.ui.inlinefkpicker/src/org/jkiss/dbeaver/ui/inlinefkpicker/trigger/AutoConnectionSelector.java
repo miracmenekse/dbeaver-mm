@@ -108,6 +108,7 @@ final class AutoConnectionSelector {
         }
     }
 
+    // dbeaver-mm K120: belirsiz tablo→bağlantı eşlemesinde kullanıcıya sorulan mevcut kalıp
     private static void askUser(
         @NotNull SQLEditorBase editor,
         @NotNull String key,
