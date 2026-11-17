@@ -349,8 +349,11 @@ public class ResultSetRowColorHelper {
     }
 
     private void applyStripeBackgrounds(@NotNull int[] stripes, @NotNull DBVGroupRowStriping striping) {
-        Color colorA = CommonUtils.isEmpty(striping.getBackgroundColor1()) ? null : UIUtils.getSharedColor(striping.getBackgroundColor1());
-        Color colorB = CommonUtils.isEmpty(striping.getBackgroundColor2()) ? null : UIUtils.getSharedColor(striping.getBackgroundColor2());
+        // dbeaver-mm K111: default stripe pair saved under the other theme follows the current theme
+        String[] stripeColors = org.jkiss.dbeaver.ui.controls.resultset.colors.GroupRowsByColumnAction.themedStripeColors(
+            striping.getBackgroundColor1(), striping.getBackgroundColor2());
+        Color colorA = CommonUtils.isEmpty(stripeColors[0]) ? null : UIUtils.getSharedColor(stripeColors[0]);
+        Color colorB = CommonUtils.isEmpty(stripeColors[1]) ? null : UIUtils.getSharedColor(stripeColors[1]);
         if (colorA == null || colorB == null) {
             return;
         }

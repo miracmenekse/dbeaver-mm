@@ -71,6 +71,25 @@ public class GroupRowsByColumnAction extends Action {
         return UIStyles.isDarkTheme() ? SOFT_DARK : SOFT_LIGHT;
     }
 
+    /**
+     * dbeaver-mm K111: stripe colors are saved per table. If the saved pair is the default pair of the
+     * other theme (table colored on a dark PC, opened on a light one), return the current theme's default.
+     * Custom colors are returned unchanged.
+     */
+    @NotNull
+    public static String[] themedStripeColors(String c1, String c2) {
+        String[] cur = softColors() == SOFT_DARK ? asStrings(SOFT_DARK) : asStrings(SOFT_LIGHT);
+        String[] other = softColors() == SOFT_DARK ? asStrings(SOFT_LIGHT) : asStrings(SOFT_DARK);
+        if (other[0].equals(c1) && other[1].equals(c2)) {
+            return cur;
+        }
+        return new String[]{c1, c2};
+    }
+
+    private static String[] asStrings(RGB[] rgbs) {
+        return new String[]{StringConverter.asString(rgbs[0]), StringConverter.asString(rgbs[1])};
+    }
+
     @Override
     public void run() {
         DBSDataContainer dataContainer = viewer.getDataContainer();
