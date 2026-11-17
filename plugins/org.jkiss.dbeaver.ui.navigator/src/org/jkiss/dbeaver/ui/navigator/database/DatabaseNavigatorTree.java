@@ -1055,6 +1055,10 @@ public class DatabaseNavigatorTree extends Composite implements INavigatorListen
                             updateToolbar(false);
                         }
                         ((DatabaseNavigatorTree) getParent()).onTreeRefresh();
+                        if (!text.isEmpty() && !initial) {
+                            // dbeaver-mm K113
+                            ((DatabaseNavigatorTree) getParent()).expandMatchingDataSources(text);
+                        }
                     } finally {
                         // done updating the tree - set redraw back to true
                         redrawFalseControl.setRedraw(true);
@@ -1063,6 +1067,39 @@ public class DatabaseNavigatorTree extends Composite implements INavigatorListen
                     return Status.OK_STATUS;
                 }
             };
+        }
+    }
+
+    // dbeaver-mm K113: aramada bağlı ama kapalı bağlantıları otomatik aç
+    private void expandMatchingDataSources(@NotNull String pattern) {
+        Tree tree = treeViewer.getTree();
+        if (tree.isDisposed()) {
+            return;
+        }
+        boolean connectionFilterType = getFilterObjectType() == DatabaseNavigatorTreeFilterObjectType.connection;
+        for (TreeItem item : tree.getItems()) {
+            if (item.getData() instanceof DBNNode node) {
+                expandMatchingDataSources(node, pattern, connectionFilterType);
+            }
+        }
+    }
+
+    private void expandMatchingDataSources(@NotNull DBNNode node, @NotNull String pattern, boolean connectionFilterType) {
+        if (node instanceof DBNDataSource dataSource) {
+            if (SearchAutoExpand.shouldExpand(
+                pattern,
+                connectionFilterType,
+                dataSource.getDataSourceContainer().isConnected(),
+                treeViewer.getExpandedState(dataSource))) {
+                treeViewer.expandToLevel(dataSource, 3);
+            }
+        } else if (node instanceof DBNLocalFolder folder) {
+            DBNNode[] children = folder.getChildren(new VoidProgressMonitor());
+            if (children != null) {
+                for (DBNNode child : children) {
+                    expandMatchingDataSources(child, pattern, connectionFilterType);
+                }
+            }
         }
     }
 
