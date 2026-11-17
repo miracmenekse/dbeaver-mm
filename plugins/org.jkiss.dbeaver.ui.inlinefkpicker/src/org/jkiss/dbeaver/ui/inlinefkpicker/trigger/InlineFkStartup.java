@@ -37,6 +37,7 @@ import org.eclipse.ui.PlatformUI;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.sql.SQLScriptElement;
 import org.jkiss.dbeaver.ui.UIUtils;
+import org.jkiss.dbeaver.ui.editors.sql.SQLFederation;
 import org.jkiss.dbeaver.ui.editors.sql.SQLEditorBase;
 import org.jkiss.dbeaver.ui.inlinefkpicker.core.FkColumnRef;
 import org.jkiss.dbeaver.ui.inlinefkpicker.core.SqlCaretAnalyzer;
@@ -56,6 +57,8 @@ public class InlineFkStartup implements IStartup {
 
     @Override
     public void earlyStartup() {
+        // dbeaver-mm K123: federe sorgu köprüsünü çalıştırıcıya bağla
+        SQLFederation.register(new FedRunnerImpl());
         enableAutoCompletionOnce();
         UIUtils.asyncExec(this::hookWorkbench);
     }
