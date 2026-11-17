@@ -72,6 +72,8 @@ Senin bilgilerin `C:\Users\<kullanıcı>\.dbeaver-mm\` altına kaydedilir ve da�
 3. Her şey yerindeyse `dbeaver.eski` klasörünü silebilirsin. Bağlantılar, betikler ve ayarlar
    `%APPDATA%\DBeaverData` ile `%USERPROFILE%\.dbeaver-mm` altında durduğu için olduğu gibi gelir.
 
+Betiği başka yere koyarsan ilk çalıştırmada DBeaver klasörünü sorar ve hatırlar.
+
 **Betik yoksa (eski zip):** Yeni zip'i indir ve **başka bir klasöre** çıkar (ör. `C:\dbeaver-mm-yeni`).
 Eski `dbeaver` klasöründeki `id-api.properties` dosyasını yeni `dbeaver` klasörüne kopyala ve yeni
 `dbeaver.exe`'yi aç. Eski klasörü silebilirsin.

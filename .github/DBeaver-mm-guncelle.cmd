@@ -4,14 +4,48 @@ setlocal EnableExtensions
 
 rem Ilk cagri: dbeaver.exe'nin bulundugu klasoru bul
 if not "%~1"=="" goto :arg_var
+rem dbeaver-mm K115: bulunan yolu kaydet, sonraki calistirmalarda kullan
+set "KAYIT=%USERPROFILE%\.dbeaver-mm\dbeaver-yolu.txt"
 if exist "%~dp0dbeaver.exe" (
   set "HEDEF=%~dp0"
-  goto :ilk_hazir
+  goto :ilk_kaydet
 )
 if exist "%~dp0dbeaver\dbeaver.exe" (
   set "HEDEF=%~dp0dbeaver"
-  goto :ilk_hazir
+  goto :ilk_kaydet
 )
+if not exist "%KAYIT%" goto :ilk_sor
+set "HEDEF="
+set /p HEDEF=<"%KAYIT%"
+if not defined HEDEF goto :ilk_sor
+if exist "%HEDEF%\dbeaver.exe" goto :ilk_kaydet
+echo "%HEDEF%" | find /i "dbeaver.exe" >nul
+if not errorlevel 1 goto :ilk_kaydet
+goto :ilk_sor
+
+:ilk_sor
+set "X="
+set /p "X=DBeaver'in dbeaver.exe dosyasinin bulundugu klasoru yazin: "
+if not defined X goto :ilk_yok
+set "X=%X:"=%"
+if "%X:~-1%"=="\" set "X=%X:~0,-1%"
+if exist "%X%\dbeaver.exe" (
+  set "HEDEF=%X%"
+  goto :ilk_kaydet
+)
+if exist "%X%\dbeaver\dbeaver.exe" (
+  set "HEDEF=%X%\dbeaver"
+  goto :ilk_kaydet
+)
+goto :ilk_yok
+
+:ilk_kaydet
+if "%HEDEF:~-1%"=="\" set "HEDEF=%HEDEF:~0,-1%"
+if not exist "%USERPROFILE%\.dbeaver-mm" mkdir "%USERPROFILE%\.dbeaver-mm" >nul 2>&1
+>"%KAYIT%" echo %HEDEF%
+goto :ilk_hazir
+
+:ilk_yok
 echo HATA: dbeaver.exe bulunamadi.
 if not defined DBMM_SESSIZ pause
 exit /b 1

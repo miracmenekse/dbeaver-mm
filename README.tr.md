@@ -323,3 +323,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K112 | 2026-11-17 | Tek şemalı bir bağlantı, tablolarını arada veritabanı / şemalar / şema klasörleri olmadan doğrudan bağlantının altında gösterir. |
 | K113 | 2026-11-17 | Gezgin arama kutusuna yazınca bağlı ama kapalı bağlantılar da açılır ve eşleşen tablo görünür; bağlantı kurmaz, en az 2 karakter ister ve metin silinince hiçbir şeyi kapatmaz. |
 | K114 | 2026-11-17 | **Windows zip'i için tek tıkla güncelleme**: zip artık `dbeaver.exe`'nin yanında `DBeaver-mm guncelle.cmd` içerir. DBeaver kapalıyken çift tıkla: son sürümü indirir, eski klasörü `dbeaver.eski` olarak saklar ve `id-api.properties`'i taşır. `docs/KURULUM.md` ve release notları anlatır. |
+| K115 | 2026-11-17 | Güncelleme betiği (`DBeaver-mm guncelle.cmd`) her klasörden çalışır: `dbeaver.exe` yanında değilse DBeaver klasörünü bir kez sorar ve `%USERPROFILE%\.dbeaver-mm\dbeaver-yolu.txt` içinde hatırlar. |
