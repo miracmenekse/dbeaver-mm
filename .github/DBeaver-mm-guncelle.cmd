@@ -64,6 +64,8 @@ if not defined DBMM_SESSIZ pause
 exit /b 1
 
 :arg_var
+rem dbeaver-mm K116: hedef klasor calisma dizini olmasin, yoksa move kilitlenir
+cd /d "%TEMP%"
 set "HEDEF=%~1"
 
 rem Calisan DBeaver varsa dosyalar kilitli olabilir
