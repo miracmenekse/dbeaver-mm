@@ -1462,6 +1462,22 @@
                     <test property="org.jkiss.dbeaver.ui.toolbar.configuration.visible" args="resultsetViewer.bottom,org.jkiss.dbeaver.core.resultset.row.delete"/>
                 </visibleWhen>
             </command>
+            <!-- dbeaver-mm K112: Fetch IDs / Add to conf package under the SQL editor's result grid too
+                 (the table editor already has them next to its tabs, K37) -->
+            <command commandId="org.jkiss.dbeaver.mm.grid.fetchIds" mode="FORCE_TEXT" style="push">
+                <visibleWhen checkEnabled="false">
+                    <with variable="activePartId">
+                        <equals value="org.jkiss.dbeaver.ui.editors.sql.SQLEditor"/>
+                    </with>
+                </visibleWhen>
+            </command>
+            <command commandId="org.jkiss.dbeaver.mm.grid.addToConfPackage" mode="FORCE_TEXT" style="push">
+                <visibleWhen checkEnabled="false">
+                    <with variable="activePartId">
+                        <equals value="org.jkiss.dbeaver.ui.editors.sql.SQLEditor"/>
+                    </with>
+                </visibleWhen>
+            </command>
         </menuContribution>
         
         <menuContribution allPopups="false" locationURI="toolbar:org.jkiss.dbeaver.ui.controls.resultset.status.navCmds" >
