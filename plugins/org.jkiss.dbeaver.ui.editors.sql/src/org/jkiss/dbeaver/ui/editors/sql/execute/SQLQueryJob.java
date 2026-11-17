@@ -47,6 +47,9 @@ import org.jkiss.dbeaver.model.data.resultset.DBCSmartTransactionManager;
 import org.jkiss.dbeaver.model.exec.*;
 import org.jkiss.dbeaver.model.impl.AbstractExecutionSource;
 import org.jkiss.dbeaver.model.impl.AbstractStatement;
+// dbeaver-mm K122: federe sonucu yerel result set olarak sunmak için
+import org.jkiss.dbeaver.model.impl.local.CachedResultSet;
+import org.jkiss.dbeaver.model.impl.local.LocalResultSet;
 import org.jkiss.dbeaver.model.impl.local.LocalStatement;
 import org.jkiss.dbeaver.model.impl.local.StatResultSet;
 import org.jkiss.dbeaver.model.preferences.DBPPreferenceStore;
@@ -70,6 +73,8 @@ import org.jkiss.dbeaver.ui.controls.resultset.ResultSetPreferences;
 import org.jkiss.dbeaver.ui.dialogs.ConfirmationDialog;
 import org.jkiss.dbeaver.ui.dialogs.exec.ExecutionQueueErrorJob;
 import org.jkiss.dbeaver.ui.editors.IncludedScriptFileEditorInput;
+// dbeaver-mm K122: federe köprü arayüzü
+import org.jkiss.dbeaver.ui.editors.sql.SQLFederation;
 import org.jkiss.dbeaver.ui.editors.sql.SQLPreferenceConstants;
 import org.jkiss.dbeaver.ui.editors.sql.SQLPreferenceConstants.StatisticsTabOnExecutionBehavior;
 import org.jkiss.dbeaver.ui.editors.sql.SQLResultsConsumer;
@@ -406,6 +411,27 @@ public class SQLQueryJob extends DataSourceJob {
         @NotNull SQLScriptElement element,
         final boolean fireEvents
     ) {
+        // dbeaver-mm K122: kayıtlı runner varsa SELECT sorgusunu normal akıştan önce dener
+        if (element instanceof SQLQuery fedQuery && SQLFederation.get() != null
+            && SQLSemanticProcessor.isSelectQuery(session.getDataSource().getSQLDialect(), fedQuery.getText())
+        ) {
+            final SQLFederation.Result fedResult;
+            try {
+                fedResult = SQLFederation.get().tryRun(
+                    session.getProgressMonitor(), session.getExecutionContext(), fedQuery.getText());
+            } catch (DBException e) {
+                lastError = e;
+                return false;
+            }
+            if (fedResult != null) {
+                try {
+                    return fetchFederatedResult(session, fedQuery, fedResult);
+                } catch (DBException e) {
+                    lastError = e;
+                    return false;
+                }
+            }
+        }
         if (!scriptContext.getPragmas().isEmpty() && element instanceof SQLQuery query) {
             final SQLQueryDataContainer container = new SQLQueryDataContainer(this::getExecutionContext, query, scriptContext, log);
 
@@ -482,6 +508,49 @@ public class SQLQueryJob extends DataSourceJob {
             }
         }
         return true;
+    }
+
+    // dbeaver-mm K122: federe sonucu yerel result set üzerinden mevcut veri alıcıya besler
+    private boolean fetchFederatedResult(
+        @NotNull DBCSession session,
+        @NotNull SQLQuery query,
+        @NotNull SQLFederation.Result fedResult
+    ) throws DBException {
+        final CachedResultSet cached = new CachedResultSet(query.getText(), fedResult.columns().toArray(new String[0]));
+        for (Object[] row : fedResult.rows()) {
+            cached.addRow(row);
+        }
+        try (LocalStatement statement = new LocalStatement(session, "federation")) {
+            FederatedResultSet resultSet = new FederatedResultSet(session, statement, cached);
+            SQLQueryResult resultInfo = new SQLQueryResult(query);
+            SQLQueryResult.ExecuteResult executeResult = resultInfo.addExecuteResult(true);
+            DBDDataReceiver dataReceiver = resultsConsumer.getDataReceiver(query, resultSetNumber);
+            if (dataReceiver == null) {
+                return false;
+            }
+            boolean fetched = fetchQueryData(session, resultSet, resultInfo, executeResult, dataReceiver, true);
+            // dbeaver-mm K122: etiket sekme adı ve iş durum satırında gösterilir
+            executeResult.setResultSetName(fedResult.label());
+            session.getProgressMonitor().subTask(fedResult.label());
+            return fetched;
+        }
+    }
+
+    // dbeaver-mm K122: CachedResultSet'i DBCResultSet olarak sunar (sütunlar salt okunur)
+    private static class FederatedResultSet extends LocalResultSet<LocalStatement> {
+        FederatedResultSet(
+            @NotNull DBCSession session,
+            @NotNull LocalStatement statement,
+            @NotNull CachedResultSet cached
+        ) {
+            super(session, statement);
+            for (String column : cached.getColumnNames()) {
+                addColumn(column, DBPDataKind.STRING);
+            }
+            for (Object[] row : cached.getRows()) {
+                addRow(row);
+            }
+        }
     }
 
     private boolean executeSingleElement(@NotNull DBCSession session, boolean fireEvents, SQLQuery sqlQuery) {
