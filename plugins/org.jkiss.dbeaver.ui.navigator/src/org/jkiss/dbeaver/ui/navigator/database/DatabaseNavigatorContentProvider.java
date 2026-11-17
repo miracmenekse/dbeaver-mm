@@ -119,6 +119,7 @@ public class DatabaseNavigatorContentProvider implements IStructuredContentProvi
                 }
                 // dbeaver-mm K4: tables directly under the connection/schema, the rest in "Other objects"
                 // ponytail: always on; add a navigator preference if someone wants the classic tree back
+                // dbeaver-mm K112: a single-schema connection keeps its tables directly under the connection
                 children = NavigatorOtherObjectsNode.flattenTables(parentNode, children, new VoidProgressMonitor());
                 return getFinalNodes(parentNode, children);
             } catch (Throwable ex) {
