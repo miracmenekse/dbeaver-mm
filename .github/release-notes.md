@@ -8,7 +8,9 @@
 **Fetch IDs kullanacaksan:** `id-api.properties` dosyasını dbeaver-mm'yi veren kişiden al, `dbeaver.exe`'nin yanına
 koy, sonra **Plus Settings › ID API account...** ile kendi kullanıcı adını ve şifreni gir.
 
-**Yeni sürüme geçerken:** yeni zip'i ayrı bir klasöre çıkar ve eski klasördeki `id-api.properties`'i yanına kopyala.
+**Yeni sürüme geçerken:** DBeaver kapalıyken klasördeki `DBeaver-mm guncelle.cmd` dosyasına çift tıkla.
+Betik yeni sürümü indirir, eski klasörü `dbeaver.eski` olarak yedekler ve `id-api.properties`'i taşır.
+Betik yoksa (eski zip) yeni zip'i ayrı bir klasöre çıkar ve eski klasördeki `id-api.properties`'i yanına kopyala.
 Bağlantıların ve ayarların korunur.
 
 Ayrıntılar, eski DBeaver bağlantılarını taşıma ve sorun giderme:

@@ -65,11 +65,16 @@ Senin bilgilerin `C:\Users\<kullanıcı>\.dbeaver-mm\` altına kaydedilir ve da�
 
 ## 4. Yeni sürüme geçiş
 
-1. Yeni zip'i indir ve **başka bir klasöre** çıkar (ör. `C:\dbeaver-mm-yeni`). Açıkken eski klasörün üzerine çıkarma.
-2. Eski `dbeaver` klasöründeki **`id-api.properties`** dosyasını yeni `dbeaver` klasörüne kopyala.
-3. Yeni `dbeaver.exe`'yi aç. Bağlantılar, betikler ve ayarlar `%APPDATA%\DBeaverData` ile
-   `%USERPROFILE%\.dbeaver-mm` altında durduğu için olduğu gibi gelir.
-4. Her şey yerindeyse eski klasörü silebilirsin.
+1. DBeaver'ı kapat. Klasördeki **`DBeaver-mm guncelle.cmd`** dosyasına çift tıkla
+   (`dbeaver` klasöründe, `dbeaver.exe`'nin yanındadır).
+2. Betik yeni sürümü indirir, eski `dbeaver` klasörünü `dbeaver.eski` olarak yedekler ve
+   **`id-api.properties`** dosyanı yeni sürüme kopyalar. Bitince yeni sürüm açılır.
+3. Her şey yerindeyse `dbeaver.eski` klasörünü silebilirsin. Bağlantılar, betikler ve ayarlar
+   `%APPDATA%\DBeaverData` ile `%USERPROFILE%\.dbeaver-mm` altında durduğu için olduğu gibi gelir.
+
+**Betik yoksa (eski zip):** Yeni zip'i indir ve **başka bir klasöre** çıkar (ör. `C:\dbeaver-mm-yeni`).
+Eski `dbeaver` klasöründeki `id-api.properties` dosyasını yeni `dbeaver` klasörüne kopyala ve yeni
+`dbeaver.exe`'yi aç. Eski klasörü silebilirsin.
 
 ## 5. Kaldırma
 

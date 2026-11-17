@@ -51,6 +51,7 @@ jobs:
           curl -sL -o jre.zip "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse"
           unzip -q jre.zip && rm jre.zip
           mv jdk-*-jre dbeaver/jre
+          cp ../dbeaver/.github/DBeaver-mm-guncelle.cmd "dbeaver/DBeaver-mm guncelle.cmd"
           zip -qr ../dbeaver-mm-windows-x64.zip dbeaver
 
       - name: Publish release
