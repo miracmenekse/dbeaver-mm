@@ -13,10 +13,11 @@ görüntüleriyle anlatır. Görüntüler örnek bir `pcm` şemasıyla (teklifle
 4. [Filtre kutusunda adla filtreleme](#filtre-kutusunda-adla-filtreleme)
 5. [SQL editörü araçları](#sql-editörü-araçları)
 6. [Çok bağlantılı çalışma](#çok-bağlantılı-çalışma)
-7. [Yeni satırlara ID getirme](#yeni-satırlara-id-getirme)
-8. [Conf paketleri](#conf-paketleri)
-9. [Oturum kaydı ve sorun raporu](#oturum-kaydı-ve-sorun-raporu)
-10. [Sorun giderme](#sorun-giderme)
+7. [Navigation Pane](#navigation-pane)
+8. [Yeni satırlara ID getirme](#yeni-satırlara-id-getirme)
+9. [Conf paketleri](#conf-paketleri)
+10. [Oturum kaydı ve sorun raporu](#oturum-kaydı-ve-sorun-raporu)
+11. [Sorun giderme](#sorun-giderme)
 
 ## Başlarken
 
@@ -157,6 +158,29 @@ değil" mesajı Türkçe gösterilir (ör. "UNION desteklenmez: birleşik sonuç
 desteklenmez; INSERT/UPDATE/DELETE gibi DML federe çalışmaz. Sonuç için satır üst sınırı 100.000'dir; aşılırsa
 hangi tablonun sınırı geçtiği söylenir. F5, filtre ve sayfalama aynı federe yolu yeniden koşar; sonuç tek
 bağlantıya düşmez.
+
+## Navigation Pane
+
+Açık bağlantılardaki tabloları tek listede toplar; tablo adıyla hızlıca arayıp açabilirsin. Görünüm kendisi
+bağlantı açmaz, yalnızca var olan bağlantıları okur.
+
+**Açma.** **Window › Navigation Pane** ya da **Plus › Navigation Pane**. **Ctrl+Alt+T** kısayolu görünümü açıp
+imleci doğrudan arama kutusuna koyar.
+
+**Arama.** Kutuya tablo adının bir parçasını yaz; liste yazdıkça daralır (bulanık arama). Sonuçlar bağlantıya göre
+gruplanır; başlığın sağındaki sayı gösterilen / toplam tablo sayısıdır. Esc aramayı temizler.
+
+**Kısayollar.**
+
+- Yukarı / Aşağı: listede seçimi taşır.
+- Enter ya da çift tık: seçili tabloyu açar.
+- Ctrl+Enter: seçili tablo için yeni SQL editörü açar.
+- Esc: aramayı temizler; arama kutusunda metin yoksa imleci listeye verir.
+- Sağ tık: **SELECT şablonu** ya da **Show in Database Navigator**.
+
+**Sınırlar.** Yalnızca **bağlı bağlantılar** okunur; bağlı bağlantı yoksa "Bağlı bağlantı yok." yazar. Arama en
+fazla 500 sonuç (satır) gösterir; daha fazla eşleşme varsa "İlk 500 eşleşme gösteriliyor…" uyarısı çıkar ve
+aramayı daraltman istenir.
 
 ## Yeni satırlara ID getirme
 
