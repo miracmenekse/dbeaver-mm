@@ -23,7 +23,6 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
-import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.ITextSelection;
@@ -41,24 +40,22 @@ import org.eclipse.swt.events.MenuAdapter;
 import org.eclipse.swt.events.MenuEvent;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
-import org.eclipse.swt.events.PaintEvent;
-import org.eclipse.swt.events.PaintListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
-import org.eclipse.swt.graphics.Color;
-import org.eclipse.swt.graphics.Font;
-import org.eclipse.swt.graphics.GC;
-import org.eclipse.swt.graphics.Rectangle;
+import org.eclipse.swt.events.TreeAdapter;
+import org.eclipse.swt.events.TreeEvent;
+import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
-import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Menu;
 import org.eclipse.swt.widgets.MenuItem;
-import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Text;
+import org.eclipse.swt.widgets.Tree;
+import org.eclipse.swt.widgets.TreeColumn;
+import org.eclipse.swt.widgets.TreeItem;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IViewPart;
 import org.eclipse.ui.IWorkbenchPage;
@@ -69,14 +66,17 @@ import org.eclipse.ui.part.ViewPart;
 import org.eclipse.ui.texteditor.ITextEditor;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
+import org.jkiss.dbeaver.model.DBIcon;
 import org.jkiss.dbeaver.model.DBPDataSource;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.DBPEvent;
 import org.jkiss.dbeaver.model.DBPEventListener;
 import org.jkiss.dbeaver.model.DBUtils;
+import org.jkiss.dbeaver.model.DBValueFormatting;
 import org.jkiss.dbeaver.model.app.DBPDataSourceRegistry;
 import org.jkiss.dbeaver.model.app.DBPProject;
 import org.jkiss.dbeaver.model.navigator.DBNNode;
+import org.jkiss.dbeaver.model.runtime.DBRProgressListener;
 import org.jkiss.dbeaver.model.runtime.VoidProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.model.struct.DBSObjectContainer;
@@ -84,15 +84,20 @@ import org.jkiss.dbeaver.model.struct.DBSEntity;
 import org.jkiss.dbeaver.model.struct.rdb.DBSSchema;
 import org.jkiss.dbeaver.model.struct.rdb.DBSTable;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
+import org.jkiss.dbeaver.runtime.ui.UIServiceConnections;
+import org.jkiss.dbeaver.ui.DBeaverIcons;
 import org.jkiss.dbeaver.ui.mm.workbench.navpane.TableSearch.Entry;
 import org.jkiss.dbeaver.ui.mm.workbench.navpane.TableSearch.Hit;
+import org.jkiss.dbeaver.utils.RuntimeUtils;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -102,6 +107,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * dbeaver-mm K138: connected connections and their tables in one flat, fuzzy-searchable
  * list. Only already connected data sources are read; the view never opens a connection.
  */
+// dbeaver-mm K142: görünüm gerçek SWT ağacına çevrildi (özel Canvas çizimi kaldırıldı)
 public class NavigationPaneView extends ViewPart implements ISelectionProvider {
 
     // dbeaver-mm K139: satır etkileşimleri, kısayollar ve sağ tık menüsü
@@ -115,20 +121,23 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
     private static final int SEARCH_DELAY_MS = 100;
     private static final int MATCH_LIMIT = 500;
     private static final int MAX_DEPTH = 8;
-    private static final int HEADER_HEIGHT = 24;
-    private static final int ITEM_HEIGHT = 22;
-    private static final int MESSAGE_HEIGHT = 24;
 
     private final Map<String, List<Entry>> cache = new ConcurrentHashMap<>();
     private final Map<String, DBSEntity> entityIndex = new ConcurrentHashMap<>();
     private final List<ISelectionChangedListener> selectionListeners = new ArrayList<>();
     private final DBPEventListener dataSourceListener = event -> scheduleReload();
+    private final Set<String> userExpanded = new LinkedHashSet<>();
+    private final Set<String> connecting = new HashSet<>();
+    private final Map<String, String> connectionErrors = new HashMap<>();
 
     private Display display;
     private Text searchText;
     private Label countLabel;
-    private Canvas list;
+    private Tree tree;
+    private TreeColumn nameColumn;
+    private TreeColumn detailColumn;
     private DBPDataSourceRegistry registry;
+    private Map<String, DBPDataSourceContainer> containersByName = Map.of();
 
     private LoadJob loadJob;
     private Job searchJob;
@@ -137,10 +146,10 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
     private List<Entry> index = List.of();
     private Map<String, Integer> connectionTotals = Map.of();
     private List<Hit> hits = List.of();
-    private List<Row> rows = List.of();
-    private Row selectedRow;
+    private Hit selectedHit;
     private int connectedCount;
     private boolean loading;
+    private boolean rebuilding;
     private String query = "";
 
     @Override
@@ -168,7 +177,7 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
                         searchText.setText("");
                         startSearch("");
                     } else {
-                        list.setFocus();
+                        tree.setFocus();
                     }
                 }
             }
@@ -177,44 +186,55 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         countLabel = new Label(bar, SWT.RIGHT);
         countLabel.setLayoutData(new GridData(SWT.END, SWT.CENTER, false, false));
 
-        list = new Canvas(root, SWT.V_SCROLL);
-        list.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        list.addPaintListener(new PaintListener() {
-            @Override
-            public void paintControl(PaintEvent event) {
-                paint(event.gc, list.getClientArea());
-            }
-        });
-        list.addControlListener(new ControlAdapter() {
+        tree = new Tree(root, SWT.V_SCROLL | SWT.H_SCROLL | SWT.FULL_SELECTION);
+        tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        tree.setHeaderVisible(false);
+        tree.setLinesVisible(false);
+        nameColumn = new TreeColumn(tree, SWT.LEFT);
+        nameColumn.setText("Bağlantı / tablo");
+        detailColumn = new TreeColumn(tree, SWT.RIGHT);
+        detailColumn.setText("Sayaç / şema");
+        tree.addControlListener(new ControlAdapter() {
             @Override
             public void controlResized(ControlEvent event) {
-                updateScrollBar();
-                list.redraw();
+                updateColumnWidths();
             }
         });
-        ScrollBar scrollBar = list.getVerticalBar();
-        if (scrollBar != null) {
-            scrollBar.addListener(SWT.Selection, event -> list.redraw());
-        }
+        tree.addSelectionListener(new SelectionAdapter() {
+            @Override
+            public void widgetSelected(SelectionEvent event) {
+                TreeItem item = selectedItem();
+                selectedHit = item != null && item.getData() instanceof Hit hit ? hit : null;
+                fireSelection();
+            }
+        });
+        tree.addTreeListener(new TreeAdapter() {
+            @Override
+            public void treeExpanded(TreeEvent event) {
+                onGroupExpanded(event.item);
+            }
+
+            @Override
+            public void treeCollapsed(TreeEvent event) {
+                onGroupCollapsed(event.item);
+            }
+        });
 
         // dbeaver-mm K139: ok/Enter/Esc/Ctrl+Enter ve çift tık
-        list.addKeyListener(new KeyAdapter() {
+        tree.addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent event) {
                 switch (event.keyCode) {
-                    case SWT.ARROW_DOWN -> {
-                        moveSelection(1);
-                        event.doit = false;
-                    }
-                    case SWT.ARROW_UP -> {
-                        moveSelection(-1);
-                        event.doit = false;
-                    }
                     case SWT.CR, SWT.KEYPAD_CR -> {
                         if ((event.stateMask & SWT.CTRL) != 0) {
                             openNewSqlEditor();
                         } else {
-                            openSelectedTable();
+                            TreeItem item = selectedItem();
+                            if (item != null && item.getData() instanceof Hit) {
+                                openSelectedTable();
+                            } else if (item != null && item.getData() instanceof String) {
+                                item.setExpanded(!item.getExpanded());
+                            }
                         }
                         event.doit = false;
                     }
@@ -227,20 +247,11 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
                 }
             }
         });
-        list.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseDown(MouseEvent event) {
-                Row row = rowAt(event.y);
-                if (row != null && row.type == Row.ITEM) {
-                    selectRow(row);
-                }
-            }
-
+        tree.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseDoubleClick(MouseEvent event) {
-                Row row = rowAt(event.y);
-                if (row != null && row.type == Row.ITEM) {
-                    selectRow(row);
+                TreeItem item = selectedItem();
+                if (item != null && item.getData() instanceof Hit) {
                     openSelectedTable();
                 }
             }
@@ -287,21 +298,39 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
 
     @Override
     public ISelection getSelection() {
-        if (selectedRow == null || selectedRow.hit == null) {
+        if (selectedHit == null) {
             return StructuredSelection.EMPTY;
         }
-        DBNNode node = nodeFor(selectedRow.hit.entry());
+        DBNNode node = nodeFor(selectedHit.entry());
         return node == null ? StructuredSelection.EMPTY : new StructuredSelection(node);
     }
 
     @Override
     public void setSelection(ISelection selection) {
-        selectedRow = null;
-        list.redraw();
+        selectedHit = null;
+        if (tree != null && !tree.isDisposed()) {
+            tree.deselectAll();
+        }
+    }
+
+    private void fireSelection() {
+        ISelection selection = getSelection();
+        SelectionChangedEvent event = new SelectionChangedEvent(this, selection);
+        for (ISelectionChangedListener listener : selectionListeners) {
+            listener.selectionChanged(event);
+        }
+    }
+
+    private TreeItem selectedItem() {
+        if (tree == null || tree.isDisposed()) {
+            return null;
+        }
+        TreeItem[] selection = tree.getSelection();
+        return selection.length == 1 ? selection[0] : null;
     }
 
     private void createContextMenu() {
-        Menu menu = new Menu(list);
+        Menu menu = new Menu(tree);
         MenuItem selectTemplate = new MenuItem(menu, SWT.PUSH);
         selectTemplate.setText("SELECT şablonu");
         selectTemplate.addSelectionListener(new SelectionAdapter() {
@@ -321,12 +350,12 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         menu.addMenuListener(new MenuAdapter() {
             @Override
             public void menuShown(MenuEvent event) {
-                boolean enabled = selectedRow != null && selectedRow.hit != null;
+                boolean enabled = selectedHit != null;
                 selectTemplate.setEnabled(enabled);
                 showInNavigator.setEnabled(enabled);
             }
         });
-        list.setMenu(menu);
+        tree.setMenu(menu);
     }
 
     private void clearSearch() {
@@ -337,53 +366,15 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         }
     }
 
-    private Row rowAt(int y) {
-        ScrollBar scrollBar = list.getVerticalBar();
-        int offset = scrollBar == null ? 0 : scrollBar.getSelection();
-        int modelY = y + offset;
-        for (Row row : rows) {
-            if (modelY >= row.y && modelY < row.y + row.height) {
-                return row;
-            }
-        }
-        return null;
-    }
-
-    private void moveSelection(int delta) {
-        int index = selectedRow == null ? -1 : rows.indexOf(selectedRow);
-        int next = index + delta;
-        while (next >= 0 && next < rows.size()) {
-            Row row = rows.get(next);
-            if (row.type == Row.ITEM) {
-                selectRow(row);
-                return;
-            }
-            next += delta;
-        }
-    }
-
-    private void selectRow(Row row) {
-        if (selectedRow == row) {
-            return;
-        }
-        selectedRow = row;
-        list.redraw();
-        ISelection selection = getSelection();
-        SelectionChangedEvent event = new SelectionChangedEvent(this, selection);
-        for (ISelectionChangedListener listener : selectionListeners) {
-            listener.selectionChanged(event);
-        }
-    }
-
     private void openSelectedTable() {
-        if (selectedRow == null || selectedRow.hit == null) {
+        if (selectedHit == null) {
             return;
         }
         runCommand(CMD_OBJECT_OPEN);
     }
 
     private void openNewSqlEditor() {
-        if (selectedRow != null && selectedRow.hit != null) {
+        if (selectedHit != null) {
             runCommand(CMD_SQL_EDITOR_CREATE);
         }
     }
@@ -405,10 +396,10 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
     }
 
     private void insertSelectTemplate() {
-        if (selectedRow == null || selectedRow.hit == null) {
+        if (selectedHit == null) {
             return;
         }
-        Entry entry = selectedRow.hit.entry();
+        Entry entry = selectedHit.entry();
         String sql = SelectTemplate.select(entry.schema(), entry.table());
         IWorkbenchWindow window = getSite() == null ? null : getSite().getWorkbenchWindow();
         IEditorPart part = window == null || window.getActivePage() == null
@@ -433,10 +424,10 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
     }
 
     private void showInDatabaseNavigator() {
-        if (selectedRow == null || selectedRow.hit == null) {
+        if (selectedHit == null) {
             return;
         }
-        DBNNode node = nodeFor(selectedRow.hit.entry());
+        DBNNode node = nodeFor(selectedHit.entry());
         IWorkbenchWindow window = getSite() == null ? null : getSite().getWorkbenchWindow();
         if (node == null || window == null || window.getActivePage() == null) {
             return;
@@ -483,19 +474,19 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
             return;
         }
         display.asyncExec(() -> {
-            if (list == null || list.isDisposed()) {
+            if (tree == null || tree.isDisposed()) {
                 return;
             }
             loading = true;
             cache.clear();
             entityIndex.clear();
-            selectedRow = null;
+            hits = List.of();
             if (loadJob != null) {
                 loadJob.cancel();
             }
             loadJob = new LoadJob();
             loadJob.schedule();
-            rebuildRows();
+            rebuildTree();
         });
     }
 
@@ -513,7 +504,7 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
     }
 
     private void startSearch(String text) {
-        if (display == null || display.isDisposed() || list == null || list.isDisposed()) {
+        if (display == null || display.isDisposed() || tree == null || tree.isDisposed()) {
             return;
         }
         query = text;
@@ -530,11 +521,11 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
                     return Status.CANCEL_STATUS;
                 }
                 display.asyncExec(() -> {
-                    if (generation != searchGeneration || list == null || list.isDisposed()) {
+                    if (generation != searchGeneration || tree == null || tree.isDisposed()) {
                         return;
                     }
                     hits = result;
-                    rebuildRows();
+                    rebuildTree();
                 });
                 return Status.OK_STATUS;
             }
@@ -544,7 +535,7 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
     }
 
     private void applyLoad(List<Entry> entries, int connected) {
-        if (list == null || list.isDisposed()) {
+        if (tree == null || tree.isDisposed()) {
             return;
         }
         index = entries;
@@ -555,52 +546,183 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         }
         connectionTotals = totals;
         loading = false;
+        hits = List.of();
+        rebuildTree();
         startSearch(searchText == null || searchText.isDisposed() ? "" : searchText.getText());
     }
 
-    private void rebuildRows() {
-        List<Row> newRows = new ArrayList<>();
-        int y = 2;
-        if (loading && index.isEmpty()) {
-            newRows.add(new Row(Row.MESSAGE, y, MESSAGE_HEIGHT, "Tablolar yükleniyor…", null, null));
-            y += MESSAGE_HEIGHT;
-        } else if (connectedCount == 0) {
-            newRows.add(new Row(Row.MESSAGE, y, MESSAGE_HEIGHT, "Bağlı bağlantı yok.", null, null));
-            y += MESSAGE_HEIGHT;
-            newRows.add(new Row(Row.MESSAGE, y, MESSAGE_HEIGHT,
-                "Database Navigator'da bağlanın; tablolar burada görünür.", null, null));
-            y += MESSAGE_HEIGHT;
-        } else if (hits.isEmpty()) {
-            String message = query.isEmpty()
-                ? "Tablo bulunamadı."
-                : "\"" + query + "\" ile eşleşen tablo yok (" + connectedCount + " bağlı bağlantı).";
-            newRows.add(new Row(Row.MESSAGE, y, MESSAGE_HEIGHT, message, null, null));
-            y += MESSAGE_HEIGHT;
-        } else {
-            Map<String, List<Hit>> groups = new LinkedHashMap<>();
-            for (Hit hit : hits) {
-                groups.computeIfAbsent(TableSearch.groupKey(hit), key -> new ArrayList<>()).add(hit);
+    private void rebuildTree() {
+        if (tree == null || tree.isDisposed()) {
+            return;
+        }
+        rebuilding = true;
+        selectedHit = null;
+        tree.setRedraw(false);
+        try {
+            tree.removeAll();
+            List<DBPDataSourceContainer> containers = currentContainers();
+            List<NavTreeModel.Conn> conns = new ArrayList<>(containers.size());
+            Map<String, DBPDataSourceContainer> byName = new LinkedHashMap<>();
+            for (DBPDataSourceContainer container : containers) {
+                String name = container.getName();
+                conns.add(new NavTreeModel.Conn(name, container.isConnected()));
+                byName.putIfAbsent(name, container);
             }
-            for (Map.Entry<String, List<Hit>> group : groups.entrySet()) {
-                int total = connectionTotals.getOrDefault(group.getKey(), group.getValue().size());
-                String right = group.getValue().size() + " / " + total;
-                newRows.add(new Row(Row.HEADER, y, HEADER_HEIGHT, group.getKey(), right, null));
-                y += HEADER_HEIGHT;
-                for (Hit hit : group.getValue()) {
-                    newRows.add(new Row(Row.ITEM, y, ITEM_HEIGHT, hit.entry().table(), hit.entry().schema(), hit));
-                    y += ITEM_HEIGHT;
-                }
+            containersByName = byName;
+            List<NavTreeModel.Group> groups = NavTreeModel.build(conns, hits, query, connectionTotals);
+            for (NavTreeModel.Group group : groups) {
+                buildGroupItem(group, byName.get(group.conn().name()));
             }
-            if (hits.size() >= MATCH_LIMIT) {
-                newRows.add(new Row(Row.MESSAGE, y, MESSAGE_HEIGHT * 2,
-                    "İlk " + MATCH_LIMIT + " eşleşme gösteriliyor. Daraltmak için daha fazla yazın.", null, null));
-                y += MESSAGE_HEIGHT * 2;
+        } finally {
+            tree.setRedraw(true);
+            rebuilding = false;
+        }
+        updateCountLabel();
+        updateColumnWidths();
+    }
+
+    private List<DBPDataSourceContainer> currentContainers() {
+        List<DBPDataSourceContainer> result = new ArrayList<>();
+        if (registry == null) {
+            return result;
+        }
+        for (DBPDataSourceContainer container : registry.getDataSources()) {
+            if (container != null) {
+                result.add(container);
             }
         }
-        rows = newRows;
-        updateCountLabel();
-        updateScrollBar();
-        list.redraw();
+        return result;
+    }
+
+    private void buildGroupItem(NavTreeModel.Group group, DBPDataSourceContainer container) {
+        String name = group.conn().name();
+        TreeItem item = new TreeItem(tree, SWT.NONE);
+        item.setText(0, name);
+        item.setData(name);
+        if (container != null) {
+            item.setImage(connectionIcon(container));
+        }
+        String detail = query.isEmpty()
+            ? String.valueOf(group.total())
+            : group.hits().size() + "/" + group.total();
+        item.setText(1, detail);
+
+        boolean connected = group.conn().connected();
+        String error = connectionErrors.get(name);
+        if (!connected) {
+            if (connecting.contains(name)) {
+                addMessageItem(item, "bağlanıyor…");
+            } else if (error != null && !error.isEmpty()) {
+                addMessageItem(item, "bağlanamadı: " + error);
+            } else {
+                addMessageItem(item, "Bağlanmak için açın");
+            }
+        } else if (loading && index.isEmpty()) {
+            addMessageItem(item, "Tablolar yükleniyor…");
+        } else {
+            for (Hit hit : group.hits()) {
+                buildTableItem(item, hit);
+            }
+        }
+
+        boolean expanded = query.isEmpty() ? userExpanded.contains(name) : group.expanded();
+        item.setExpanded(expanded);
+    }
+
+    private void buildTableItem(TreeItem parent, Hit hit) {
+        TreeItem item = new TreeItem(parent, SWT.NONE);
+        item.setText(0, hit.entry().table());
+        String schema = hit.entry().schema();
+        if (schema != null && !schema.isEmpty()) {
+            item.setText(1, schema);
+            item.setForeground(1, display.getSystemColor(SWT.COLOR_DARK_GRAY));
+        }
+        item.setImage(tableIcon(hit));
+        item.setData(hit);
+    }
+
+    private void addMessageItem(TreeItem parent, String text) {
+        TreeItem item = new TreeItem(parent, SWT.NONE);
+        item.setText(0, text);
+        item.setForeground(display.getSystemColor(SWT.COLOR_DARK_GRAY));
+    }
+
+    private Image connectionIcon(DBPDataSourceContainer container) {
+        return DBeaverIcons.getImage(container.getDriver().getIconBig());
+    }
+
+    private Image tableIcon(Hit hit) {
+        Entry entry = hit.entry();
+        DBSEntity entity = entityIndex.get(entityKey(entry.connection(), entry.schema(), entry.table()));
+        if (entity != null) {
+            return DBeaverIcons.getImage(DBValueFormatting.getObjectImage(entity));
+        }
+        return DBeaverIcons.getImage("VIEW".equals(entry.kind()) ? DBIcon.TREE_VIEW : DBIcon.TREE_TABLE);
+    }
+
+    private void onGroupExpanded(Object widget) {
+        if (rebuilding || !(widget instanceof TreeItem item) || item.getParentItem() != null) {
+            return;
+        }
+        if (!(item.getData() instanceof String name) || !query.isEmpty()) {
+            return;
+        }
+        userExpanded.add(name);
+        DBPDataSourceContainer container = containersByName.get(name);
+        if (container != null && !container.isConnected() && !connecting.contains(name)) {
+            connectContainer(name, container);
+        }
+    }
+
+    private void onGroupCollapsed(Object widget) {
+        if (rebuilding || !(widget instanceof TreeItem item) || item.getParentItem() != null) {
+            return;
+        }
+        if (item.getData() instanceof String name && query.isEmpty()) {
+            userExpanded.remove(name);
+        }
+    }
+
+    private void connectContainer(String name, DBPDataSourceContainer container) {
+        connecting.add(name);
+        connectionErrors.remove(name);
+        display.asyncExec(this::rebuildTree);
+
+        DBRProgressListener onFinish = status -> display.asyncExec(() -> {
+            connecting.remove(name);
+            boolean ok = status != null && status.isOK() && container.isConnected();
+            if (!ok) {
+                String message = status == null ? null : status.getMessage();
+                connectionErrors.put(name, message == null || message.isEmpty() ? "bağlantı kurulamadı" : message);
+            }
+            scheduleReload();
+        });
+
+        UIServiceConnections connections = DBWorkbench.getService(UIServiceConnections.class);
+        if (connections != null) {
+            try {
+                connections.connectDataSource(container, onFinish);
+            } catch (Throwable e) {
+                connecting.remove(name);
+                connectionErrors.put(name, e.getMessage() == null ? "bağlantı kurulamadı" : e.getMessage());
+                display.asyncExec(this::rebuildTree);
+            }
+        } else {
+            new Job("Bağlantı: " + name) {
+                @Override
+                protected IStatus run(IProgressMonitor monitor) {
+                    try {
+                        container.connect(RuntimeUtils.makeMonitor(monitor), true, true);
+                        onFinish.onTaskFinished(Status.OK_STATUS);
+                        return Status.OK_STATUS;
+                    } catch (DBException e) {
+                        Status status = new Status(IStatus.ERROR, VIEW_ID, e.getMessage(), e);
+                        onFinish.onTaskFinished(status);
+                        return status;
+                    }
+                }
+            }.schedule();
+        }
     }
 
     private void updateCountLabel() {
@@ -616,110 +738,14 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         }
     }
 
-    private void updateScrollBar() {
-        if (list == null || list.isDisposed()) {
+    private void updateColumnWidths() {
+        if (tree == null || tree.isDisposed() || nameColumn == null || detailColumn == null) {
             return;
         }
-        ScrollBar scrollBar = list.getVerticalBar();
-        if (scrollBar == null) {
-            return;
-        }
-        Rectangle area = list.getClientArea();
-        int total = rows.isEmpty() ? area.height : rows.getLast().y + rows.getLast().height + 2;
-        int maximum = Math.max(total, area.height);
-        scrollBar.setMinimum(0);
-        scrollBar.setMaximum(maximum);
-        scrollBar.setThumb(Math.min(area.height, total));
-        scrollBar.setPageIncrement(area.height);
-        scrollBar.setIncrement(ITEM_HEIGHT);
-        if (scrollBar.getSelection() > maximum - area.height) {
-            scrollBar.setSelection(Math.max(0, maximum - area.height));
-        }
-    }
-
-    private void paint(GC gc, Rectangle area) {
-        Color background = display.getSystemColor(SWT.COLOR_LIST_BACKGROUND);
-        Color foreground = display.getSystemColor(SWT.COLOR_LIST_FOREGROUND);
-        Color selectionBackground = display.getSystemColor(SWT.COLOR_LIST_SELECTION);
-        Color selectionForeground = display.getSystemColor(SWT.COLOR_LIST_SELECTION_TEXT);
-        Color muted = display.getSystemColor(SWT.COLOR_DARK_GRAY);
-        Font normal = JFaceResources.getFontRegistry().get(JFaceResources.DEFAULT_FONT);
-        Font bold = JFaceResources.getFontRegistry().getBold(JFaceResources.DEFAULT_FONT);
-
-        gc.setBackground(background);
-        gc.fillRectangle(area);
-
-        ScrollBar scrollBar = list.getVerticalBar();
-        int offset = scrollBar == null ? 0 : scrollBar.getSelection();
-        for (Row row : rows) {
-            int y = row.y - offset;
-            if (y + row.height < 0) {
-                continue;
-            }
-            if (y > area.height) {
-                break;
-            }
-            int textY = y + (row.height - gc.getFontMetrics().getHeight()) / 2 + 1;
-            Color rowForeground = foreground;
-            if (row == selectedRow && row.type == Row.ITEM) {
-                gc.setBackground(selectionBackground);
-                gc.fillRectangle(0, y, area.width, row.height);
-                rowForeground = selectionForeground;
-            }
-            switch (row.type) {
-                case Row.HEADER -> {
-                    gc.setForeground(rowForeground);
-                    gc.setFont(bold);
-                    gc.drawString("▾ " + row.text, 10, textY, true);
-                    if (row.right != null) {
-                        gc.setForeground(muted);
-                        gc.setFont(normal);
-                        int width = gc.textExtent(row.right).x;
-                        gc.drawString(row.right, area.width - width - 12, textY, true);
-                    }
-                }
-                case Row.ITEM -> {
-                    gc.setForeground(rowForeground);
-                    int[] matched = row.hit == null ? new int[0] : row.hit.matched();
-                    drawMatched(gc, row.text, matched, 24, textY, normal, bold);
-                    if (row.right != null && !row.right.isEmpty()) {
-                        gc.setForeground(muted);
-                        gc.setFont(normal);
-                        int width = gc.textExtent(row.right).x;
-                        gc.drawString(row.right, area.width - width - 12, textY, true);
-                    }
-                }
-                default -> {
-                    gc.setForeground(muted);
-                    gc.setFont(normal);
-                    gc.drawString(row.text, 12, textY, true);
-                }
-            }
-        }
-        gc.setFont(normal);
-    }
-
-    private static void drawMatched(GC gc, String text, int[] matched, int x, int y, Font normal, Font bold) {
-        int matchIndex = 0;
-        int segmentStart = 0;
-        boolean segmentBold = false;
-        for (int i = 0; i <= text.length(); i++) {
-            boolean isBold = i < text.length() && matchIndex < matched.length && matched[matchIndex] == i;
-            if (isBold) {
-                matchIndex++;
-            }
-            if (i == text.length() || isBold != segmentBold) {
-                if (i > segmentStart) {
-                    gc.setFont(segmentBold ? bold : normal);
-                    String part = text.substring(segmentStart, i);
-                    gc.drawString(part, x, y, true);
-                    x += gc.textExtent(part).x;
-                }
-                segmentStart = i;
-                segmentBold = isBold;
-            }
-        }
-        gc.setFont(normal);
+        int width = tree.getClientArea().width;
+        int detail = Math.max(80, Math.min(140, width / 3));
+        detailColumn.setWidth(detail);
+        nameColumn.setWidth(Math.max(100, width - detail));
     }
 
     private List<Entry> collectEntries(DBPDataSourceContainer container) {
@@ -839,28 +865,6 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
                 log.debug("Navigation Pane açılamadı", e);
             }
             return null;
-        }
-    }
-
-    private static final class Row {
-        static final int HEADER = 0;
-        static final int ITEM = 1;
-        static final int MESSAGE = 2;
-
-        final int type;
-        final int y;
-        final int height;
-        final String text;
-        final String right;
-        final Hit hit;
-
-        Row(int type, int y, int height, String text, String right, Hit hit) {
-            this.type = type;
-            this.y = y;
-            this.height = height;
-            this.text = text;
-            this.right = right;
-            this.hit = hit;
         }
     }
 }
