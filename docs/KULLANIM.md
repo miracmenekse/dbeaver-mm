@@ -146,9 +146,16 @@ Bu sorgu, [`cross_connection_fk_setup.sql`](../cross_connection_fk_setup.sql) be
 `bsn_order_spec` tablosu ve `service_id` değerleri `mm_test_db` içinde, `service_spec` ise `cfg` kısa kodlu
 yapılandırma bağlantısındadır. İki bağlantının da açık olması yeterli; aralarında gerçek FK tanımı gerekmez.
 
-**Sınırlar.** Yalnız SELECT desteklenir; INSERT/UPDATE/DELETE federe çalışmaz. `WHERE`, `HAVING` ve alt sorgu
-desteklenmez; JOIN'ler INNER olmalı ve tek bir eşitlik anahtarı taşımalı (üç bağlantılı zincir de çalışır).
-Sonuç için satır üst sınırı 100.000'dir. F5, filtre ve sayfalama aynı federe yolu yeniden koşar; sonuç tek
+**Desteklenen sorgular.** `SELECT *` seçimi kaynaktaki gerçek kolonlara açılır ve kolonlar kaynak tablodaki
+tipleriyle (sayı, tarih, metin) gelir. JOIN türleri INNER, LEFT JOIN ve RIGHT JOIN'dir (üç bağlantılı zincir de
+çalışır); ON birden çok eşitlik anahtarı taşıyabilir (bileşik anahtar). WHERE tek tabloya bağlı kalmadan OR ve
+birden çok tabloyu birlikte kapsayabilir; GROUP BY ile birlikte HAVING içindeki toplama karşılaştırmaları da
+bellekte uygulanır. Sonuç ızgarasının filtresi federe sonuca da uygulanır. Sorgu federe edilemiyorsa "neden federe
+değil" mesajı Türkçe gösterilir (ör. "UNION desteklenmez: birleşik sonuç federe edilemez").
+
+**Sınırlar.** Alt sorgu, CTE (`WITH`), UNION ve FULL/CROSS JOIN federe çalışmaz. Seçimde ifade ya da fonksiyon
+desteklenmez; INSERT/UPDATE/DELETE gibi DML federe çalışmaz. Sonuç için satır üst sınırı 100.000'dir; aşılırsa
+hangi tablonun sınırı geçtiği söylenir. F5, filtre ve sayfalama aynı federe yolu yeniden koşar; sonuç tek
 bağlantıya düşmez.
 
 ## Yeni satırlara ID getirme
