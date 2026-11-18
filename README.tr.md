@@ -58,6 +58,8 @@ ya da ayrı bir kural motoru gerekmez. Böylece fork, upstream DBeaver'ın üzer
 * **Çok bağlantılı SQL editörü:** Bağlantı çubuğu, betiğin hangi bağlantılarda çalışabileceğini seçer. Editör,
   sorgudaki tabloların bulunduğu bağlantıya kendisi geçer. Tablo adları bağlantılar arasında tamamlanır
   (`Tablo | Bağlantı`). Bağlantı kısa kodları (`<kod>.`) listeyi tek bir bağlantıyla sınırlar.
+* **Bağlantılar arası JOIN:** Farklı bağlantılardaki tabloları birleştiren SELECT tek sorgu gibi çalışır: her tablo kendi
+  bağlantısından okunur, anahtarlar `IN (...)` ile öbür tarafa iletilir, sonuç bellekte birleştirilir (salt okunur).
 * **Betik araçları:** Son SQL betikleri paneli son 10 betiği WHERE koşullarıyla birlikte kartlar halinde gösterir,
   favoriler en üstte durur. Parametre formu (`Ctrl+Alt+P`) betikteki tüm `kolon = değer` koşullarını tek yerden
   düzenletir.
@@ -325,3 +327,4 @@ Fork'un her adımı eskiden yeniye sıralanmıştır. Commit mesajlarında adım
 | K114 | 2026-11-17 | **Windows zip'i için tek tıkla güncelleme**: zip artık `dbeaver.exe`'nin yanında `DBeaver-mm guncelle.cmd` içerir. DBeaver kapalıyken çift tıkla: son sürümü indirir, eski klasörü `dbeaver.eski` olarak saklar ve `id-api.properties`'i taşır. `docs/KURULUM.md` ve release notları anlatır. |
 | K115 | 2026-11-17 | Güncelleme betiği (`DBeaver-mm guncelle.cmd`) her klasörden çalışır: `dbeaver.exe` yanında değilse DBeaver klasörünü bir kez sorar ve `%USERPROFILE%\.dbeaver-mm\dbeaver-yolu.txt` içinde hatırlar. |
 | K116 | 2026-11-17 | Düzeltme: güncelleme betiği DBeaver klasöründen çift tıklayarak başlatılınca "başka bir işlem kullanıyor" hatası vermez (klasörü taşımadan önce o klasörden çıkar). |
+| K118–K129 | 2026-11-18 | **Bağlantılar arası JOIN**: tabloları 2+ bağlantıda olan SELECT (`cfg.service_spec s JOIN bsn.orders o ON ...`) Ctrl+Enter ile kendiliğinden çalışır. Her tablo kendi bağlantısından okunur (önce filtreli ya da küçük taraf, anahtarları öbür tarafa `IN (...)` parçalarıyla gider), bellekte birleştirilir ve salt okunur gösterilir (`federated: cfg, bsn`); F5'te de federe kalır. 2+ bağlantılı INNER JOIN zincirleri, `tablo.kolon [AS ad]` seçimleri, ORDER BY, LIMIT/OFFSET, DISTINCT, COUNT/SUM/MIN/MAX/AVG ile GROUP BY ve 100000 satırlık güvenlik sınırı desteklenir. Federe SAYILMAYANLAR (eskisi gibi çalışır): LEFT JOIN, `SELECT *`, alt sorgu, HAVING, tablolar arası OR. |

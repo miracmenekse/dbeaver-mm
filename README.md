@@ -47,6 +47,8 @@ no separate rule engine, so it stays a thin layer over upstream DBeaver.
 * **Multi-connection SQL editor:** A connections bar chooses which connections a script may use. The editor switches
   to the connection that holds the statement's tables. Table names are completed across connections
   (`Table | Connection`), and connection short codes (`<code>.`) narrow the list to a single connection.
+* **Cross-connection JOIN:** A SELECT that joins tables from different connections runs as one query: each table is read
+  from its own connection, the keys are passed on with `IN (...)`, and the result is joined in memory (read-only).
 * **Script tools:** A Recent SQL Scripts panel shows the last 10 scripts as cards with their WHERE conditions, with
   favorites pinned on top. A parameter form (`Ctrl+Alt+P`) edits every `column = value` condition of a script in one
   place.
@@ -318,3 +320,4 @@ Each step of the fork, oldest first, so you can follow how the product grew. Ite
 | K114 | 2026-11-17 | **One-click update for the Windows zip**: the zip now contains `DBeaver-mm guncelle.cmd` next to `dbeaver.exe`. Double-click it with DBeaver closed: it downloads the latest release, keeps the old folder as `dbeaver.eski` and carries `id-api.properties` over. `docs/KURULUM.md` and the release notes describe it. |
 | K115 | 2026-11-17 | The update script (`DBeaver-mm guncelle.cmd`) works from any folder: if `dbeaver.exe` is not next to it, it asks for the DBeaver folder once and remembers it in `%USERPROFILE%\.dbeaver-mm\dbeaver-yolu.txt`. |
 | K116 | 2026-11-17 | Fix: the update script no longer fails with "being used by another process" when started by double-click from the DBeaver folder (it leaves that folder before moving it). |
+| K118–K129 | 2026-11-18 | **Cross-connection JOIN**: a SELECT whose tables live in 2+ connections (`cfg.service_spec s JOIN bsn.orders o ON ...`) now runs on Ctrl+Enter by itself. Each table is read from its own connection (the filtered or smaller side first, its keys sent to the other side as `IN (...)` chunks), joined in memory and shown read-only (`federated: cfg, bsn`); it stays federated on F5. Supports INNER JOIN chains over 2+ connections, `table.column [AS name]` selections, ORDER BY, LIMIT/OFFSET, DISTINCT, GROUP BY with COUNT/SUM/MIN/MAX/AVG, and a 100000-row safety limit. Not federated (runs as before): LEFT JOIN, `SELECT *`, subqueries, HAVING, OR across tables. |
