@@ -74,18 +74,30 @@ public final class FedExecutor {
     }
 
     /** dbeaver-mm K128: iki tabloyu ON eşitliğiyle bağlayan yönsüz kenar. */
-    private record Edge(String leftAlias, String leftColumn, String rightAlias, String rightColumn) {
+    // dbeaver-mm K132: bileşik anahtar için kenar tüm anahtar sütun çiftlerini taşır
+    private record Edge(
+        String leftAlias,
+        List<String> leftColumns,
+        String rightAlias,
+        List<String> rightColumns
+    ) {
         String otherAlias(String alias) {
             return leftAlias.equalsIgnoreCase(alias) ? rightAlias : leftAlias;
         }
 
-        String columnFor(String alias) {
-            return leftAlias.equalsIgnoreCase(alias) ? leftColumn : rightColumn;
+        List<String> columnsFor(String alias) {
+            return leftAlias.equalsIgnoreCase(alias) ? leftColumns : rightColumns;
         }
     }
 
     /** dbeaver-mm K128: zincire eklenen tablo, bağlandığı tablo ve iki taraftaki anahtar sütunları. */
-    private record Step(FedPlanner.Table table, String fromAlias, String fromColumn, String keyColumn) {
+    // dbeaver-mm K132: bileşik anahtarda sütun listeleri birlikte taşınır
+    private record Step(
+        FedPlanner.Table table,
+        String fromAlias,
+        List<String> fromColumns,
+        List<String> keyColumns
+    ) {
     }
 
     /**
@@ -136,22 +148,40 @@ public final class FedExecutor {
             boolean inner = "INNER".equalsIgnoreCase(type);
             boolean left = "LEFT".equalsIgnoreCase(type);
             boolean right = "RIGHT".equalsIgnoreCase(type);
-            // dbeaver-mm K131: FULL/CROSS/NATURAL desteklenmez; dış join tek anahtarlı olmalı
-            if (join.keys().size() != 1 || !(inner || left || right)) {
+            // dbeaver-mm K131: FULL/CROSS/NATURAL desteklenmez
+            // dbeaver-mm K132: çok anahtarlı ON bileşik anahtar olarak desteklenir
+            if (join.keys().isEmpty() || !(inner || left || right)) {
                 throw new FedUnsupportedException("Desteklenmeyen join türü");
             }
-            FedPlanner.Key key = join.keys().get(0);
-            String leftAlias = aliasOf(key.left());
-            String rightAlias = aliasOf(key.right());
+            FedPlanner.Key firstKey = join.keys().get(0);
+            String leftAlias = aliasOf(firstKey.left());
+            String rightAlias = aliasOf(firstKey.right());
             if (!tableByAlias.containsKey(leftAlias) || !tableByAlias.containsKey(rightAlias)
                 || leftAlias.equalsIgnoreCase(rightAlias)) {
                 throw new FedUnsupportedException("ON koşulu olmayan tablo");
             }
             if (inner) {
+                List<String> leftColumns = new ArrayList<>();
+                List<String> rightColumns = new ArrayList<>();
+                for (FedPlanner.Key key : join.keys()) {
+                    String keyLeftAlias = aliasOf(key.left());
+                    String keyRightAlias = aliasOf(key.right());
+                    if (keyLeftAlias.equalsIgnoreCase(leftAlias)
+                        && keyRightAlias.equalsIgnoreCase(rightAlias)) {
+                        leftColumns.add(key.left());
+                        rightColumns.add(key.right());
+                    } else if (keyLeftAlias.equalsIgnoreCase(rightAlias)
+                        && keyRightAlias.equalsIgnoreCase(leftAlias)) {
+                        leftColumns.add(key.right());
+                        rightColumns.add(key.left());
+                    } else {
+                        throw new FedUnsupportedException("ON koşulu olmayan tablo");
+                    }
+                }
                 graph.computeIfAbsent(leftAlias, k -> new ArrayList<>())
-                    .add(new Edge(leftAlias, key.left(), rightAlias, key.right()));
+                    .add(new Edge(leftAlias, List.copyOf(leftColumns), rightAlias, List.copyOf(rightColumns)));
                 graph.computeIfAbsent(rightAlias, k -> new ArrayList<>())
-                    .add(new Edge(rightAlias, key.right(), leftAlias, key.left()));
+                    .add(new Edge(rightAlias, List.copyOf(rightColumns), leftAlias, List.copyOf(leftColumns)));
                 continue;
             }
             // dbeaver-mm K131: ON yeni tabloya bağlanmalı, aksi hâlde zincir kurulamaz
@@ -162,12 +192,32 @@ public final class FedExecutor {
                 throw new FedUnsupportedException("ON koşulu olmayan tablo");
             }
             String preservedAlias = left == newIsRight ? leftAlias : rightAlias;
-            String preservedColumn = left == newIsRight ? key.left() : key.right();
             // dbeaver-mm K131: LEFT'te null taraf yeni tablo, RIGHT'ta korunan taraf yeni tablodur
             String nullAlias = left == newIsRight ? rightAlias : leftAlias;
-            String nullColumn = left == newIsRight ? key.right() : key.left();
+            List<String> preservedColumns = new ArrayList<>();
+            List<String> nullColumns = new ArrayList<>();
+            for (FedPlanner.Key key : join.keys()) {
+                String keyLeftAlias = aliasOf(key.left());
+                String keyRightAlias = aliasOf(key.right());
+                if (keyLeftAlias.equalsIgnoreCase(preservedAlias)
+                    && keyRightAlias.equalsIgnoreCase(nullAlias)) {
+                    preservedColumns.add(key.left());
+                    nullColumns.add(key.right());
+                } else if (keyLeftAlias.equalsIgnoreCase(nullAlias)
+                    && keyRightAlias.equalsIgnoreCase(preservedAlias)) {
+                    preservedColumns.add(key.right());
+                    nullColumns.add(key.left());
+                } else {
+                    throw new FedUnsupportedException("ON koşulu olmayan tablo");
+                }
+            }
             graph.computeIfAbsent(preservedAlias, k -> new ArrayList<>())
-                .add(new Edge(preservedAlias, preservedColumn, nullAlias, nullColumn));
+                .add(new Edge(
+                    preservedAlias,
+                    List.copyOf(preservedColumns),
+                    nullAlias,
+                    List.copyOf(nullColumns)
+                ));
             outerPairs.add(pair(preservedAlias, nullAlias));
             nullableAliases.add(nullAlias);
         }
@@ -200,7 +250,7 @@ public final class FedExecutor {
         }
         List<Step> steps = new ArrayList<>();
         List<Boolean> outerSteps = new ArrayList<>();
-        steps.add(new Step(start, null, null, null));
+        steps.add(new Step(start, null, List.of(), List.of()));
         outerSteps.add(false);
         Set<String> included = new LinkedHashSet<>();
         included.add(start.alias());
@@ -214,8 +264,8 @@ public final class FedExecutor {
                 steps.add(new Step(
                     tableByAlias.get(next),
                     current,
-                    edge.columnFor(current),
-                    edge.columnFor(next)
+                    edge.columnsFor(current),
+                    edge.columnsFor(next)
                 ));
                 outerSteps.add(outerPairs.contains(pair(current, next)));
             }
@@ -244,16 +294,26 @@ public final class FedExecutor {
             }
 
             Integer fromStart = starts.get(step.fromAlias());
-            int fromIndex = indexOfIgnoreCase(blockByAlias.get(step.fromAlias()), step.fromColumn());
-            int keyIndex = indexOfIgnoreCase(block, step.keyColumn());
-            if (fromStart == null || fromIndex < 0 || keyIndex < 0) {
+            List<String> fromColumns = step.fromColumns();
+            List<String> keyColumns = step.keyColumns();
+            if (fromStart == null || fromColumns.isEmpty() || fromColumns.size() != keyColumns.size()) {
                 // dbeaver-mm K128: bağlantı anahtarı blokta yoksa zincir kurulamaz
                 throw new FedUnsupportedException("ON koşulu olmayan tablo: " + table.alias());
+            }
+            int[] fromIndexes = new int[fromColumns.size()];
+            int[] keyIndexes = new int[keyColumns.size()];
+            for (int i = 0; i < fromColumns.size(); i++) {
+                fromIndexes[i] = indexOfIgnoreCase(blockByAlias.get(step.fromAlias()), fromColumns.get(i));
+                keyIndexes[i] = indexOfIgnoreCase(block, keyColumns.get(i));
+                if (fromIndexes[i] < 0 || keyIndexes[i] < 0) {
+                    throw new FedUnsupportedException("ON koşulu olmayan tablo: " + table.alias());
+                }
             }
 
             boolean leftOuter = outerSteps.get(s);
             // dbeaver-mm K131: dış join'de anahtar yoksa sol satırlar null blokla korunur
-            Set<Object> keys = keyValues(acc, fromStart + fromIndex);
+            // dbeaver-mm K132: yalnız ilk anahtar IN ile itilir, kalan anahtarlar bellekte eşlenir
+            Set<Object> keys = keyValues(acc, fromStart + fromIndexes[0]);
             List<Object[]> rows = List.of();
             if (!keys.isEmpty() || !leftOuter) {
                 // dbeaver-mm K128: önceki ara sonucun anahtarları sıradaki kaynağa IN ile itilir
@@ -261,7 +321,7 @@ public final class FedExecutor {
                     ? fetchKeys(
                         source(sourceByAlias, table.alias()),
                         table,
-                        step.keyColumn(),
+                        keyColumns.get(0),
                         block,
                         keys,
                         maxRows
@@ -274,7 +334,15 @@ public final class FedExecutor {
 
             int width = block.size();
             // dbeaver-mm K131: eşleşmeyen korunan satırlar sağ blok null ile birleşir
-            acc = FedJoin.join(acc, rows, new int[] {fromStart + fromIndex}, new int[] {keyIndex}, leftOuter, width);
+            // dbeaver-mm K132: birleşimde tüm anahtar sütun çiftleri eşitlenir
+            acc = FedJoin.join(
+                acc,
+                rows,
+                shift(fromIndexes, fromStart),
+                keyIndexes,
+                leftOuter,
+                width
+            );
             if (acc.isEmpty()) {
                 return acc;
             }
@@ -302,6 +370,15 @@ public final class FedExecutor {
             int limit = plan.limit() == null ? Integer.MAX_VALUE : clamp(plan.limit());
             int offset = plan.offset() == null ? 0 : clamp(plan.offset());
             result = FedSort.limit(result, limit, offset);
+        }
+        return result;
+    }
+
+    // dbeaver-mm K132: önceki bloktaki anahtar konumlarını birleşik satır konumlarına taşır
+    private static int[] shift(int[] indexes, int start) {
+        int[] result = new int[indexes.length];
+        for (int i = 0; i < indexes.length; i++) {
+            result[i] = start + indexes[i];
         }
         return result;
     }
@@ -374,18 +451,30 @@ public final class FedExecutor {
 
     /** dbeaver-mm K127: planda GROUP BY veya toplama var mı. */
     public static boolean aggregated(FedPlanner.FedPlan plan) {
-        return !plan.groupColumns().isEmpty() || !plan.aggregates().isEmpty();
+        return !plan.groupColumns().isEmpty() || !plan.aggregates().isEmpty()
+            || !plan.havingFilters().isEmpty();
     }
 
+    // dbeaver-mm K132: HAVING toplamaları seçimde olmasa da hesaplanır ve gruplar filtrelenir
     private static List<Object[]> aggregate(FedPlanner.FedPlan plan, List<Object[]> rows) {
         int groupCount = plan.groupColumns().size();
         int[] groupPositions = new int[groupCount];
         for (int i = 0; i < groupCount; i++) {
             groupPositions[i] = positionOf(plan, plan.groupColumns().get(i));
         }
-        FedAggregate.AggSpec[] specs = new FedAggregate.AggSpec[plan.aggregates().size()];
+        List<FedPlanner.Aggregate> all = new ArrayList<>(plan.aggregates());
+        List<Integer> havingIndexes = new ArrayList<>();
+        for (FedPlanner.Having having : plan.havingFilters()) {
+            int aggregateIndex = aggregateIndex(all, having.function(), having.column());
+            if (aggregateIndex < 0) {
+                all.add(new FedPlanner.Aggregate(having.function(), having.column(), -1));
+                aggregateIndex = all.size() - 1;
+            }
+            havingIndexes.add(aggregateIndex);
+        }
+        FedAggregate.AggSpec[] specs = new FedAggregate.AggSpec[all.size()];
         for (int i = 0; i < specs.length; i++) {
-            FedPlanner.Aggregate item = plan.aggregates().get(i);
+            FedPlanner.Aggregate item = all.get(i);
             int column = item.column() == null ? -1 : positionOf(plan, item.column());
             specs[i] = new FedAggregate.AggSpec(column, FedAggregate.AggType.valueOf(item.function()));
         }
@@ -394,7 +483,7 @@ public final class FedExecutor {
         int[] aggregateBySelection = new int[plan.selection().size()];
         Arrays.fill(groupBySelection, -1);
         Arrays.fill(aggregateBySelection, -1);
-        for (int i = 0; i < specs.length; i++) {
+        for (int i = 0; i < plan.aggregates().size(); i++) {
             aggregateBySelection[plan.aggregates().get(i).selectionIndex()] = i;
         }
         for (int i = 0; i < plan.selection().size(); i++) {
@@ -411,6 +500,17 @@ public final class FedExecutor {
         }
         List<Object[]> result = new ArrayList<>(grouped.size());
         for (Object[] row : grouped) {
+            boolean keep = true;
+            for (int i = 0; i < plan.havingFilters().size(); i++) {
+                Object value = row[groupCount + havingIndexes.get(i)];
+                if (!havingMatches(plan.havingFilters().get(i), value)) {
+                    keep = false;
+                    break;
+                }
+            }
+            if (!keep) {
+                continue;
+            }
             Object[] out = new Object[plan.selection().size()];
             for (int i = 0; i < out.length; i++) {
                 if (aggregateBySelection[i] >= 0) {
@@ -422,6 +522,48 @@ public final class FedExecutor {
             result.add(out);
         }
         return result;
+    }
+
+    private static int aggregateIndex(List<FedPlanner.Aggregate> aggregates, String function, String column) {
+        for (int i = 0; i < aggregates.size(); i++) {
+            FedPlanner.Aggregate item = aggregates.get(i);
+            if (item.function().equalsIgnoreCase(function)
+                && (item.column() == null ? column == null : item.column().equalsIgnoreCase(column))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean havingMatches(FedPlanner.Having having, Object value) {
+        if (value == null) {
+            return false;
+        }
+        int compare;
+        String literal = having.literal();
+        if (literal.length() >= 2 && literal.charAt(0) == '\''
+            && literal.charAt(literal.length() - 1) == '\'') {
+            String text = literal.substring(1, literal.length() - 1).replace("''", "'");
+            compare = String.valueOf(value).compareTo(text);
+        } else {
+            try {
+                BigDecimal left = value instanceof BigDecimal decimal
+                    ? decimal
+                    : new BigDecimal(String.valueOf(value));
+                compare = left.compareTo(new BigDecimal(literal));
+            } catch (NumberFormatException e) {
+                compare = String.valueOf(value).compareTo(literal);
+            }
+        }
+        return switch (having.operator()) {
+            case "=" -> compare == 0;
+            case "<>" -> compare != 0;
+            case "<" -> compare < 0;
+            case ">" -> compare > 0;
+            case "<=" -> compare <= 0;
+            case ">=" -> compare >= 0;
+            default -> false;
+        };
     }
 
     private static int positionOf(FedPlanner.FedPlan plan, String column) {
@@ -521,6 +663,12 @@ public final class FedExecutor {
         for (FedPlanner.Aggregate aggregate : plan.aggregates()) {
             if (aggregate.column() != null) {
                 addColumn(columns, aggregate.column(), alias);
+            }
+        }
+        // dbeaver-mm K132: yalnız HAVING'de geçen toplama sütunları da blokta bulunmalı
+        for (FedPlanner.Having having : plan.havingFilters()) {
+            if (having.column() != null) {
+                addColumn(columns, having.column(), alias);
             }
         }
         // dbeaver-mm K125: ORDER BY sütunu seçilmemiş olsa da sıralama için çekilir
@@ -686,7 +834,8 @@ public final class FedExecutor {
         }
         return new FedPlanner.FedPlan(
             plan.tables(), plan.joins(), plan.where(), List.copyOf(selection), plan.orderBy(),
-            plan.limit(), plan.offset(), plan.distinct(), plan.groupColumns(), List.copyOf(aggregates)
+            plan.limit(), plan.offset(), plan.distinct(), plan.groupColumns(), List.copyOf(aggregates),
+            plan.havingText(), plan.havingFilters()
         );
     }
 

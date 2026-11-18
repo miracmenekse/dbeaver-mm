@@ -197,7 +197,8 @@ public class FedRunnerImpl implements SQLFederation.Runner {
         if (plan.joins().size() != plan.tables().size() - 1) {
             return false;
         }
-        // dbeaver-mm K131: LEFT/RIGHT join'ler de tek anahtarlıysa federe edilebilir
+        // dbeaver-mm K131: LEFT/RIGHT join'ler de federe edilebilir
+        // dbeaver-mm K132: çok anahtarlı ON bileşik anahtar olarak federe edilir
         Set<String> nullableAliases = new LinkedHashSet<>();
         for (int j = 0; j < plan.joins().size(); j++) {
             FedPlanner.Join join = plan.joins().get(j);
@@ -205,7 +206,7 @@ public class FedRunnerImpl implements SQLFederation.Runner {
             boolean inner = "INNER".equalsIgnoreCase(type);
             boolean left = "LEFT".equalsIgnoreCase(type);
             boolean right = "RIGHT".equalsIgnoreCase(type);
-            if (join.keys().size() != 1 || !(inner || left || right)) {
+            if (join.keys().isEmpty() || !(inner || left || right)) {
                 return false;
             }
             if (!inner) {

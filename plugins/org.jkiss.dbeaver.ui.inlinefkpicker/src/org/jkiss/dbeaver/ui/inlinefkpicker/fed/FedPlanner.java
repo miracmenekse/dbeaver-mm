@@ -16,6 +16,7 @@
  */
 package org.jkiss.dbeaver.ui.inlinefkpicker.fed;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -57,6 +58,7 @@ public final class FedPlanner {
      * Federe plan: tablo listesi, join listesi, kalan WHERE, seçim listesi ve
      * dbeaver-mm K125 ile ORDER BY/LIMIT/OFFSET/DISTINCT bilgileri.
      * dbeaver-mm K127: GROUP BY sütunları ve seçim listesindeki toplamalar da taşınır.
+     * dbeaver-mm K132: HAVING metni ve bellekte uygulanacak toplama karşılaştırmaları taşınır.
      */
     public record FedPlan(
         List<Table> tables,
@@ -68,7 +70,9 @@ public final class FedPlanner {
         Long offset,
         boolean distinct,
         List<String> groupColumns,
-        List<Aggregate> aggregates
+        List<Aggregate> aggregates,
+        String havingText,
+        List<Having> havingFilters
     ) {
         public FedPlan(
             List<Table> tables,
@@ -77,12 +81,29 @@ public final class FedPlanner {
             List<String> selection,
             List<Order> orderBy
         ) {
-            this(tables, joins, where, selection, orderBy, null, null, false, List.of(), List.of());
+            this(
+                tables,
+                joins,
+                where,
+                selection,
+                orderBy,
+                null,
+                null,
+                false,
+                List.of(),
+                List.of(),
+                "",
+                List.of()
+            );
         }
     }
 
     /** dbeaver-mm K127: seçim listesindeki bir toplama; sütun COUNT(*) için null. */
     public record Aggregate(String function, String column, int selectionIndex) {
+    }
+
+    /** dbeaver-mm K132: HAVING içindeki toplama karşılaştırması; sütun COUNT(*) için null. */
+    public record Having(String function, String column, String operator, String literal) {
     }
 
     /** Bir FROM/JOIN tablosu: kod (şema), ad, alias ve o tabloya itilen WHERE. */
@@ -130,10 +151,8 @@ public final class FedPlanner {
         }
 
         int[] depths = depths(tokens);
-        // dbeaver-mm K127: HAVING desteklenmez; federe plan üretilmez
-        if (findWord(tokens, depths, "HAVING", 1) >= 0) {
-            return null;
-        }
+        // dbeaver-mm K132: HAVING desteklenen toplama karşılaştırmalarıysa planda saklanır
+        int havingStart = findWord(tokens, depths, "HAVING", 1);
         int from = findWord(tokens, depths, "FROM", 1);
         if (from < 0) {
             return null;
@@ -195,6 +214,26 @@ public final class FedPlanner {
                 return null;
             }
         }
+        // dbeaver-mm K132: HAVING yalnız toplama <karşılaştırma> sabit ve AND birleşimleriyle desteklenir
+        String havingText = "";
+        List<Having> havingFilters = List.of();
+        if (havingStart >= 0) {
+            if (havingStart + 1 >= tokens.size()) {
+                return null;
+            }
+            int havingEnd = firstBoundary(tokens, depths, havingStart + 1);
+            if (havingStart + 1 >= havingEnd) {
+                return null;
+            }
+            havingText = text.substring(
+                tokens.get(havingStart + 1).start,
+                tokens.get(havingEnd - 1).end
+            ).trim();
+            havingFilters = parser.parseHaving(havingStart + 1, havingEnd);
+            if (havingFilters == null) {
+                return null;
+            }
+        }
         String remaining = "";
         if (whereStart >= 0) {
             for (int i = whereStart + 1; i < whereEnd; i++) {
@@ -250,7 +289,9 @@ public final class FedPlanner {
             offset,
             distinct,
             List.copyOf(groupColumns),
-            List.copyOf(aggregates)
+            List.copyOf(aggregates),
+            havingText,
+            List.copyOf(havingFilters)
         );
     }
 
@@ -556,6 +597,15 @@ public final class FedPlanner {
         return value.toUpperCase(Locale.ROOT);
     }
 
+    // dbeaver-mm K132: HAVING karşılaştırma işleçlerini tek biçime getirir
+    private static String comparison(String text) {
+        return switch (text) {
+            case "=", "<>", "<", ">", "<=", ">=" -> text;
+            case "!=" -> "<>";
+            default -> null;
+        };
+    }
+
     private static String unquote(String value) {
         if (value.length() < 2) {
             return value;
@@ -599,6 +649,99 @@ public final class FedPlanner {
             this.depths = depths;
             this.index = start;
             this.end = end;
+        }
+
+        // dbeaver-mm K132: HAVING ifadelerini AND ile ayırıp her birini doğrular
+        private List<Having> parseHaving(int start, int endExclusive) {
+            List<int[]> terms = splitTerms(start, endExclusive, "AND", 0);
+            if (terms.isEmpty()) {
+                return null;
+            }
+            List<Having> result = new ArrayList<>();
+            for (int[] term : terms) {
+                Having having = parseHavingTerm(term[0], term[1]);
+                if (having == null) {
+                    return null;
+                }
+                result.add(having);
+            }
+            return result;
+        }
+
+        private Having parseHavingTerm(int start, int endExclusive) {
+            int operatorIndex = -1;
+            String operator = null;
+            for (int i = start; i < endExclusive; i++) {
+                if (depths[i] != 0) {
+                    continue;
+                }
+                Token token = tokens.get(i);
+                if (isWord(token, "OR")) {
+                    return null;
+                }
+                String found = comparison(token.text);
+                if (found != null) {
+                    if (operatorIndex >= 0) {
+                        return null;
+                    }
+                    operatorIndex = i;
+                    operator = found;
+                }
+            }
+            if (operatorIndex <= start || operatorIndex + 1 >= endExclusive) {
+                return null;
+            }
+            Token functionToken = tokens.get(start);
+            if (functionToken.type != WORD) {
+                return null;
+            }
+            String function = upper(functionToken.text);
+            if (!AGGREGATE_FUNCTIONS.contains(function)) {
+                return null;
+            }
+            if (start + 1 >= operatorIndex || !tokens.get(start + 1).text.equals("(")) {
+                return null;
+            }
+            if (!tokens.get(operatorIndex - 1).text.equals(")")) {
+                return null;
+            }
+            int argStart = start + 2;
+            int argEnd = operatorIndex - 1;
+            String column = null;
+            if (argEnd - argStart == 1 && tokens.get(argStart).text.equals("*")) {
+                if (!function.equals("COUNT")) {
+                    return null;
+                }
+                function = "COUNT_STAR";
+            } else if (argEnd - argStart == 3
+                && isName(tokens.get(argStart))
+                && tokens.get(argStart + 1).text.equals(".")
+                && isName(tokens.get(argStart + 2))) {
+                String alias = unquote(tokens.get(argStart).text);
+                if (!aliases.containsKey(alias)) {
+                    return null;
+                }
+                column = alias + "." + unquote(tokens.get(argStart + 2).text);
+            } else {
+                return null;
+            }
+            String rightText = sql.substring(
+                tokens.get(operatorIndex + 1).start,
+                tokens.get(endExclusive - 1).end
+            ).trim();
+            String literal;
+            if (rightText.length() >= 2 && rightText.charAt(0) == '\''
+                && rightText.charAt(rightText.length() - 1) == '\'') {
+                literal = rightText;
+            } else {
+                try {
+                    new BigDecimal(rightText);
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+                literal = rightText;
+            }
+            return new Having(function, column, operator, literal);
         }
 
         private boolean parseFrom() {
