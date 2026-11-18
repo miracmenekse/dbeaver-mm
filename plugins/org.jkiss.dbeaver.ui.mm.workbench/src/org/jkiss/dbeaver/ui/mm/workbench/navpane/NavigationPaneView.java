@@ -16,18 +16,35 @@
  */
 package org.jkiss.dbeaver.ui.mm.workbench.navpane;
 
+import org.eclipse.core.commands.AbstractHandler;
+import org.eclipse.core.commands.ExecutionEvent;
+import org.eclipse.core.commands.ExecutionException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.resource.JFaceResources;
+import org.eclipse.jface.text.BadLocationException;
+import org.eclipse.jface.text.IDocument;
+import org.eclipse.jface.text.ITextSelection;
+import org.eclipse.jface.viewers.ISelection;
+import org.eclipse.jface.viewers.ISelectionChangedListener;
+import org.eclipse.jface.viewers.ISelectionProvider;
+import org.eclipse.jface.viewers.SelectionChangedEvent;
+import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ControlAdapter;
 import org.eclipse.swt.events.ControlEvent;
 import org.eclipse.swt.events.KeyAdapter;
 import org.eclipse.swt.events.KeyEvent;
+import org.eclipse.swt.events.MenuAdapter;
+import org.eclipse.swt.events.MenuEvent;
+import org.eclipse.swt.events.MouseAdapter;
+import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.PaintEvent;
 import org.eclipse.swt.events.PaintListener;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.GC;
@@ -38,9 +55,18 @@ import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Menu;
+import org.eclipse.swt.widgets.MenuItem;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Text;
+import org.eclipse.ui.IEditorPart;
+import org.eclipse.ui.IViewPart;
+import org.eclipse.ui.IWorkbenchPage;
+import org.eclipse.ui.IWorkbenchWindow;
+import org.eclipse.ui.handlers.HandlerUtil;
+import org.eclipse.ui.handlers.IHandlerService;
 import org.eclipse.ui.part.ViewPart;
+import org.eclipse.ui.texteditor.ITextEditor;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBPDataSource;
@@ -50,6 +76,7 @@ import org.jkiss.dbeaver.model.DBPEventListener;
 import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.app.DBPDataSourceRegistry;
 import org.jkiss.dbeaver.model.app.DBPProject;
+import org.jkiss.dbeaver.model.navigator.DBNNode;
 import org.jkiss.dbeaver.model.runtime.VoidProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.model.struct.DBSObjectContainer;
@@ -75,7 +102,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * dbeaver-mm K138: connected connections and their tables in one flat, fuzzy-searchable
  * list. Only already connected data sources are read; the view never opens a connection.
  */
-public class NavigationPaneView extends ViewPart {
+public class NavigationPaneView extends ViewPart implements ISelectionProvider {
+
+    // dbeaver-mm K139: satır etkileşimleri, kısayollar ve sağ tık menüsü
+    public static final String VIEW_ID = "org.jkiss.dbeaver.ui.mm.navpane";
+    private static final String CMD_OBJECT_OPEN = "org.jkiss.dbeaver.core.object.open";
+    private static final String CMD_SQL_EDITOR_CREATE = "org.jkiss.dbeaver.core.sql.editor.create";
+    private static final String DATABASE_NAVIGATOR_VIEW_ID = "org.jkiss.dbeaver.core.databaseNavigator";
 
     private static final Log log = Log.getLog(NavigationPaneView.class);
 
@@ -87,6 +120,8 @@ public class NavigationPaneView extends ViewPart {
     private static final int MESSAGE_HEIGHT = 24;
 
     private final Map<String, List<Entry>> cache = new ConcurrentHashMap<>();
+    private final Map<String, DBSEntity> entityIndex = new ConcurrentHashMap<>();
+    private final List<ISelectionChangedListener> selectionListeners = new ArrayList<>();
     private final DBPEventListener dataSourceListener = event -> scheduleReload();
 
     private Display display;
@@ -103,6 +138,7 @@ public class NavigationPaneView extends ViewPart {
     private Map<String, Integer> connectionTotals = Map.of();
     private List<Hit> hits = List.of();
     private List<Row> rows = List.of();
+    private Row selectedRow;
     private int connectedCount;
     private boolean loading;
     private String query = "";
@@ -161,6 +197,56 @@ public class NavigationPaneView extends ViewPart {
             scrollBar.addListener(SWT.Selection, event -> list.redraw());
         }
 
+        // dbeaver-mm K139: ok/Enter/Esc/Ctrl+Enter ve çift tık
+        list.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent event) {
+                switch (event.keyCode) {
+                    case SWT.ARROW_DOWN -> {
+                        moveSelection(1);
+                        event.doit = false;
+                    }
+                    case SWT.ARROW_UP -> {
+                        moveSelection(-1);
+                        event.doit = false;
+                    }
+                    case SWT.CR, SWT.KEYPAD_CR -> {
+                        if ((event.stateMask & SWT.CTRL) != 0) {
+                            openNewSqlEditor();
+                        } else {
+                            openSelectedTable();
+                        }
+                        event.doit = false;
+                    }
+                    case SWT.ESC -> {
+                        clearSearch();
+                        event.doit = false;
+                    }
+                    default -> {
+                    }
+                }
+            }
+        });
+        list.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseDown(MouseEvent event) {
+                Row row = rowAt(event.y);
+                if (row != null && row.type == Row.ITEM) {
+                    selectRow(row);
+                }
+            }
+
+            @Override
+            public void mouseDoubleClick(MouseEvent event) {
+                Row row = rowAt(event.y);
+                if (row != null && row.type == Row.ITEM) {
+                    selectRow(row);
+                    openSelectedTable();
+                }
+            }
+        });
+        createContextMenu();
+
         try {
             DBPProject project = DBWorkbench.getPlatform().getWorkspace().getActiveProject();
             if (project != null) {
@@ -180,6 +266,202 @@ public class NavigationPaneView extends ViewPart {
         if (searchText != null && !searchText.isDisposed()) {
             searchText.setFocus();
         }
+    }
+
+    public void focusSearch() {
+        if (searchText != null && !searchText.isDisposed()) {
+            searchText.setFocus();
+            searchText.selectAll();
+        }
+    }
+
+    @Override
+    public void addSelectionChangedListener(ISelectionChangedListener listener) {
+        selectionListeners.add(listener);
+    }
+
+    @Override
+    public void removeSelectionChangedListener(ISelectionChangedListener listener) {
+        selectionListeners.remove(listener);
+    }
+
+    @Override
+    public ISelection getSelection() {
+        if (selectedRow == null || selectedRow.hit == null) {
+            return StructuredSelection.EMPTY;
+        }
+        DBNNode node = nodeFor(selectedRow.hit.entry());
+        return node == null ? StructuredSelection.EMPTY : new StructuredSelection(node);
+    }
+
+    @Override
+    public void setSelection(ISelection selection) {
+        selectedRow = null;
+        list.redraw();
+    }
+
+    private void createContextMenu() {
+        Menu menu = new Menu(list);
+        MenuItem selectTemplate = new MenuItem(menu, SWT.PUSH);
+        selectTemplate.setText("SELECT şablonu");
+        selectTemplate.addSelectionListener(new SelectionAdapter() {
+            @Override
+            public void widgetSelected(SelectionEvent event) {
+                insertSelectTemplate();
+            }
+        });
+        MenuItem showInNavigator = new MenuItem(menu, SWT.PUSH);
+        showInNavigator.setText("Show in Database Navigator");
+        showInNavigator.addSelectionListener(new SelectionAdapter() {
+            @Override
+            public void widgetSelected(SelectionEvent event) {
+                showInDatabaseNavigator();
+            }
+        });
+        menu.addMenuListener(new MenuAdapter() {
+            @Override
+            public void menuShown(MenuEvent event) {
+                boolean enabled = selectedRow != null && selectedRow.hit != null;
+                selectTemplate.setEnabled(enabled);
+                showInNavigator.setEnabled(enabled);
+            }
+        });
+        list.setMenu(menu);
+    }
+
+    private void clearSearch() {
+        if (searchText != null && !searchText.isDisposed()) {
+            searchText.setText("");
+            startSearch("");
+            searchText.setFocus();
+        }
+    }
+
+    private Row rowAt(int y) {
+        ScrollBar scrollBar = list.getVerticalBar();
+        int offset = scrollBar == null ? 0 : scrollBar.getSelection();
+        int modelY = y + offset;
+        for (Row row : rows) {
+            if (modelY >= row.y && modelY < row.y + row.height) {
+                return row;
+            }
+        }
+        return null;
+    }
+
+    private void moveSelection(int delta) {
+        int index = selectedRow == null ? -1 : rows.indexOf(selectedRow);
+        int next = index + delta;
+        while (next >= 0 && next < rows.size()) {
+            Row row = rows.get(next);
+            if (row.type == Row.ITEM) {
+                selectRow(row);
+                return;
+            }
+            next += delta;
+        }
+    }
+
+    private void selectRow(Row row) {
+        if (selectedRow == row) {
+            return;
+        }
+        selectedRow = row;
+        list.redraw();
+        ISelection selection = getSelection();
+        SelectionChangedEvent event = new SelectionChangedEvent(this, selection);
+        for (ISelectionChangedListener listener : selectionListeners) {
+            listener.selectionChanged(event);
+        }
+    }
+
+    private void openSelectedTable() {
+        if (selectedRow == null || selectedRow.hit == null) {
+            return;
+        }
+        runCommand(CMD_OBJECT_OPEN);
+    }
+
+    private void openNewSqlEditor() {
+        if (selectedRow != null && selectedRow.hit != null) {
+            runCommand(CMD_SQL_EDITOR_CREATE);
+        }
+    }
+
+    private void runCommand(String commandId) {
+        IWorkbenchWindow window = getSite() == null ? null : getSite().getWorkbenchWindow();
+        if (window == null) {
+            return;
+        }
+        IHandlerService handlerService = window.getService(IHandlerService.class);
+        if (handlerService == null) {
+            return;
+        }
+        try {
+            handlerService.executeCommand(commandId, null);
+        } catch (Exception e) {
+            log.debug("Komut çalıştırılamadı: " + commandId, e);
+        }
+    }
+
+    private void insertSelectTemplate() {
+        if (selectedRow == null || selectedRow.hit == null) {
+            return;
+        }
+        Entry entry = selectedRow.hit.entry();
+        String sql = SelectTemplate.select(entry.schema(), entry.table());
+        IWorkbenchWindow window = getSite() == null ? null : getSite().getWorkbenchWindow();
+        IEditorPart part = window == null || window.getActivePage() == null
+            ? null : window.getActivePage().getActiveEditor();
+        ITextEditor editor = part == null ? null : part.getAdapter(ITextEditor.class);
+        if (editor == null) {
+            return;
+        }
+        IDocument document = editor.getDocumentProvider().getDocument(editor.getEditorInput());
+        if (document == null) {
+            return;
+        }
+        ISelection selection = editor.getSelectionProvider().getSelection();
+        int offset = selection instanceof ITextSelection textSelection
+            ? textSelection.getOffset() : document.getLength();
+        int length = selection instanceof ITextSelection textSelection ? textSelection.getLength() : 0;
+        try {
+            document.replace(offset, length, sql);
+        } catch (BadLocationException e) {
+            log.debug("SELECT şablonu eklenemedi", e);
+        }
+    }
+
+    private void showInDatabaseNavigator() {
+        if (selectedRow == null || selectedRow.hit == null) {
+            return;
+        }
+        DBNNode node = nodeFor(selectedRow.hit.entry());
+        IWorkbenchWindow window = getSite() == null ? null : getSite().getWorkbenchWindow();
+        if (node == null || window == null || window.getActivePage() == null) {
+            return;
+        }
+        try {
+            IWorkbenchPage page = window.getActivePage();
+            IViewPart view = page.showView(DATABASE_NAVIGATOR_VIEW_ID);
+            page.activate(view);
+            // dbeaver-mm K139: navigator eklentisine derleme bağımlılığı eklemeden mevcut seçme davranışı
+            view.getClass().getMethod("showNode", DBNNode.class).invoke(view, node);
+        } catch (Exception e) {
+            log.debug("Database Navigator'da gösterilemedi", e);
+        }
+    }
+
+    private DBNNode nodeFor(Entry entry) {
+        DBSEntity entity = entityIndex.get(entityKey(entry.connection(), entry.schema(), entry.table()));
+        if (entity == null || DBWorkbench.getPlatform().getNavigatorModel() == null) {
+            return null;
+        }
+        return DBWorkbench.getPlatform().getNavigatorModel().getNodeByObject(entity);
+    }
+
+    private static String entityKey(String connection, String schema, String table) {
+        return connection + '\u0000' + schema + '\u0000' + table;
     }
 
     @Override
@@ -206,6 +488,8 @@ public class NavigationPaneView extends ViewPart {
             }
             loading = true;
             cache.clear();
+            entityIndex.clear();
+            selectedRow = null;
             if (loadJob != null) {
                 loadJob.cancel();
             }
@@ -356,6 +640,8 @@ public class NavigationPaneView extends ViewPart {
     private void paint(GC gc, Rectangle area) {
         Color background = display.getSystemColor(SWT.COLOR_LIST_BACKGROUND);
         Color foreground = display.getSystemColor(SWT.COLOR_LIST_FOREGROUND);
+        Color selectionBackground = display.getSystemColor(SWT.COLOR_LIST_SELECTION);
+        Color selectionForeground = display.getSystemColor(SWT.COLOR_LIST_SELECTION_TEXT);
         Color muted = display.getSystemColor(SWT.COLOR_DARK_GRAY);
         Font normal = JFaceResources.getFontRegistry().get(JFaceResources.DEFAULT_FONT);
         Font bold = JFaceResources.getFontRegistry().getBold(JFaceResources.DEFAULT_FONT);
@@ -374,9 +660,15 @@ public class NavigationPaneView extends ViewPart {
                 break;
             }
             int textY = y + (row.height - gc.getFontMetrics().getHeight()) / 2 + 1;
+            Color rowForeground = foreground;
+            if (row == selectedRow && row.type == Row.ITEM) {
+                gc.setBackground(selectionBackground);
+                gc.fillRectangle(0, y, area.width, row.height);
+                rowForeground = selectionForeground;
+            }
             switch (row.type) {
                 case Row.HEADER -> {
-                    gc.setForeground(foreground);
+                    gc.setForeground(rowForeground);
                     gc.setFont(bold);
                     gc.drawString("▾ " + row.text, 10, textY, true);
                     if (row.right != null) {
@@ -387,7 +679,7 @@ public class NavigationPaneView extends ViewPart {
                     }
                 }
                 case Row.ITEM -> {
-                    gc.setForeground(foreground);
+                    gc.setForeground(rowForeground);
                     int[] matched = row.hit == null ? new int[0] : row.hit.matched();
                     drawMatched(gc, row.text, matched, 24, textY, normal, bold);
                     if (row.right != null && !row.right.isEmpty()) {
@@ -430,7 +722,7 @@ public class NavigationPaneView extends ViewPart {
         gc.setFont(normal);
     }
 
-    private static List<Entry> collectEntries(DBPDataSourceContainer container) {
+    private List<Entry> collectEntries(DBPDataSourceContainer container) {
         DBPDataSource dataSource = container.getDataSource();
         if (dataSource == null) {
             return List.of();
@@ -445,7 +737,7 @@ public class NavigationPaneView extends ViewPart {
         return entries;
     }
 
-    private static void readChildren(
+    private void readChildren(
         DBSObjectContainer container,
         String connection,
         List<Entry> entries,
@@ -476,6 +768,7 @@ public class NavigationPaneView extends ViewPart {
                 }
                 String kind = entity instanceof DBSTable table && table.isView() ? "VIEW" : "TABLE";
                 entries.add(new Entry(connection, schema, entity.getName(), kind));
+                entityIndex.putIfAbsent(entityKey(connection, schema, entity.getName()), entity);
             } else if (child instanceof DBSObjectContainer childContainer) {
                 readChildren(childContainer, connection, entries, visited, depth + 1);
             }
@@ -524,6 +817,28 @@ public class NavigationPaneView extends ViewPart {
             final int count = connected;
             display.asyncExec(() -> applyLoad(result, count));
             return Status.OK_STATUS;
+        }
+    }
+
+    // dbeaver-mm K139: Ctrl+Alt+T görünümü açar ve aramaya odaklanır
+    public static final class ShowHandler extends AbstractHandler {
+        @Override
+        public Object execute(ExecutionEvent event) throws ExecutionException {
+            IWorkbenchWindow window = HandlerUtil.getActiveWorkbenchWindow(event);
+            if (window == null || window.getActivePage() == null) {
+                return null;
+            }
+            try {
+                IWorkbenchPage page = window.getActivePage();
+                IViewPart view = page.showView(VIEW_ID);
+                page.activate(view);
+                if (view instanceof NavigationPaneView navigationPane) {
+                    navigationPane.focusSearch();
+                }
+            } catch (Exception e) {
+                log.debug("Navigation Pane açılamadı", e);
+            }
+            return null;
         }
     }
 

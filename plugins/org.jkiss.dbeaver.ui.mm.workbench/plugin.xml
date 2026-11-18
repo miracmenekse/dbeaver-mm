@@ -28,6 +28,11 @@
             categoryId="org.jkiss.dbeaver.core.util"
             name="%command.problemReport.name"
             description="%command.problemReport.description"/>
+        <!-- dbeaver-mm K139: Ctrl+Alt+T opens the Navigation Pane and focuses its search -->
+        <command
+            id="org.jkiss.dbeaver.ui.mm.workbench.showNavPane"
+            categoryId="org.jkiss.dbeaver.core.util"
+            name="Navigation Pane araması"/>
     </extension>
 
     <extension point="org.eclipse.ui.handlers">
@@ -43,6 +48,9 @@
                 </with>
             </enabledWhen>
         </handler>
+        <handler
+            commandId="org.jkiss.dbeaver.ui.mm.workbench.showNavPane"
+            class="org.jkiss.dbeaver.ui.mm.workbench.navpane.NavigationPaneView$ShowHandler"/>
     </extension>
 
     <extension point="org.eclipse.ui.bindings">
@@ -51,6 +59,12 @@
             contextId="org.eclipse.ui.contexts.window"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="CTRL+ALT+F"/>
+        <!-- dbeaver-mm K139: Ctrl+Alt+T -->
+        <key
+            commandId="org.jkiss.dbeaver.ui.mm.workbench.showNavPane"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+T"/>
     </extension>
 
     <!-- dbeaver-mm K138: connected tables with fuzzy search, opened from Window and Plus -->
