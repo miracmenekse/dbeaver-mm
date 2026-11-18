@@ -169,7 +169,59 @@ public final class FedExecutor {
                 return acc;
             }
         }
-        return acc;
+        // dbeaver-mm K125: DISTINCT, ORDER BY ve LIMIT/OFFSET bellekte uygulanır
+        List<Object[]> result = plan.distinct() ? FedSort.distinct(acc) : acc;
+        if (!plan.orderBy().isEmpty()) {
+            int[] sortColumns = sortColumns(plan);
+            boolean[] descending = new boolean[plan.orderBy().size()];
+            for (int i = 0; i < descending.length; i++) {
+                descending[i] = plan.orderBy().get(i).descending();
+            }
+            result = FedSort.sort(result, sortColumns, descending);
+        }
+        if (plan.limit() != null || plan.offset() != null) {
+            int limit = plan.limit() == null ? Integer.MAX_VALUE : clamp(plan.limit());
+            int offset = plan.offset() == null ? 0 : clamp(plan.offset());
+            result = FedSort.limit(result, limit, offset);
+        }
+        return result;
+    }
+
+    private static int clamp(long value) {
+        return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) Math.max(0, value);
+    }
+
+    private static int[] sortColumns(FedPlanner.FedPlan plan) {
+        Map<String, List<String>> blocks = blocks(plan);
+        Map<String, Integer> starts = new HashMap<>();
+        int cursor = 0;
+        for (FedPlanner.Table table : plan.tables()) {
+            starts.put(table.alias(), cursor);
+            cursor += blocks.getOrDefault(table.alias(), List.of()).size();
+        }
+        int[] result = new int[plan.orderBy().size()];
+        for (int i = 0; i < result.length; i++) {
+            String column = plan.orderBy().get(i).column();
+            int dot = column.indexOf('.');
+            String alias = dot > 0 ? column.substring(0, dot) : column;
+            Integer start = starts.get(alias);
+            if (start == null) {
+                throw new IllegalArgumentException("ORDER BY bilinmeyen tablo: " + column);
+            }
+            List<String> block = blocks.getOrDefault(alias, List.of());
+            int index = -1;
+            for (int j = 0; j < block.size(); j++) {
+                if (block.get(j).equalsIgnoreCase(column)) {
+                    index = j;
+                    break;
+                }
+            }
+            if (index < 0) {
+                throw new IllegalArgumentException("ORDER BY sütunu bulunamadı: " + column);
+            }
+            result[i] = start + index;
+        }
+        return result;
     }
 
     /**
@@ -183,6 +235,24 @@ public final class FedExecutor {
         }
         for (String selection : plan.selection()) {
             String column = baseColumn(selection);
+            int dot = column.indexOf('.');
+            if (dot <= 0 || !column.substring(0, dot).equalsIgnoreCase(alias)) {
+                continue;
+            }
+            boolean exists = false;
+            for (String existing : columns) {
+                if (existing.equalsIgnoreCase(column)) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                columns.add(column);
+            }
+        }
+        // dbeaver-mm K125: ORDER BY sütunu seçilmemiş olsa da sıralama için çekilir
+        for (FedPlanner.Order order : plan.orderBy()) {
+            String column = order.column();
             int dot = column.indexOf('.');
             if (dot <= 0 || !column.substring(0, dot).equalsIgnoreCase(alias)) {
                 continue;

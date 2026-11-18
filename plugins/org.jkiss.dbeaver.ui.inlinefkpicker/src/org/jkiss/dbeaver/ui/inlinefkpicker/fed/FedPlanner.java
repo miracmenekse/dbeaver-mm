@@ -52,8 +52,20 @@ public final class FedPlanner {
     private FedPlanner() {
     }
 
-    /** Federe plan: tablo listesi, join listesi, kalan WHERE ve seçim listesi. */
-    public record FedPlan(List<Table> tables, List<Join> joins, String where, List<String> selection) {
+    /**
+     * Federe plan: tablo listesi, join listesi, kalan WHERE, seçim listesi ve
+     * dbeaver-mm K125 ile ORDER BY/LIMIT/OFFSET/DISTINCT bilgileri.
+     */
+    public record FedPlan(
+        List<Table> tables,
+        List<Join> joins,
+        String where,
+        List<String> selection,
+        List<Order> orderBy,
+        Long limit,
+        Long offset,
+        boolean distinct
+    ) {
     }
 
     /** Bir FROM/JOIN tablosu: kod (şema), ad, alias ve o tabloya itilen WHERE. */
@@ -66,6 +78,10 @@ public final class FedPlanner {
 
     /** {@code alias.kolon = alias.kolon} eşitliğinin iki tarafı. */
     public record Key(String left, String right) {
+    }
+
+    /** dbeaver-mm K125: ORDER BY öğesi; sütun ve azalan sıralama yönü. */
+    public record Order(String column, boolean descending) {
     }
 
     /**
@@ -134,7 +150,99 @@ public final class FedPlanner {
                 return null;
             }
         }
-        return new FedPlan(List.copyOf(parser.tables), List.copyOf(parser.joins), remaining, selection);
+        // dbeaver-mm K125: ORDER BY / LIMIT / OFFSET / DISTINCT plana okunur
+        boolean distinct = tokens.size() > 1 && isWord(tokens.get(1), "DISTINCT");
+        List<Order> orderBy = List.of();
+        int orderStart = findWord(tokens, depths, "ORDER", from + 1);
+        if (orderStart >= 0) {
+            if (orderStart + 1 >= tokens.size() || !isWord(tokens.get(orderStart + 1), "BY")) {
+                return null;
+            }
+            int orderEnd = firstBoundary(tokens, depths, orderStart + 2);
+            List<String> items = splitItems(text, tokens, depths, orderStart + 2, orderEnd);
+            if (items.isEmpty()) {
+                return null;
+            }
+            orderBy = parseOrder(items, parser.aliases);
+            if (orderBy == null) {
+                return null;
+            }
+        }
+        Long limit = null;
+        int limitStart = findWord(tokens, depths, "LIMIT", from + 1);
+        if (limitStart >= 0) {
+            limit = parseCount(tokens, limitStart + 1);
+            if (limit == null) {
+                return null;
+            }
+        }
+        Long offset = null;
+        int offsetStart = findWord(tokens, depths, "OFFSET", from + 1);
+        if (offsetStart >= 0) {
+            offset = parseCount(tokens, offsetStart + 1);
+            if (offset == null) {
+                return null;
+            }
+        }
+        return new FedPlan(
+            List.copyOf(parser.tables),
+            List.copyOf(parser.joins),
+            remaining,
+            selection,
+            List.copyOf(orderBy),
+            limit,
+            offset,
+            distinct
+        );
+    }
+
+    private static List<Order> parseOrder(List<String> items, Map<String, Integer> aliases) {
+        List<Order> result = new ArrayList<>();
+        for (String item : items) {
+            String text = item.trim();
+            boolean descending = false;
+            int space = lastSpace(text);
+            if (space > 0) {
+                String direction = text.substring(space + 1);
+                if (direction.equalsIgnoreCase("DESC")) {
+                    descending = true;
+                    text = text.substring(0, space).trim();
+                } else if (direction.equalsIgnoreCase("ASC")) {
+                    text = text.substring(0, space).trim();
+                }
+            }
+            int dot = text.indexOf('.');
+            if (dot <= 0 || dot == text.length() - 1) {
+                return null;
+            }
+            String alias = unquote(text.substring(0, dot).trim());
+            if (!aliases.containsKey(alias)) {
+                return null;
+            }
+            String column = unquote(text.substring(dot + 1).trim());
+            result.add(new Order(alias + "." + column, descending));
+        }
+        return result;
+    }
+
+    private static int lastSpace(String text) {
+        for (int i = text.length() - 1; i >= 0; i--) {
+            if (Character.isWhitespace(text.charAt(i))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static Long parseCount(List<Token> tokens, int index) {
+        if (index >= tokens.size()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(tokens.get(index).text);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static int firstBoundary(List<Token> tokens, int[] depths, int start) {
