@@ -48,6 +48,11 @@ public final class FedExecutor {
     /** Bir bağlantıda SQL çalıştırıp satırları döndüren kaynak. */
     public interface Source {
         List<Object[]> fetch(String sql, long maxRows) throws Exception;
+
+        // dbeaver-mm K130: yıldız genişletmesi için tablo kolon adlarını isteğe bağlı olarak sağlar
+        default List<String> columns(FedPlanner.Table table) throws Exception {
+            return List.of();
+        }
     }
 
     /** Bir tablonun çekilen satır sayısı üst sınırı aşarsa fırlatılır. */
@@ -96,6 +101,16 @@ public final class FedExecutor {
         FedPlanner.FedPlan plan,
         Map<String, Source> sourceByAlias,
         long maxRows
+    ) throws Exception {
+        return run(plan, sourceByAlias, maxRows, true);
+    }
+
+    // dbeaver-mm K130: genişletilmiş planda anahtarlar zaten bilindiğinden IN itimi yapılmaz
+    public static List<Object[]> run(
+        FedPlanner.FedPlan plan,
+        Map<String, Source> sourceByAlias,
+        long maxRows,
+        boolean pushKeys
     ) throws Exception {
         List<FedPlanner.Table> tables = plan.tables();
         List<FedPlanner.Join> joins = plan.joins();
@@ -193,14 +208,17 @@ public final class FedExecutor {
             if (keys.isEmpty()) {
                 return new ArrayList<>();
             }
-            List<Object[]> rows = fetchKeys(
-                source(sourceByAlias, table.alias()),
-                table,
-                step.keyColumn(),
-                block,
-                keys,
-                maxRows
-            );
+            // dbeaver-mm K130: yıldız genişletilmiş planda tüm satırlar çekilir, eşleşme bellekte kurulur
+            List<Object[]> rows = pushKeys
+                ? fetchKeys(
+                    source(sourceByAlias, table.alias()),
+                    table,
+                    step.keyColumn(),
+                    block,
+                    keys,
+                    maxRows
+                )
+                : fetchTable(source(sourceByAlias, table.alias()), table, block, maxRows);
             if (rows.isEmpty()) {
                 return new ArrayList<>();
             }
@@ -553,6 +571,86 @@ public final class FedExecutor {
             result[i] = position;
         }
         return result;
+    }
+
+    /** dbeaver-mm K130: seçimde genişletilmesi gereken yıldız öğesi var mı? */
+    public static boolean hasStarSelection(FedPlanner.FedPlan plan) {
+        for (String item : plan.selection()) {
+            if (item.indexOf('(') < 0 && starAlias(baseColumn(item)) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** dbeaver-mm K130: SELECT * ve alias.* seçimini açık kolon listesine genişletir. */
+    public static FedPlanner.FedPlan expandStar(
+        FedPlanner.FedPlan plan,
+        Map<String, List<String>> columnsByAlias
+    ) {
+        List<String> selection = new ArrayList<>();
+        int[] mapping = new int[plan.selection().size()];
+        boolean changed = false;
+        for (int i = 0; i < plan.selection().size(); i++) {
+            String item = plan.selection().get(i);
+            mapping[i] = selection.size();
+            String alias = item.indexOf('(') < 0 ? starAlias(baseColumn(item)) : null;
+            if (alias == null) {
+                selection.add(item);
+                continue;
+            }
+            List<String> aliases = new ArrayList<>();
+            if ("*".equals(alias)) {
+                for (FedPlanner.Table table : plan.tables()) {
+                    aliases.add(table.alias());
+                }
+            } else {
+                aliases.add(alias);
+            }
+            int added = 0;
+            for (String tableAlias : aliases) {
+                List<String> columns = columnsByAlias == null ? null : columnsByAlias.get(tableAlias);
+                if (columns == null || columns.isEmpty()) {
+                    return null;
+                }
+                for (String column : columns) {
+                    selection.add(tableAlias + "." + column);
+                    added++;
+                }
+            }
+            if (added == 0) {
+                return null;
+            }
+            changed = true;
+        }
+        if (!changed) {
+            return plan;
+        }
+        List<FedPlanner.Aggregate> aggregates = new ArrayList<>();
+        for (FedPlanner.Aggregate aggregate : plan.aggregates()) {
+            int index = aggregate.selectionIndex();
+            if (index < 0 || index >= mapping.length) {
+                return null;
+            }
+            aggregates.add(new FedPlanner.Aggregate(aggregate.function(), aggregate.column(), mapping[index]));
+        }
+        return new FedPlanner.FedPlan(
+            plan.tables(), plan.joins(), plan.where(), List.copyOf(selection), plan.orderBy(),
+            plan.limit(), plan.offset(), plan.distinct(), plan.groupColumns(), List.copyOf(aggregates)
+        );
+    }
+
+    private static String starAlias(String column) {
+        if ("*".equals(column)) {
+            return "*";
+        }
+        if (column.endsWith(".*")) {
+            String alias = column.substring(0, column.length() - 2);
+            if (!alias.isEmpty() && alias.indexOf('.') < 0) {
+                return alias;
+            }
+        }
+        return null;
     }
 
     private static String baseColumn(String selection) {

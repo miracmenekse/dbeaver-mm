@@ -25,6 +25,7 @@ import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.app.DBPProject;
+import org.jkiss.dbeaver.model.exec.DBCAttributeMetaData;
 import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.model.exec.DBCExecutionPurpose;
 import org.jkiss.dbeaver.model.exec.DBCResultSet;
@@ -107,7 +108,18 @@ public class FedRunnerImpl implements SQLFederation.Runner {
                 throw new DBException("bağlantı kapalı: " + container.getName());
             }
             DBCExecutionContext sourceContext = DBUtils.getDefaultContext(container.getDataSource(), false);
-            sources.put(entry.getKey(), (sourceSql, maxRows) -> fetchRows(monitor, sourceContext, sourceSql, maxRows));
+            // dbeaver-mm K130: kaynak, satır çekmenin yanında kolon keşfini de sağlar
+            sources.put(entry.getKey(), new FedExecutor.Source() {
+                @Override
+                public List<Object[]> fetch(String sourceSql, long maxRows) throws Exception {
+                    return fetchRows(monitor, sourceContext, sourceSql, maxRows);
+                }
+
+                @Override
+                public List<String> columns(FedPlanner.Table table) throws Exception {
+                    return fetchColumns(monitor, sourceContext, table);
+                }
+            });
         }
         return runPlan(plan, sources, codes(plan));
     }
@@ -118,21 +130,50 @@ public class FedRunnerImpl implements SQLFederation.Runner {
         @NotNull Map<String, FedExecutor.Source> sources,
         @NotNull List<String> codes
     ) throws DBException {
-        if (!federable(plan)) {
+        FedPlanner.FedPlan effective = plan;
+        boolean expanded = false;
+        // dbeaver-mm K130: yıldız seçimde kolonları kaynaktan keşfedip planı genişletir
+        if (FedExecutor.hasStarSelection(plan)) {
+            Map<String, List<String>> columnsByAlias = new LinkedHashMap<>();
+            try {
+                for (FedPlanner.Table table : plan.tables()) {
+                    FedExecutor.Source source = sources.get(table.alias());
+                    if (source == null) {
+                        return null;
+                    }
+                    List<String> found = source.columns(table);
+                    if (found == null || found.isEmpty()) {
+                        return null;
+                    }
+                    columnsByAlias.put(table.alias(), found);
+                }
+            } catch (Exception e) {
+                return null;
+            }
+            effective = FedExecutor.expandStar(plan, columnsByAlias);
+            if (effective == null) {
+                return null;
+            }
+            expanded = true;
+        }
+        if (!federable(effective)) {
             return null;
         }
         List<Object[]> combined;
         try {
-            combined = FedExecutor.run(plan, sources, MAX_ROWS);
+            // dbeaver-mm K130: genişletilmiş plan aynı yoldan, anahtar itimi olmadan çalışır
+            combined = expanded
+                ? FedExecutor.run(effective, sources, MAX_ROWS, false)
+                : FedExecutor.run(effective, sources, MAX_ROWS);
         } catch (FedExecutor.FedLimitException e) {
             throw new DBException(e.getMessage(), e);
         } catch (Exception e) {
             throw new DBException("Federe yürütme başarısız: " + e.getMessage(), e);
         }
 
-        List<String> columns = plan.selection();
+        List<String> columns = effective.selection();
         // dbeaver-mm K127: toplamalı sonuç FedExecutor tarafından seçim sırasında üretilir
-        int[] positions = FedExecutor.selectionPositions(plan);
+        int[] positions = FedExecutor.selectionPositions(effective);
         List<String> display = new ArrayList<>(columns.size());
         for (String column : columns) {
             display.add(displayName(column));
@@ -194,6 +235,10 @@ public class FedRunnerImpl implements SQLFederation.Runner {
     private static boolean federableSelection(@NotNull FedPlanner.FedPlan plan) {
         // dbeaver-mm K127: GROUP BY ve toplama seçimi FedPlanner tarafından doğrulanır.
         // GROUP BY olmadan toplama (ör. tek başına COUNT(*)) eski davranışla federe değildir.
+        // dbeaver-mm K130: genişletilmemiş yıldız seçimi federe edilemez.
+        if (FedExecutor.hasStarSelection(plan)) {
+            return false;
+        }
         if (!plan.groupColumns().isEmpty()) {
             return true;
         }
@@ -352,6 +397,35 @@ public class FedRunnerImpl implements SQLFederation.Runner {
             }
         }
         return false;
+    }
+
+    // dbeaver-mm K130: boş sonuç sorgusunun meta verisinden kolon adlarını okur
+    @NotNull
+    private static List<String> fetchColumns(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBCExecutionContext context,
+        @NotNull FedPlanner.Table table
+    ) throws Exception {
+        String ref = table.code() == null || table.code().isBlank()
+            ? table.name()
+            : table.code() + "." + table.name();
+        String sql = "SELECT * FROM " + ref + " WHERE 1=0";
+        List<String> names = new ArrayList<>();
+        try (DBCSession session = context.openSession(monitor, DBCExecutionPurpose.UTIL, "Federe kolon keşfi")) {
+            try (DBCStatement statement = session.prepareStatement(DBCStatementType.QUERY, sql, false, false, false)) {
+                statement.setLimit(0, 0);
+                if (statement.executeStatement()) {
+                    try (DBCResultSet rs = statement.openResultSet()) {
+                        if (rs != null) {
+                            for (DBCAttributeMetaData attribute : rs.getMeta().getAttributes()) {
+                                names.add(attribute.getName());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return names;
     }
 
     @NotNull
