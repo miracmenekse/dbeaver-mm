@@ -19,6 +19,7 @@ package org.jkiss.dbeaver.ui.inlinefkpicker.fed;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -103,7 +104,9 @@ public final class FedExecutor {
                 }
                 if (blank(first.pushedWhere()) && !blank(right.pushedWhere())) {
                     // filtreli taraf sürücü: önce o çekilir, anahtarlarıyla ilk tablo IN ile sorgulanır
-                    List<Object[]> driverRows = fetchTable(source(sourceByAlias, right.alias()), right, key.right(), maxRows);
+                    List<String> rightBlock = blockColumns(plan, right.alias(), key.right());
+                    List<String> firstBlock = blockColumns(plan, first.alias(), key.left());
+                    List<Object[]> driverRows = fetchTable(source(sourceByAlias, right.alias()), right, rightBlock, maxRows);
                     if (driverRows.isEmpty()) {
                         return new ArrayList<>();
                     }
@@ -111,6 +114,7 @@ public final class FedExecutor {
                         source(sourceByAlias, first.alias()),
                         first,
                         key.left(),
+                        firstBlock,
                         keyValues(driverRows, 0),
                         maxRows
                     );
@@ -128,7 +132,8 @@ public final class FedExecutor {
                     }
                     continue;
                 }
-                List<Object[]> rows = fetchTable(source(sourceByAlias, first.alias()), first, key.left(), maxRows);
+                List<String> firstBlock = blockColumns(plan, first.alias(), key.left());
+                List<Object[]> rows = fetchTable(source(sourceByAlias, first.alias()), first, firstBlock, maxRows);
                 if (rows.isEmpty()) {
                     return new ArrayList<>();
                 }
@@ -143,10 +148,12 @@ public final class FedExecutor {
                 throw new IllegalArgumentException("tablo tek bir anahtar sütunuyla bağlanabilir: " + key.left());
             }
 
+            List<String> rightBlock = blockColumns(plan, right.alias(), key.right());
             List<Object[]> rightRows = fetchKeys(
                 source(sourceByAlias, right.alias()),
                 right,
                 key.right(),
+                rightBlock,
                 keyValues(acc, leftOffset),
                 maxRows
             );
@@ -165,9 +172,60 @@ public final class FedExecutor {
         return acc;
     }
 
-    private static List<Object[]> fetchTable(Source source, FedPlanner.Table table, String keyColumn, long maxRows)
+    /**
+     * dbeaver-mm K124: bir tablo bloğunun seçim listesi. İlk sütun join anahtarıdır; ardından
+     * plan seçiminde o tabloya ait kolonlar seçim sırasıyla, yinelenenler bir kez gelir.
+     */
+    public static List<String> blockColumns(FedPlanner.FedPlan plan, String alias, String keyColumn) {
+        List<String> columns = new ArrayList<>();
+        if (keyColumn != null && !keyColumn.isBlank()) {
+            columns.add(keyColumn);
+        }
+        for (String selection : plan.selection()) {
+            String column = baseColumn(selection);
+            int dot = column.indexOf('.');
+            if (dot <= 0 || !column.substring(0, dot).equalsIgnoreCase(alias)) {
+                continue;
+            }
+            boolean exists = false;
+            for (String existing : columns) {
+                if (existing.equalsIgnoreCase(column)) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                columns.add(column);
+            }
+        }
+        return columns;
+    }
+
+    /** dbeaver-mm K124: tablo alias'ından blok seçim listesine eşleme. */
+    public static Map<String, List<String>> blocks(FedPlanner.FedPlan plan) {
+        Map<String, String> keys = new LinkedHashMap<>();
+        for (FedPlanner.Join join : plan.joins()) {
+            for (FedPlanner.Key key : join.keys()) {
+                keys.putIfAbsent(aliasOf(key.left()), key.left());
+                keys.putIfAbsent(aliasOf(key.right()), key.right());
+            }
+        }
+        Map<String, List<String>> result = new LinkedHashMap<>();
+        for (FedPlanner.Table table : plan.tables()) {
+            result.put(table.alias(), blockColumns(plan, table.alias(), keys.get(table.alias())));
+        }
+        return result;
+    }
+
+    private static String baseColumn(String selection) {
+        String text = selection.trim();
+        int space = text.indexOf(' ');
+        return space < 0 ? text : text.substring(0, space).trim();
+    }
+
+    private static List<Object[]> fetchTable(Source source, FedPlanner.Table table, List<String> columns, long maxRows)
         throws Exception {
-        String sql = selectPrefix(table, keyColumn) + where(table.pushedWhere());
+        String sql = selectPrefix(table, columns) + where(table.pushedWhere());
         List<Object[]> rows = nonNull(source.fetch(sql, probe(maxRows)));
         check(table, rows.size(), maxRows);
         return rows;
@@ -177,6 +235,7 @@ public final class FedExecutor {
         Source source,
         FedPlanner.Table table,
         String keyColumn,
+        List<String> columns,
         Set<Object> keys,
         long maxRows
     ) throws Exception {
@@ -191,15 +250,15 @@ public final class FedExecutor {
             if (!blank(table.pushedWhere())) {
                 filter = "(" + table.pushedWhere() + ") AND " + filter;
             }
-            String sql = selectPrefix(table, keyColumn) + " WHERE " + filter;
+            String sql = selectPrefix(table, columns) + " WHERE " + filter;
             out.addAll(nonNull(source.fetch(sql, probe(maxRows - out.size()))));
             check(table, out.size(), maxRows);
         }
         return out;
     }
 
-    private static String selectPrefix(FedPlanner.Table table, String keyColumn) {
-        return "SELECT " + keyColumn + ", " + table.alias() + ".* FROM " + table.name() + " " + table.alias();
+    private static String selectPrefix(FedPlanner.Table table, List<String> columns) {
+        return "SELECT " + String.join(", ", columns) + " FROM " + table.name() + " " + table.alias();
     }
 
     private static String where(String pushed) {

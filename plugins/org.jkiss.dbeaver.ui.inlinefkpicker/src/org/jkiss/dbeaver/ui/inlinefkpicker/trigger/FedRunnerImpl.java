@@ -131,26 +131,33 @@ public class FedRunnerImpl implements SQLFederation.Runner {
         }
 
         List<String> columns = plan.selection();
-        Map<String, List<Integer>> byAlias = new LinkedHashMap<>();
+        // K124: bloklar anahtar + o tabloya ait seçilmiş kolonlar; eşleme blok içi konumla yapılır
+        Map<String, List<String>> blocks = FedExecutor.blocks(plan);
+        Map<String, Integer> starts = new LinkedHashMap<>();
+        int width = 0;
+        for (FedPlanner.Table table : plan.tables()) {
+            starts.put(table.alias(), width);
+            width += blocks.getOrDefault(table.alias(), List.of()).size();
+        }
+        int[] positions = new int[columns.size()];
+        List<String> display = new ArrayList<>(columns.size());
         for (int i = 0; i < columns.size(); i++) {
-            String alias = aliasOf(columns.get(i), plan);
-            byAlias.computeIfAbsent(alias, key -> new ArrayList<>()).add(i);
+            String base = baseColumn(columns.get(i));
+            String alias = aliasOf(base, plan);
+            List<String> block = blocks.getOrDefault(alias, List.of());
+            positions[i] = starts.getOrDefault(alias, 0) + indexOfIgnoreCase(block, base);
+            display.add(displayName(columns.get(i)));
         }
         List<Object[]> rows = new ArrayList<>(combined.size());
         for (Object[] joined : combined) {
             Object[] row = new Object[columns.size()];
-            int offset = 0;
-            for (FedPlanner.Table table : plan.tables()) {
-                // K121: her blok anahtar sütunuyla başlar; anahtar seçim listesinde yoksa atlanır
-                offset++;
-                for (int index : byAlias.getOrDefault(table.alias(), List.of())) {
-                    row[index] = offset < joined.length ? joined[offset] : null;
-                    offset++;
-                }
+            for (int i = 0; i < columns.size(); i++) {
+                int index = positions[i];
+                row[i] = index >= 0 && index < joined.length ? joined[index] : null;
             }
             rows.add(row);
         }
-        return new SQLFederation.Result(columns, rows, LABEL_PREFIX + String.join(", ", codes));
+        return new SQLFederation.Result(display, rows, LABEL_PREFIX + String.join(", ", codes));
     }
 
     private static boolean federable(@NotNull FedPlanner.FedPlan plan) {
@@ -165,7 +172,110 @@ public class FedRunnerImpl implements SQLFederation.Runner {
                 return false;
             }
         }
+        return federableSelection(plan);
+    }
+
+    private static boolean federableSelection(@NotNull FedPlanner.FedPlan plan) {
+        for (String selection : plan.selection()) {
+            String[] parts = selectionParts(selection);
+            if (parts == null || !columnForm(parts[0]) || !knownAlias(parts[0], plan)) {
+                return false;
+            }
+            if (parts[1] != null && !identifier(parts[1])) {
+                return false;
+            }
+        }
         return true;
+    }
+
+    @Nullable
+    private static String[] selectionParts(@NotNull String selection) {
+        String text = selection.trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        int space = text.indexOf(' ');
+        if (space < 0) {
+            return new String[] {text, null};
+        }
+        String base = text.substring(0, space).trim();
+        String rest = text.substring(space + 1).trim();
+        int second = rest.indexOf(' ');
+        String as = second < 0 ? rest : rest.substring(0, second);
+        if (!"AS".equalsIgnoreCase(as)) {
+            return null;
+        }
+        String alias = second < 0 ? "" : rest.substring(second + 1).trim();
+        if (alias.isEmpty() || alias.indexOf(' ') >= 0) {
+            return null;
+        }
+        return new String[] {base, alias};
+    }
+
+    private static boolean columnForm(@NotNull String base) {
+        int dot = base.indexOf('.');
+        if (dot <= 0 || dot != base.lastIndexOf('.') || dot == base.length() - 1) {
+            return false;
+        }
+        return identifier(base.substring(0, dot)) && identifier(base.substring(dot + 1));
+    }
+
+    private static boolean identifier(@NotNull String text) {
+        if (text.isEmpty()) {
+            return false;
+        }
+        char first = text.charAt(0);
+        if (!Character.isLetter(first) && first != '_') {
+            return false;
+        }
+        for (int i = 1; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (!Character.isLetterOrDigit(c) && c != '_' && c != '$') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean knownAlias(@NotNull String qualifiedColumn, @NotNull FedPlanner.FedPlan plan) {
+        int dot = qualifiedColumn.indexOf('.');
+        if (dot <= 0) {
+            return false;
+        }
+        String alias = qualifiedColumn.substring(0, dot);
+        for (FedPlanner.Table table : plan.tables()) {
+            if (table.alias().equalsIgnoreCase(alias)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @NotNull
+    private static String baseColumn(@NotNull String selection) {
+        String text = selection.trim();
+        int space = text.indexOf(' ');
+        return space < 0 ? text : text.substring(0, space).trim();
+    }
+
+    @NotNull
+    private static String displayName(@NotNull String selection) {
+        String[] parts = selectionParts(selection);
+        if (parts != null && parts[1] != null) {
+            return parts[1];
+        }
+        String base = parts == null ? selection.trim() : parts[0];
+        int dot = base.lastIndexOf('.');
+        return dot >= 0 ? base.substring(dot + 1) : base;
+    }
+
+    private static int indexOfIgnoreCase(@NotNull List<String> values, @NotNull String value) {
+        for (int i = 0; i < values.size(); i++) {
+            if (values.get(i).equalsIgnoreCase(value)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @NotNull
