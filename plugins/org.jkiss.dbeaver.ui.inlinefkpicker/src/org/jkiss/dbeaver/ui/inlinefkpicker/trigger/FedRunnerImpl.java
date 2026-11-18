@@ -131,7 +131,7 @@ public class FedRunnerImpl implements SQLFederation.Runner {
         }
 
         List<String> columns = plan.selection();
-        // dbeaver-mm K126: konum hesabı FedExecutor ile ortak; burada yalnız görünen adlar üretilir
+        // dbeaver-mm K127: toplamalı sonuç FedExecutor tarafından seçim sırasında üretilir
         int[] positions = FedExecutor.selectionPositions(plan);
         List<String> display = new ArrayList<>(columns.size());
         for (String column : columns) {
@@ -192,6 +192,11 @@ public class FedRunnerImpl implements SQLFederation.Runner {
     }
 
     private static boolean federableSelection(@NotNull FedPlanner.FedPlan plan) {
+        // dbeaver-mm K127: GROUP BY ve toplama seçimi FedPlanner tarafından doğrulanır.
+        // GROUP BY olmadan toplama (ör. tek başına COUNT(*)) eski davranışla federe değildir.
+        if (!plan.groupColumns().isEmpty()) {
+            return true;
+        }
         for (String selection : plan.selection()) {
             String[] parts = selectionParts(selection);
             if (parts == null || !columnForm(parts[0]) || !knownAlias(parts[0], plan)) {

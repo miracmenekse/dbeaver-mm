@@ -18,6 +18,7 @@ package org.jkiss.dbeaver.ui.inlinefkpicker.fed;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -169,6 +170,10 @@ public final class FedExecutor {
                 return acc;
             }
         }
+        // dbeaver-mm K127: GROUP BY ve toplamalar birleşimden sonra bellekte uygulanır
+        if (aggregated(plan)) {
+            acc = aggregate(plan, acc);
+        }
         // dbeaver-mm K125: DISTINCT, ORDER BY ve LIMIT/OFFSET bellekte uygulanır
         // dbeaver-mm K126: DISTINCT yalnız seçilen kolonların birleşik satırdaki konumlarına bakar
         List<Object[]> result = plan.distinct() ? FedSort.distinct(acc, selectionPositions(plan)) : acc;
@@ -192,7 +197,90 @@ public final class FedExecutor {
         return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) Math.max(0, value);
     }
 
+    /** dbeaver-mm K127: planda GROUP BY veya toplama var mı. */
+    public static boolean aggregated(FedPlanner.FedPlan plan) {
+        return !plan.groupColumns().isEmpty() || !plan.aggregates().isEmpty();
+    }
+
+    private static List<Object[]> aggregate(FedPlanner.FedPlan plan, List<Object[]> rows) {
+        int groupCount = plan.groupColumns().size();
+        int[] groupPositions = new int[groupCount];
+        for (int i = 0; i < groupCount; i++) {
+            groupPositions[i] = positionOf(plan, plan.groupColumns().get(i));
+        }
+        FedAggregate.AggSpec[] specs = new FedAggregate.AggSpec[plan.aggregates().size()];
+        for (int i = 0; i < specs.length; i++) {
+            FedPlanner.Aggregate item = plan.aggregates().get(i);
+            int column = item.column() == null ? -1 : positionOf(plan, item.column());
+            specs[i] = new FedAggregate.AggSpec(column, FedAggregate.AggType.valueOf(item.function()));
+        }
+        List<Object[]> grouped = FedAggregate.group(rows, groupPositions, specs);
+        int[] groupBySelection = new int[plan.selection().size()];
+        int[] aggregateBySelection = new int[plan.selection().size()];
+        Arrays.fill(groupBySelection, -1);
+        Arrays.fill(aggregateBySelection, -1);
+        for (int i = 0; i < specs.length; i++) {
+            aggregateBySelection[plan.aggregates().get(i).selectionIndex()] = i;
+        }
+        for (int i = 0; i < plan.selection().size(); i++) {
+            if (aggregateBySelection[i] >= 0) {
+                continue;
+            }
+            String base = baseColumn(plan.selection().get(i));
+            for (int g = 0; g < groupCount; g++) {
+                if (plan.groupColumns().get(g).equalsIgnoreCase(base)) {
+                    groupBySelection[i] = g;
+                    break;
+                }
+            }
+        }
+        List<Object[]> result = new ArrayList<>(grouped.size());
+        for (Object[] row : grouped) {
+            Object[] out = new Object[plan.selection().size()];
+            for (int i = 0; i < out.length; i++) {
+                if (aggregateBySelection[i] >= 0) {
+                    out[i] = row[groupCount + aggregateBySelection[i]];
+                } else if (groupBySelection[i] >= 0) {
+                    out[i] = row[groupBySelection[i]];
+                }
+            }
+            result.add(out);
+        }
+        return result;
+    }
+
+    private static int positionOf(FedPlanner.FedPlan plan, String column) {
+        Map<String, List<String>> blocks = blocks(plan);
+        int cursor = 0;
+        for (FedPlanner.Table table : plan.tables()) {
+            List<String> block = blocks.getOrDefault(table.alias(), List.of());
+            for (int i = 0; i < block.size(); i++) {
+                if (block.get(i).equalsIgnoreCase(column)) {
+                    return cursor + i;
+                }
+            }
+            cursor += block.size();
+        }
+        throw new IllegalArgumentException("toplama sütunu bulunamadı: " + column);
+    }
+
+    private static int selectionIndex(FedPlanner.FedPlan plan, String column) {
+        for (int i = 0; i < plan.selection().size(); i++) {
+            if (baseColumn(plan.selection().get(i)).equalsIgnoreCase(column)) {
+                return i;
+            }
+        }
+        throw new IllegalArgumentException("ORDER BY seçim sütunu bulunamadı: " + column);
+    }
+
     private static int[] sortColumns(FedPlanner.FedPlan plan) {
+        if (aggregated(plan)) {
+            int[] result = new int[plan.orderBy().size()];
+            for (int i = 0; i < result.length; i++) {
+                result[i] = selectionIndex(plan, plan.orderBy().get(i).column());
+            }
+            return result;
+        }
         Map<String, List<String>> blocks = blocks(plan);
         Map<String, Integer> starts = new HashMap<>();
         int cursor = 0;
@@ -251,6 +339,15 @@ public final class FedExecutor {
                 columns.add(column);
             }
         }
+        // dbeaver-mm K127: GROUP BY ve toplama sütunları da blokta bulunmalı
+        for (String groupColumn : plan.groupColumns()) {
+            addColumn(columns, groupColumn, alias);
+        }
+        for (FedPlanner.Aggregate aggregate : plan.aggregates()) {
+            if (aggregate.column() != null) {
+                addColumn(columns, aggregate.column(), alias);
+            }
+        }
         // dbeaver-mm K125: ORDER BY sütunu seçilmemiş olsa da sıralama için çekilir
         for (FedPlanner.Order order : plan.orderBy()) {
             String column = order.column();
@@ -272,6 +369,19 @@ public final class FedExecutor {
         return columns;
     }
 
+    private static void addColumn(List<String> columns, String column, String alias) {
+        int dot = column.indexOf('.');
+        if (dot <= 0 || !column.substring(0, dot).equalsIgnoreCase(alias)) {
+            return;
+        }
+        for (String existing : columns) {
+            if (existing.equalsIgnoreCase(column)) {
+                return;
+            }
+        }
+        columns.add(column);
+    }
+
     /** dbeaver-mm K124: tablo alias'ından blok seçim listesine eşleme. */
     public static Map<String, List<String>> blocks(FedPlanner.FedPlan plan) {
         Map<String, String> keys = new LinkedHashMap<>();
@@ -290,6 +400,14 @@ public final class FedExecutor {
 
     /** dbeaver-mm K126: seçim listesindeki kolonların birleşik satırdaki konumları. */
     public static int[] selectionPositions(FedPlanner.FedPlan plan) {
+        // dbeaver-mm K127: toplamalı sonuç zaten seçim sırasında üretilir
+        if (aggregated(plan)) {
+            int[] identity = new int[plan.selection().size()];
+            for (int i = 0; i < identity.length; i++) {
+                identity[i] = i;
+            }
+            return identity;
+        }
         Map<String, List<String>> blocks = blocks(plan);
         int[] result = new int[plan.selection().size()];
         for (int i = 0; i < result.length; i++) {

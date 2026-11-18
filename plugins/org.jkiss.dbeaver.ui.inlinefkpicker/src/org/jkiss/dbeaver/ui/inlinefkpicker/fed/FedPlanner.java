@@ -44,6 +44,7 @@ public final class FedPlanner {
         "AS", "ON", "USING", "WHERE", "GROUP", "HAVING", "ORDER", "LIMIT", "OFFSET",
         "FETCH", "FOR", "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "OUTER", "CROSS"
     );
+    private static final Set<String> AGGREGATE_FUNCTIONS = Set.of("COUNT", "SUM", "MIN", "MAX", "AVG");
     private static final int WORD = 1;
     private static final int IDENT = 2;
     private static final int STRING = 3;
@@ -55,6 +56,7 @@ public final class FedPlanner {
     /**
      * Federe plan: tablo listesi, join listesi, kalan WHERE, seçim listesi ve
      * dbeaver-mm K125 ile ORDER BY/LIMIT/OFFSET/DISTINCT bilgileri.
+     * dbeaver-mm K127: GROUP BY sütunları ve seçim listesindeki toplamalar da taşınır.
      */
     public record FedPlan(
         List<Table> tables,
@@ -64,8 +66,23 @@ public final class FedPlanner {
         List<Order> orderBy,
         Long limit,
         Long offset,
-        boolean distinct
+        boolean distinct,
+        List<String> groupColumns,
+        List<Aggregate> aggregates
     ) {
+        public FedPlan(
+            List<Table> tables,
+            List<Join> joins,
+            String where,
+            List<String> selection,
+            List<Order> orderBy
+        ) {
+            this(tables, joins, where, selection, orderBy, null, null, false, List.of(), List.of());
+        }
+    }
+
+    /** dbeaver-mm K127: seçim listesindeki bir toplama; sütun COUNT(*) için null. */
+    public record Aggregate(String function, String column, int selectionIndex) {
     }
 
     /** Bir FROM/JOIN tablosu: kod (şema), ad, alias ve o tabloya itilen WHERE. */
@@ -113,6 +130,10 @@ public final class FedPlanner {
         }
 
         int[] depths = depths(tokens);
+        // dbeaver-mm K127: HAVING desteklenmez; federe plan üretilmez
+        if (findWord(tokens, depths, "HAVING", 1) >= 0) {
+            return null;
+        }
         int from = findWord(tokens, depths, "FROM", 1);
         if (from < 0) {
             return null;
@@ -136,9 +157,43 @@ public final class FedPlanner {
             return null;
         }
 
+        // dbeaver-mm K127: GROUP BY sütunları ve seçim listesindeki toplamalar okunur
+        List<String> groupColumns = List.of();
+        int groupStart = findWord(tokens, depths, "GROUP", from + 1);
+        if (groupStart >= 0) {
+            if (groupStart + 1 >= tokens.size() || !isWord(tokens.get(groupStart + 1), "BY")) {
+                return null;
+            }
+            int groupEnd = firstBoundary(tokens, depths, groupStart + 2);
+            List<String> items = splitItems(text, tokens, depths, groupStart + 2, groupEnd);
+            groupColumns = parseGroupColumns(items);
+            if (groupColumns == null) {
+                return null;
+            }
+        }
+        List<Aggregate> aggregates = parseAggregates(selection);
+        if (aggregates == null) {
+            return null;
+        }
+
         Parser parser = new Parser(text, tokens, depths, from + 1, fromEnd);
         if (!parser.parseFrom()) {
             return null;
+        }
+        for (String groupColumn : groupColumns) {
+            if (!parser.aliases.containsKey(aliasOfColumn(groupColumn))) {
+                return null;
+            }
+        }
+        for (Aggregate aggregate : aggregates) {
+            if (aggregate.column() != null && !parser.aliases.containsKey(aliasOfColumn(aggregate.column()))) {
+                return null;
+            }
+        }
+        if (!groupColumns.isEmpty() || !aggregates.isEmpty()) {
+            if (!validGroupedSelection(selection, groupColumns, aggregates)) {
+                return null;
+            }
         }
         String remaining = "";
         if (whereStart >= 0) {
@@ -193,8 +248,106 @@ public final class FedPlanner {
             List.copyOf(orderBy),
             limit,
             offset,
-            distinct
+            distinct,
+            List.copyOf(groupColumns),
+            List.copyOf(aggregates)
         );
+    }
+
+    private static List<String> parseGroupColumns(List<String> items) {
+        if (items.isEmpty()) {
+            return null;
+        }
+        List<String> result = new ArrayList<>();
+        for (String item : items) {
+            String column = item.trim();
+            int dot = column.indexOf('.');
+            if (dot <= 0 || dot != column.lastIndexOf('.') || dot == column.length() - 1) {
+                return null;
+            }
+            String alias = unquote(column.substring(0, dot).trim());
+            String name = unquote(column.substring(dot + 1).trim());
+            if (alias.isEmpty() || name.isEmpty()) {
+                return null;
+            }
+            result.add(alias + "." + name);
+        }
+        return result;
+    }
+
+    private static List<Aggregate> parseAggregates(List<String> selection) {
+        List<Aggregate> result = new ArrayList<>();
+        for (int i = 0; i < selection.size(); i++) {
+            String base = selectionBase(selection.get(i));
+            int open = base.indexOf('(');
+            if (open < 0) {
+                continue;
+            }
+            int close = base.lastIndexOf(')');
+            if (open == 0 || close != base.length() - 1) {
+                return null;
+            }
+            String function = upper(base.substring(0, open).trim());
+            if (!AGGREGATE_FUNCTIONS.contains(function)) {
+                return null;
+            }
+            String argument = base.substring(open + 1, close).trim();
+            if (argument.equals("*")) {
+                if (!function.equals("COUNT")) {
+                    return null;
+                }
+                result.add(new Aggregate("COUNT_STAR", null, i));
+                continue;
+            }
+            int dot = argument.indexOf('.');
+            if (dot <= 0 || dot != argument.lastIndexOf('.') || dot == argument.length() - 1) {
+                return null;
+            }
+            result.add(new Aggregate(function, argument, i));
+        }
+        return result;
+    }
+
+    private static boolean validGroupedSelection(
+        List<String> selection,
+        List<String> groupColumns,
+        List<Aggregate> aggregates
+    ) {
+        for (int i = 0; i < selection.size(); i++) {
+            boolean aggregate = false;
+            for (Aggregate item : aggregates) {
+                if (item.selectionIndex() == i) {
+                    aggregate = true;
+                    break;
+                }
+            }
+            if (aggregate) {
+                continue;
+            }
+            String base = selectionBase(selection.get(i));
+            boolean grouped = false;
+            for (String groupColumn : groupColumns) {
+                if (groupColumn.equalsIgnoreCase(base)) {
+                    grouped = true;
+                    break;
+                }
+            }
+            if (!grouped) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String selectionBase(String selection) {
+        String text = selection.trim();
+        int space = text.indexOf(' ');
+        return space < 0 ? text : text.substring(0, space).trim();
+    }
+
+    private static String aliasOfColumn(String column) {
+        int dot = column.indexOf('.');
+        return dot > 0 ? column.substring(0, dot) : column;
     }
 
     private static List<Order> parseOrder(List<String> items, Map<String, Integer> aliases) {
