@@ -63,6 +63,7 @@ import org.jkiss.dbeaver.model.sql.registry.SQLCommandHandlerDescriptor;
 import org.jkiss.dbeaver.model.sql.registry.SQLCommandsRegistry;
 import org.jkiss.dbeaver.model.sql.registry.SQLPragmaHandlerDescriptor;
 import org.jkiss.dbeaver.model.struct.DBSDataContainer;
+import org.jkiss.dbeaver.model.struct.DBSTypedObject;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.runtime.jobs.DataSourceJob;
 import org.jkiss.dbeaver.runtime.ui.DBPPlatformUI;
@@ -85,6 +86,7 @@ import org.jkiss.dbeaver.utils.RuntimeUtils;
 import org.jkiss.utils.CommonUtils;
 
 import java.lang.reflect.InvocationTargetException;
+import java.sql.Types;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -555,7 +557,9 @@ public class SQLQueryJob extends DataSourceJob {
             cached.addRow(row);
         }
         try (LocalStatement statement = new LocalStatement(session, "federation")) {
-            FederatedResultSet resultSet = new FederatedResultSet(session, statement, cached);
+            // dbeaver-mm K134: sütun tipleri federe sonuçtan aktarılır
+            FederatedResultSet resultSet = new FederatedResultSet(
+                session, statement, cached, fedResult.sqlTypes(), fedResult.typeNames());
             SQLQueryResult resultInfo = new SQLQueryResult(query);
             SQLQueryResult.ExecuteResult executeResult = resultInfo.addExecuteResult(true);
             boolean fetched = fetchQueryData(session, resultSet, resultInfo, executeResult, dataReceiver, true);
@@ -571,15 +575,114 @@ public class SQLQueryJob extends DataSourceJob {
         FederatedResultSet(
             @NotNull DBCSession session,
             @NotNull LocalStatement statement,
-            @NotNull CachedResultSet cached
+            @NotNull CachedResultSet cached,
+            @NotNull List<Integer> sqlTypes,
+            @NotNull List<String> typeNames
         ) {
             super(session, statement);
-            for (String column : cached.getColumnNames()) {
-                addColumn(column, DBPDataKind.STRING);
+            String[] columns = cached.getColumnNames();
+            for (int i = 0; i < columns.length; i++) {
+                int typeId = i < sqlTypes.size() ? sqlTypes.get(i) : Types.VARCHAR;
+                String typeName = i < typeNames.size() ? typeNames.get(i) : "VARCHAR";
+                addColumn(columns[i], new FederatedTypedObject(typeId, typeName));
             }
             for (Object[] row : cached.getRows()) {
                 addRow(row);
             }
+        }
+    }
+
+    // dbeaver-mm K134: federe sütun tipini yerel sonuç kümesine taşır
+    private static final class FederatedTypedObject implements DBSTypedObject {
+        private final int typeId;
+        private final String typeName;
+
+        private FederatedTypedObject(int typeId, @NotNull String typeName) {
+            this.typeId = typeId;
+            this.typeName = typeName;
+        }
+
+        @NotNull
+        @Override
+        public String getTypeName() {
+            return typeName;
+        }
+
+        @NotNull
+        @Override
+        public String getFullTypeName() {
+            return typeName;
+        }
+
+        @Override
+        public int getTypeID() {
+            return typeId;
+        }
+
+        @NotNull
+        @Override
+        public DBPDataKind getDataKind() {
+            return dataKind(typeId);
+        }
+
+        @Nullable
+        @Override
+        public Integer getScale() {
+            return null;
+        }
+
+        @Nullable
+        @Override
+        public Integer getPrecision() {
+            return null;
+        }
+
+        @Override
+        public long getMaxLength() {
+            return 0;
+        }
+
+        @Override
+        public long getTypeModifiers() {
+            return 0;
+        }
+    }
+
+    // dbeaver-mm K134: bilinmeyen tip eski davranışla STRING kabul edilir
+    @NotNull
+    private static DBPDataKind dataKind(int typeId) {
+        switch (typeId) {
+            case Types.BIT:
+            case Types.BOOLEAN:
+                return DBPDataKind.BOOLEAN;
+            case Types.TINYINT:
+            case Types.SMALLINT:
+            case Types.INTEGER:
+            case Types.BIGINT:
+            case Types.FLOAT:
+            case Types.REAL:
+            case Types.DOUBLE:
+            case Types.NUMERIC:
+            case Types.DECIMAL:
+                return DBPDataKind.NUMERIC;
+            case Types.DATE:
+            case Types.TIME:
+            case Types.TIME_WITH_TIMEZONE:
+            case Types.TIMESTAMP:
+            case Types.TIMESTAMP_WITH_TIMEZONE:
+                return DBPDataKind.DATETIME;
+            case Types.BINARY:
+            case Types.VARBINARY:
+            case Types.LONGVARBINARY:
+            case Types.BLOB:
+                return DBPDataKind.BINARY;
+            case Types.CLOB:
+            case Types.NCLOB:
+            case Types.LONGVARCHAR:
+            case Types.LONGNVARCHAR:
+                return DBPDataKind.CONTENT;
+            default:
+                return DBPDataKind.STRING;
         }
     }
 

@@ -41,6 +41,7 @@ import org.jkiss.dbeaver.ui.inlinefkpicker.core.InlineFkService;
 import org.jkiss.dbeaver.ui.inlinefkpicker.fed.FedExecutor;
 import org.jkiss.dbeaver.ui.inlinefkpicker.fed.FedPlanner;
 
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -56,6 +57,10 @@ public class FedRunnerImpl implements SQLFederation.Runner {
 
     private static final long MAX_ROWS = 100000L;
     private static final String LABEL_PREFIX = "federated: ";
+
+    // dbeaver-mm K134: kaynak sütununun SQL tip kimliği ve tip adı
+    private record ColumnType(int typeId, String typeName) {
+    }
 
     @Nullable
     @Override
@@ -80,6 +85,7 @@ public class FedRunnerImpl implements SQLFederation.Runner {
             InlineFkService.resolveTableConnections(monitor, tableRefs, candidatePool());
 
         Map<String, DBPDataSourceContainer> byAlias = new LinkedHashMap<>();
+        Map<String, FedPlanner.Table> tableByAlias = new LinkedHashMap<>();
         Set<DBPDataSourceContainer> distinct = new LinkedHashSet<>();
         String currentId = context.getDataSource() == null ? null : context.getDataSource().getContainer().getId();
         for (FedPlanner.Table table : plan.tables()) {
@@ -95,6 +101,7 @@ public class FedRunnerImpl implements SQLFederation.Runner {
                 }
             }
             byAlias.put(table.alias(), chosen);
+            tableByAlias.put(table.alias(), table);
             distinct.add(chosen);
         }
         if (distinct.size() < 2 || hasBackslashTextKey(new ArrayList<>(distinct), sql)) {
@@ -102,6 +109,7 @@ public class FedRunnerImpl implements SQLFederation.Runner {
         }
 
         Map<String, FedExecutor.Source> sources = new LinkedHashMap<>();
+        Map<String, Map<String, ColumnType>> typesByAlias = new LinkedHashMap<>();
         for (Map.Entry<String, DBPDataSourceContainer> entry : byAlias.entrySet()) {
             DBPDataSourceContainer container = entry.getValue();
             if (!container.isConnected()) {
@@ -120,15 +128,22 @@ public class FedRunnerImpl implements SQLFederation.Runner {
                     return fetchColumns(monitor, sourceContext, table);
                 }
             });
+            // dbeaver-mm K134: tip okunamazsa sütunlar eski davranışla STRING kalır
+            try {
+                typesByAlias.put(entry.getKey(), fetchColumnTypes(monitor, sourceContext, tableByAlias.get(entry.getKey())));
+            } catch (Exception e) {
+                typesByAlias.put(entry.getKey(), Map.of());
+            }
         }
-        return runPlan(plan, sources, codes(plan));
+        return runPlan(plan, sources, codes(plan), typesByAlias);
     }
 
     @Nullable
     private SQLFederation.Result runPlan(
         @NotNull FedPlanner.FedPlan plan,
         @NotNull Map<String, FedExecutor.Source> sources,
-        @NotNull List<String> codes
+        @NotNull List<String> codes,
+        @NotNull Map<String, Map<String, ColumnType>> typesByAlias
     ) throws DBException {
         FedPlanner.FedPlan effective = plan;
         boolean expanded = false;
@@ -187,7 +202,71 @@ public class FedRunnerImpl implements SQLFederation.Runner {
             }
             rows.add(row);
         }
-        return new SQLFederation.Result(display, rows, LABEL_PREFIX + String.join(", ", codes));
+        // dbeaver-mm K134: seçim tipleri kaynak meta verisinden ve toplama türünden türetilir
+        Map<Integer, FedPlanner.Aggregate> aggregatesBySelection = new LinkedHashMap<>();
+        for (FedPlanner.Aggregate aggregate : effective.aggregates()) {
+            aggregatesBySelection.put(aggregate.selectionIndex(), aggregate);
+        }
+        List<Integer> sqlTypes = new ArrayList<>(columns.size());
+        List<String> typeNames = new ArrayList<>(columns.size());
+        for (int i = 0; i < columns.size(); i++) {
+            ColumnType type = columnType(columns.get(i), aggregatesBySelection.get(i), typesByAlias);
+            sqlTypes.add(type.typeId());
+            typeNames.add(type.typeName());
+        }
+        return new SQLFederation.Result(
+            display, rows, LABEL_PREFIX + String.join(", ", codes), sqlTypes, typeNames);
+    }
+
+    @NotNull
+    private static ColumnType columnType(
+        @NotNull String selection,
+        @Nullable FedPlanner.Aggregate aggregate,
+        @NotNull Map<String, Map<String, ColumnType>> typesByAlias
+    ) {
+        if (aggregate != null) {
+            String function = aggregate.function();
+            if ("COUNT".equalsIgnoreCase(function) || "COUNT_STAR".equalsIgnoreCase(function)) {
+                return new ColumnType(Types.BIGINT, "BIGINT");
+            }
+            if ("SUM".equalsIgnoreCase(function)) {
+                return new ColumnType(Types.NUMERIC, "NUMERIC");
+            }
+            if ("AVG".equalsIgnoreCase(function)) {
+                return new ColumnType(Types.DOUBLE, "DOUBLE");
+            }
+            if (aggregate.column() != null) {
+                ColumnType source = findColumnType(typesByAlias, aggregate.column());
+                if (source != null) {
+                    return source;
+                }
+            }
+            return new ColumnType(Types.VARCHAR, "VARCHAR");
+        }
+        ColumnType source = findColumnType(typesByAlias, baseColumn(selection));
+        return source == null ? new ColumnType(Types.VARCHAR, "VARCHAR") : source;
+    }
+
+    @Nullable
+    private static ColumnType findColumnType(
+        @NotNull Map<String, Map<String, ColumnType>> typesByAlias,
+        @NotNull String qualifiedColumn
+    ) {
+        int dot = qualifiedColumn.indexOf('.');
+        if (dot <= 0) {
+            return null;
+        }
+        Map<String, ColumnType> types = typesByAlias.get(qualifiedColumn.substring(0, dot));
+        if (types == null) {
+            return null;
+        }
+        String column = qualifiedColumn.substring(dot + 1);
+        for (Map.Entry<String, ColumnType> entry : types.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(column)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private static boolean federable(@NotNull FedPlanner.FedPlan plan) {
@@ -456,6 +535,36 @@ public class FedRunnerImpl implements SQLFederation.Runner {
             }
         }
         return names;
+    }
+
+    // dbeaver-mm K134: kaynak tablonun kolon adı -> SQL tipi eşlemesini okur
+    @NotNull
+    private static Map<String, ColumnType> fetchColumnTypes(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBCExecutionContext context,
+        @NotNull FedPlanner.Table table
+    ) throws Exception {
+        String ref = table.code() == null || table.code().isBlank()
+            ? table.name()
+            : table.code() + "." + table.name();
+        String sql = "SELECT * FROM " + ref + " WHERE 1=0";
+        Map<String, ColumnType> types = new LinkedHashMap<>();
+        try (DBCSession session = context.openSession(monitor, DBCExecutionPurpose.UTIL, "Federe kolon tipleri")) {
+            try (DBCStatement statement = session.prepareStatement(DBCStatementType.QUERY, sql, false, false, false)) {
+                statement.setLimit(0, 0);
+                if (statement.executeStatement()) {
+                    try (DBCResultSet rs = statement.openResultSet()) {
+                        if (rs != null) {
+                            for (DBCAttributeMetaData attribute : rs.getMeta().getAttributes()) {
+                                types.put(attribute.getName(),
+                                    new ColumnType(attribute.getTypeID(), attribute.getTypeName()));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return types;
     }
 
     @NotNull

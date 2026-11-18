@@ -22,6 +22,8 @@ import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 
+import java.sql.Types;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -66,9 +68,55 @@ public final class SQLFederation {
     }
 
     /**
-     * Federe sonucun sütun adları, satırları ve görünen etiketi.
+     * Federe sonucun sütun adları, satırları, görünen etiketi ve sütun tipleri.
+     * dbeaver-mm K134: tipler bilinmiyorsa STRING kabul edilir.
      */
-    public record Result(List<String> columns, List<Object[]> rows, String label) {
+    public record Result(
+        List<String> columns,
+        List<Object[]> rows,
+        String label,
+        List<Integer> sqlTypes,
+        List<String> typeNames
+    ) {
+        public Result {
+            int size = columns == null ? 0 : columns.size();
+            sqlTypes = normalizeTypes(sqlTypes, size);
+            typeNames = normalizeNames(typeNames, size);
+        }
+
+        /** dbeaver-mm K134: tipleri taşımayan eski çağrılar için geriye uyumlu kurucu. */
+        public Result(List<String> columns, List<?> rows, String label) {
+            this(columns, toRows(rows), label, null, null);
+        }
+
+        private static List<Object[]> toRows(List<?> rows) {
+            if (rows == null) {
+                return List.of();
+            }
+            List<Object[]> result = new ArrayList<>(rows.size());
+            for (Object row : rows) {
+                result.add(row instanceof Object[] array ? array : new Object[]{row});
+            }
+            return result;
+        }
+
+        private static List<Integer> normalizeTypes(List<Integer> types, int size) {
+            List<Integer> result = new ArrayList<>(size);
+            for (int i = 0; i < size; i++) {
+                Integer type = types != null && i < types.size() ? types.get(i) : null;
+                result.add(type == null ? Types.VARCHAR : type);
+            }
+            return List.copyOf(result);
+        }
+
+        private static List<String> normalizeNames(List<String> names, int size) {
+            List<String> result = new ArrayList<>(size);
+            for (int i = 0; i < size; i++) {
+                String name = names != null && i < names.size() ? names.get(i) : null;
+                result.add(name == null ? "VARCHAR" : name);
+            }
+            return List.copyOf(result);
+        }
     }
 
     /**

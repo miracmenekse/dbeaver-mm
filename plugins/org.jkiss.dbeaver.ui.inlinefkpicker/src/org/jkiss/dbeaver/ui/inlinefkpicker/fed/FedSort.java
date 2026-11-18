@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -122,10 +123,19 @@ public final class FedSort {
         if (b == null) {
             return -1;
         }
+        // dbeaver-mm K134: karşılaştırma değer tipine göre sayısal, tarihsel ya da metinseldir
         if (a instanceof Number left && b instanceof Number right) {
             BigDecimal leftValue = new BigDecimal(left.toString());
             BigDecimal rightValue = new BigDecimal(right.toString());
             return leftValue.compareTo(rightValue);
+        }
+        if (a instanceof Date left && b instanceof Date right) {
+            return Long.compare(left.getTime(), right.getTime());
+        }
+        if (a instanceof Comparable<?> && a.getClass().isInstance(b)) {
+            @SuppressWarnings("unchecked")
+            Comparable<Object> comparable = (Comparable<Object>) a;
+            return comparable.compareTo(b);
         }
         return collator.compare(String.valueOf(a), String.valueOf(b));
     }
