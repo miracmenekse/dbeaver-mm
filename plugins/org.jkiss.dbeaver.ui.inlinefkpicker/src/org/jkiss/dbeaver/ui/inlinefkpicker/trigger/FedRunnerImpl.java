@@ -191,7 +191,12 @@ public class FedRunnerImpl implements SQLFederation.Runner {
     }
 
     private static boolean federable(@NotNull FedPlanner.FedPlan plan) {
-        if (plan.tables().size() < 2 || (plan.where() != null && !plan.where().isBlank())) {
+        if (plan.tables().size() < 2) {
+            return false;
+        }
+        // dbeaver-mm K133: kalan WHERE bellekte derlenebiliyorsa federe olur
+        if (plan.where() != null && !plan.where().isBlank()
+            && FedExecutor.compileFilter(plan) == null) {
             return false;
         }
         if (plan.joins().size() != plan.tables().size() - 1) {

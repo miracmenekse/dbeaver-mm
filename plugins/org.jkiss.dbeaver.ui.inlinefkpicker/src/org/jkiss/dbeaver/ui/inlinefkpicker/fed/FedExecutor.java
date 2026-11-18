@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * dbeaver-mm K121: federe planı anahtar aktarımıyla çalıştıran saf yürütücü.
@@ -351,6 +352,20 @@ public final class FedExecutor {
             starts.put(table.alias(), insertPos);
             refreshStarts(tables, blockByAlias, starts);
         }
+        // dbeaver-mm K133: kalan WHERE birleşimden sonra, GROUP BY ve ORDER BY'dan önce bellekte uygulanır
+        if (!blank(plan.where())) {
+            Predicate<Object[]> filter = compileFilter(plan);
+            if (filter == null) {
+                throw new FedUnsupportedException("WHERE derlenemedi: " + plan.where());
+            }
+            List<Object[]> filtered = new ArrayList<>(acc.size());
+            for (Object[] row : acc) {
+                if (filter.test(row)) {
+                    filtered.add(row);
+                }
+            }
+            acc = filtered;
+        }
         // dbeaver-mm K127: GROUP BY ve toplamalar birleşimden sonra bellekte uygulanır
         if (aggregated(plan)) {
             acc = aggregate(plan, acc);
@@ -453,6 +468,95 @@ public final class FedExecutor {
     public static boolean aggregated(FedPlanner.FedPlan plan) {
         return !plan.groupColumns().isEmpty() || !plan.aggregates().isEmpty()
             || !plan.havingFilters().isEmpty();
+    }
+
+    // dbeaver-mm K133: kalan WHERE'i bellek filtresine derler; boşsa ya da derlenemezse null
+    public static Predicate<Object[]> compileFilter(FedPlanner.FedPlan plan) {
+        if (blank(plan.where())) {
+            return null;
+        }
+        return FedFilter.compile(plan.where(), columnPositions(plan)::get);
+    }
+
+    // dbeaver-mm K133: birleşik satırdaki alias.kolon konumları
+    private static Map<String, Integer> columnPositions(FedPlanner.FedPlan plan) {
+        Map<String, List<String>> blocks = blocks(plan);
+        Map<String, Integer> positions = new HashMap<>();
+        int cursor = 0;
+        for (FedPlanner.Table table : plan.tables()) {
+            List<String> block = blocks.getOrDefault(table.alias(), List.of());
+            for (int i = 0; i < block.size(); i++) {
+                positions.putIfAbsent(block.get(i).toLowerCase(Locale.ROOT), cursor + i);
+            }
+            cursor += block.size();
+        }
+        return positions;
+    }
+
+    // dbeaver-mm K133: WHERE metnindeki alias.kolon başvuruları
+    private static List<String> whereColumns(String where) {
+        List<String> result = new ArrayList<>();
+        if (where == null) {
+            return result;
+        }
+        int n = where.length();
+        int i = 0;
+        while (i < n) {
+            char c = where.charAt(i);
+            if (c == '\'') {
+                i++;
+                while (i < n) {
+                    if (where.charAt(i) == '\'') {
+                        if (i + 1 < n && where.charAt(i + 1) == '\'') {
+                            i += 2;
+                            continue;
+                        }
+                        i++;
+                        break;
+                    }
+                    i++;
+                }
+                continue;
+            }
+            if (isIdentifierStart(c)) {
+                int aliasStart = i;
+                while (i < n && isIdentifierPart(where.charAt(i))) {
+                    i++;
+                }
+                int aliasEnd = i;
+                int j = i;
+                while (j < n && Character.isWhitespace(where.charAt(j))) {
+                    j++;
+                }
+                if (j < n && where.charAt(j) == '.') {
+                    int k = j + 1;
+                    while (k < n && Character.isWhitespace(where.charAt(k))) {
+                        k++;
+                    }
+                    if (k < n && isIdentifierStart(where.charAt(k))) {
+                        int columnStart = k;
+                        while (k < n && isIdentifierPart(where.charAt(k))) {
+                            k++;
+                        }
+                        result.add(where.substring(aliasStart, aliasEnd)
+                            + "." + where.substring(columnStart, k));
+                        i = k;
+                        continue;
+                    }
+                }
+                continue;
+            }
+            i++;
+        }
+        return result;
+    }
+
+    private static boolean isIdentifierStart(char c) {
+        return Character.isLetter(c) || c == '_';
+    }
+
+    private static boolean isIdentifierPart(char c) {
+        return Character.isLetterOrDigit(c) || c == '_' || c == '$';
     }
 
     // dbeaver-mm K132: HAVING toplamaları seçimde olmasa da hesaplanır ve gruplar filtrelenir
@@ -688,6 +792,10 @@ public final class FedExecutor {
             if (!exists) {
                 columns.add(column);
             }
+        }
+        // dbeaver-mm K133: bellekte süzülecek WHERE kolonları da blokta bulunur
+        for (String column : whereColumns(plan.where())) {
+            addColumn(columns, column, alias);
         }
         return columns;
     }

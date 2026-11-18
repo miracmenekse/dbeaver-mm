@@ -30,7 +30,8 @@ import java.util.Set;
  * <p>
  * Tek bir SELECT'i metin düzeyinde ayrıştırır; FROM/JOIN tablolarını, ON eşitliklerini,
  * tablo başına itilebilen WHERE terimlerini ve SELECT listesini çıkarır. Alt sorgu, UNION,
- * CTE, DML, OR içeren WHERE ve eşitlik dışı ON koşulları federe sayılmaz ve {@code null} döner.
+ * CTE, DML ve eşitlik dışı ON koşulları federe sayılmaz ve {@code null} döner.
+ * dbeaver-mm K133: OR içeren ya da çok tablolu WHERE terimleri planda kalır ve bellekte süzülür.
  * JSQLParser'a bağımlı değildir; SQL metni tarayıcıyla çözülür.
  */
 public final class FedPlanner {
@@ -234,14 +235,11 @@ public final class FedPlanner {
                 return null;
             }
         }
+        // dbeaver-mm K133: dış join'in null tarafındaki terimler kaynağa itilmez
+        Set<String> nullableAliases = nullableAliases(parser.tables, parser.joins);
         String remaining = "";
         if (whereStart >= 0) {
-            for (int i = whereStart + 1; i < whereEnd; i++) {
-                if (isWord(tokens.get(i), "OR")) {
-                    return null;
-                }
-            }
-            remaining = parser.applyWhere(whereStart + 1, whereEnd);
+            remaining = parser.applyWhere(whereStart + 1, whereEnd, nullableAliases);
             if (remaining == null) {
                 return null;
             }
@@ -293,6 +291,27 @@ public final class FedPlanner {
             havingText,
             List.copyOf(havingFilters)
         );
+    }
+
+    // dbeaver-mm K133: dış join'in null tarafı olan aliaslar
+    private static Set<String> nullableAliases(List<Table> tables, List<Join> joins) {
+        Set<String> result = new LinkedHashSet<>();
+        for (int j = 0; j < joins.size(); j++) {
+            Join join = joins.get(j);
+            String type = join.type();
+            boolean left = "LEFT".equalsIgnoreCase(type);
+            boolean outer = left || "RIGHT".equalsIgnoreCase(type);
+            if (join.keys().isEmpty() || !outer || j + 1 >= tables.size()) {
+                continue;
+            }
+            String newAlias = tables.get(j + 1).alias();
+            Key key = join.keys().get(0);
+            String leftAlias = aliasOfColumn(key.left());
+            String rightAlias = aliasOfColumn(key.right());
+            boolean newIsRight = rightAlias.equalsIgnoreCase(newAlias);
+            result.add(left == newIsRight ? rightAlias : leftAlias);
+        }
+        return result;
     }
 
     private static List<String> parseGroupColumns(List<String> items) {
@@ -938,11 +957,18 @@ public final class FedPlanner {
             return parts;
         }
 
-        private String applyWhere(int start, int endExclusive) {
+        // dbeaver-mm K133: OR içeren WHERE bütünüyle kalır; null taraf terimi de itilmez
+        private String applyWhere(int start, int endExclusive, Set<String> nullableAliases) {
             if (start >= endExclusive) {
                 return "";
             }
-            List<int[]> terms = splitTerms(start, endExclusive, "AND", 0);
+            for (int i = start; i < endExclusive; i++) {
+                if (depths[i] == 0 && isWord(tokens.get(i), "OR")) {
+                    return sql.substring(tokens.get(start).start, tokens.get(endExclusive - 1).end).trim();
+                }
+            }
+            // dbeaver-mm K133: BETWEEN ... AND ... tek terimdir; AND ayırıcı sayılmaz
+            List<int[]> terms = splitWhereTerms(start, endExclusive);
             StringBuilder remaining = new StringBuilder();
             for (int[] term : terms) {
                 String text = sql.substring(tokens.get(term[0]).start, tokens.get(term[1] - 1).end).trim();
@@ -953,7 +979,7 @@ public final class FedPlanner {
                 if (referenced.size() == 1) {
                     String alias = referenced.iterator().next();
                     Integer tableIndex = aliases.get(alias);
-                    if (tableIndex != null) {
+                    if (tableIndex != null && !nullableAliases.contains(alias)) {
                         pushWhere(tableIndex, text);
                         continue;
                     }
@@ -992,6 +1018,34 @@ public final class FedPlanner {
             int termStart = start;
             for (int i = start; i < endExclusive; i++) {
                 if (depths[i] == base && isWord(tokens.get(i), keyword)) {
+                    if (i > termStart) {
+                        terms.add(new int[]{termStart, i});
+                    }
+                    termStart = i + 1;
+                }
+            }
+            if (endExclusive > termStart) {
+                terms.add(new int[]{termStart, endExclusive});
+            }
+            return terms;
+        }
+
+        // dbeaver-mm K133: WHERE terimlerini böler; BETWEEN'in AND'i ayırıcı sayılmaz
+        private List<int[]> splitWhereTerms(int start, int endExclusive) {
+            List<int[]> terms = new ArrayList<>();
+            int termStart = start;
+            int pendingBetween = 0;
+            for (int i = start; i < endExclusive; i++) {
+                if (depths[i] != 0) {
+                    continue;
+                }
+                if (isWord(tokens.get(i), "BETWEEN")) {
+                    pendingBetween++;
+                } else if (isWord(tokens.get(i), "AND")) {
+                    if (pendingBetween > 0) {
+                        pendingBetween--;
+                        continue;
+                    }
                     if (i > termStart) {
                         terms.add(new int[]{termStart, i});
                     }
