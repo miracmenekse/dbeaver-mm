@@ -92,6 +92,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * SQLQueryJob
@@ -104,6 +106,9 @@ public class SQLQueryJob extends DataSourceJob {
     public static final Object STATS_RESULTS = new Object();
     private static final int MAX_QUERY_PREVIEW_LENGTH = 8192;
     private static final int MAX_UPDATE_COUNT_READS = 1000;
+    // dbeaver-mm K135: süzülmüş sorgu metninden WHERE gövdesini ayıklamak için
+    private static final Pattern GRID_WHERE = Pattern.compile("\\sWHERE\\s", Pattern.CASE_INSENSITIVE);
+    private static final Pattern GRID_ORDER = Pattern.compile("\\sORDER\\s+BY\\s", Pattern.CASE_INSENSITIVE);
 
     private final DBSDataContainer dataContainer;
     private final List<SQLScriptElement> queries;
@@ -433,6 +438,11 @@ public class SQLQueryJob extends DataSourceJob {
                     return false;
                 }
             }
+            // dbeaver-mm K135: federe olmayan sorgunun nedeni durum satırında gösterilir; normal akış sürer
+            String whyNot = SQLFederation.get() == null ? null : SQLFederation.get().explainWhyNot(fedQuery.getText());
+            if (whyNot != null) {
+                session.getProgressMonitor().subTask(whyNot);
+            }
         }
         if (!scriptContext.getPragmas().isEmpty() && element instanceof SQLQuery query) {
             final SQLQueryDataContainer container = new SQLQueryDataContainer(this::getExecutionContext, query, scriptContext, log);
@@ -539,7 +549,48 @@ public class SQLQueryJob extends DataSourceJob {
         }
         // dbeaver-mm K129: yenileme istatistikleri sıfırdan tutulur
         statistics = new DBCStatistics();
-        return feedFederatedResult(session, query, fedResult, dataReceiver);
+        return feedFederatedResult(session, query, applyGridFilter(session, runner, fedResult), dataReceiver);
+    }
+
+    // dbeaver-mm K135: grid filtresi (kısıtlar ve WHERE) bellekte süzülebiliyorsa süzülmüş sonucu, yoksa aynısını döner
+    @NotNull
+    private SQLFederation.Result applyGridFilter(
+        @NotNull DBCSession session,
+        @NotNull SQLFederation.Runner runner,
+        @NotNull SQLFederation.Result fedResult
+    ) {
+        String criteria = gridCriteria(session);
+        if (criteria == null || criteria.isBlank()) {
+            return fedResult;
+        }
+        List<Object[]> rows = runner.filterRows(fedResult.columns(), fedResult.rows(), criteria);
+        if (rows == null) {
+            return fedResult;
+        }
+        return new SQLFederation.Result(
+            fedResult.columns(), rows, fedResult.label(), fedResult.sqlTypes(), fedResult.typeNames());
+    }
+
+    // dbeaver-mm K135: grid filtresini modelin kendi üretecinden WHERE metni olarak alır; alınamazsa null
+    @Nullable
+    private String gridCriteria(@NotNull DBCSession session) {
+        if (dataFilter == null || !dataFilter.hasFilters()) {
+            return null;
+        }
+        try {
+            DBPDataSource dataSource = session.getDataSource();
+            String rendered = dataSource.getSQLDialect().addFiltersToQuery(
+                session.getProgressMonitor(), dataSource, "SELECT * FROM fed_grid", dataFilter);
+            Matcher where = GRID_WHERE.matcher(rendered);
+            if (!where.find()) {
+                return null;
+            }
+            String tail = rendered.substring(where.end());
+            Matcher order = GRID_ORDER.matcher(tail);
+            return order.find() ? tail.substring(0, order.start()) : tail;
+        } catch (DBException | RuntimeException e) {
+            return null;
+        }
     }
 
     // dbeaver-mm K129: federe satırları verilen alıcıya yazar (sorgu metni değiştirilmez)

@@ -39,6 +39,8 @@ import org.jkiss.dbeaver.ui.editors.sql.SQLFederation;
 import org.jkiss.dbeaver.ui.editors.sql.SqlConnectionsBar;
 import org.jkiss.dbeaver.ui.inlinefkpicker.core.InlineFkService;
 import org.jkiss.dbeaver.ui.inlinefkpicker.fed.FedExecutor;
+import org.jkiss.dbeaver.ui.inlinefkpicker.fed.FedExplain;
+import org.jkiss.dbeaver.ui.inlinefkpicker.fed.FedFilter;
 import org.jkiss.dbeaver.ui.inlinefkpicker.fed.FedPlanner;
 
 import java.sql.Types;
@@ -60,6 +62,32 @@ public class FedRunnerImpl implements SQLFederation.Runner {
 
     // dbeaver-mm K134: kaynak sütununun SQL tip kimliği ve tip adı
     private record ColumnType(int typeId, String typeName) {
+    }
+
+    // dbeaver-mm K135: federe olmayan sorgunun nedeni (sadece metin taraması; hata olursa bilinmiyor)
+    @Nullable
+    @Override
+    public String explainWhyNot(@NotNull String sql) {
+        try {
+            // dbeaver-mm K135: tek bağlantılı kullanıcıya "federe değil" gürültüsü gösterme
+            if (candidatePool().size() < 2) {
+                return null;
+            }
+            return FedExplain.reason(sql);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    // dbeaver-mm K135: grid filtresini federe sonucun bellek satırlarına uygular
+    @Nullable
+    @Override
+    public List<Object[]> filterRows(
+        @NotNull List<String> columns,
+        @NotNull List<Object[]> rows,
+        @NotNull String criteria
+    ) {
+        return FedFilter.apply(columns, rows, criteria);
     }
 
     @Nullable

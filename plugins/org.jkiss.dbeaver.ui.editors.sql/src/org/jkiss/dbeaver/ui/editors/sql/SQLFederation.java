@@ -65,6 +65,31 @@ public final class SQLFederation {
             @NotNull DBCExecutionContext context,
             @NotNull String sql
         ) throws DBException;
+
+        // dbeaver-mm K135: federe olmayan sorgunun nedeni ve bellekte grid filtresi (varsayılan: yok)
+        /**
+         * Federe OLMAYAN sorgu için neden metnini döner.
+         *
+         * @return Türkçe neden, bilinmiyorsa {@code null}
+         */
+        @Nullable
+        default String explainWhyNot(@NotNull String sql) {
+            return null;
+        }
+
+        /**
+         * dbeaver-mm K135: federe sonucun bellek satırlarına grid filtresi (WHERE metni) uygular.
+         *
+         * @return süzülmüş satırlar, desteklenmiyorsa {@code null}
+         */
+        @Nullable
+        default List<Object[]> filterRows(
+            @NotNull List<String> columns,
+            @NotNull List<Object[]> rows,
+            @NotNull String criteria
+        ) {
+            return null;
+        }
     }
 
     /**

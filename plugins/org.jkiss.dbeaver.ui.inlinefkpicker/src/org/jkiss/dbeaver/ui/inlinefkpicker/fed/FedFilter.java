@@ -18,8 +18,10 @@ package org.jkiss.dbeaver.ui.inlinefkpicker.fed;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
@@ -59,6 +61,38 @@ public final class FedFilter {
         } catch (ParseException e) {
             return null;
         }
+    }
+
+    /**
+     * dbeaver-mm K135: federe sonucun bellek satırlarına grid filtresi (WHERE metni) uygular.
+     * <p>
+     * Kolonlar görünen adlarıyla eşleşir (büyük/küçük harf duyarsız); çıplak ya da tırnaklı
+     * kolon adı kabul edilir. Boş kriter tüm satırları döner.
+     *
+     * @param columns satır sütunlarının adları, satır dizisiyle aynı sırada
+     * @param rows süzülecek satırlar
+     * @param criteria WHERE metni
+     * @return süzülmüş satırlar; bilinmeyen kolon ya da derlenemeyen kriterde {@code null}
+     */
+    public static List<Object[]> apply(List<String> columns, List<Object[]> rows, String criteria) {
+        if (criteria == null || criteria.isBlank()) {
+            return new ArrayList<>(rows);
+        }
+        Map<String, Integer> positions = new HashMap<>();
+        for (int i = 0; i < columns.size(); i++) {
+            positions.putIfAbsent(columns.get(i).toLowerCase(Locale.ROOT), i);
+        }
+        Predicate<Object[]> filter = compile(criteria, positions::get);
+        if (filter == null) {
+            return null;
+        }
+        List<Object[]> result = new ArrayList<>();
+        for (Object[] row : rows) {
+            if (filter.test(row)) {
+                result.add(row);
+            }
+        }
+        return result;
     }
 
     /** Satırdaki bir değer; kolon konumu ya da derleme zamanı sabiti. */
@@ -286,6 +320,10 @@ public final class FedFilter {
             if (c == '-' || c == '+' || Character.isDigit(c)) {
                 return constant(readNumber());
             }
+            // dbeaver-mm K135: tırnaklı kolon adı (grid filtresi "kolon" biçiminde üretir)
+            if (c == '"' || c == '`') {
+                return column(lookup(readQuotedName(c)));
+            }
             if (Character.isLetter(c) || c == '_') {
                 String alias = readIdentifier();
                 skipWhitespace();
@@ -293,16 +331,36 @@ public final class FedFilter {
                     index++;
                     skipWhitespace();
                     String column = readIdentifier();
-                    Integer position = positions.apply(
-                        (alias + "." + column).toLowerCase(Locale.ROOT));
-                    if (position == null) {
-                        throw new ParseException();
-                    }
-                    return column(position);
+                    return column(lookup(alias + "." + column));
                 }
-                throw new ParseException();
+                // dbeaver-mm K135: çıplak kolon adı; yalnız sütun listesinde varsa geçerli
+                return column(lookup(alias));
             }
             throw new ParseException();
+        }
+
+        // dbeaver-mm K135: kolon adını konuma çevirir; bulunamazsa ayrıştırma hatası
+        private int lookup(String name) {
+            Integer position = positions.apply(name.toLowerCase(Locale.ROOT));
+            if (position == null) {
+                throw new ParseException();
+            }
+            return position;
+        }
+
+        // dbeaver-mm K135: tırnaklı tanımlayıcıyı okur; kapanmazsa hata
+        private String readQuotedName(char quote) {
+            index++;
+            int start = index;
+            while (index < text.length() && text.charAt(index) != quote) {
+                index++;
+            }
+            if (index >= text.length()) {
+                throw new ParseException();
+            }
+            String name = text.substring(start, index);
+            index++;
+            return name;
         }
 
         private String readIdentifier() {

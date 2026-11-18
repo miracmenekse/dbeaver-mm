@@ -278,6 +278,7 @@ abstract class QueryResultsContainer implements
             job.setFetchFlags(flags);
 
             // dbeaver-mm K129: federe sonuç F5/filtre/sayfalamada aynı federe yolla yeniden koşar
+            // dbeaver-mm K135: grid filtresi bu yolda federe sonucun bellek satırlarına uygulanır (SQLQueryJob)
             if (resultCounts <= 1 && this.query instanceof SQLQuery fedQuery
                 && job.refreshFederatedResult(session, fedQuery, dataReceiver)
             ) {
