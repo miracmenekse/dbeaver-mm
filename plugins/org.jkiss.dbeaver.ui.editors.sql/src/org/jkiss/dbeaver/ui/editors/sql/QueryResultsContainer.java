@@ -277,6 +277,12 @@ abstract class QueryResultsContainer implements
             job.setFetchSize(fetchSize);
             job.setFetchFlags(flags);
 
+            // dbeaver-mm K129: federe sonuç F5/filtre/sayfalamada aynı federe yolla yeniden koşar
+            if (resultCounts <= 1 && this.query instanceof SQLQuery fedQuery
+                && job.refreshFederatedResult(session, fedQuery, dataReceiver)
+            ) {
+                return job.getStatistics();
+            }
             try {
                 job.extractData(session, this.query, resultCounts > 1 ? 0 : resultSetNumber, !detached, !detached);
             } finally {

@@ -511,11 +511,45 @@ public class SQLQueryJob extends DataSourceJob {
     }
 
     // dbeaver-mm K122: federe sonucu yerel result set üzerinden mevcut veri alıcıya besler
+    // dbeaver-mm K129: besleme kodu yenileme yoluyla paylaşılıyor
     private boolean fetchFederatedResult(
         @NotNull DBCSession session,
         @NotNull SQLQuery query,
         @NotNull SQLFederation.Result fedResult
     ) throws DBException {
+        return feedFederatedResult(session, query, fedResult, resultsConsumer.getDataReceiver(query, resultSetNumber));
+    }
+
+    // dbeaver-mm K129: F5/filtre/sayfalama için federe yolu salt okunur yeniden koşar
+    public boolean refreshFederatedResult(
+        @NotNull DBCSession session,
+        @NotNull SQLQuery query,
+        @NotNull DBDDataReceiver dataReceiver
+    ) throws DBException {
+        final SQLFederation.Runner runner = SQLFederation.get();
+        if (runner == null) {
+            return false;
+        }
+        final SQLFederation.Result fedResult = runner.tryRun(
+            session.getProgressMonitor(), session.getExecutionContext(), query.getText());
+        if (fedResult == null) {
+            return false;
+        }
+        // dbeaver-mm K129: yenileme istatistikleri sıfırdan tutulur
+        statistics = new DBCStatistics();
+        return feedFederatedResult(session, query, fedResult, dataReceiver);
+    }
+
+    // dbeaver-mm K129: federe satırları verilen alıcıya yazar (sorgu metni değiştirilmez)
+    private boolean feedFederatedResult(
+        @NotNull DBCSession session,
+        @NotNull SQLQuery query,
+        @NotNull SQLFederation.Result fedResult,
+        @Nullable DBDDataReceiver dataReceiver
+    ) throws DBException {
+        if (dataReceiver == null) {
+            return false;
+        }
         final CachedResultSet cached = new CachedResultSet(query.getText(), fedResult.columns().toArray(new String[0]));
         for (Object[] row : fedResult.rows()) {
             cached.addRow(row);
@@ -524,10 +558,6 @@ public class SQLQueryJob extends DataSourceJob {
             FederatedResultSet resultSet = new FederatedResultSet(session, statement, cached);
             SQLQueryResult resultInfo = new SQLQueryResult(query);
             SQLQueryResult.ExecuteResult executeResult = resultInfo.addExecuteResult(true);
-            DBDDataReceiver dataReceiver = resultsConsumer.getDataReceiver(query, resultSetNumber);
-            if (dataReceiver == null) {
-                return false;
-            }
             boolean fetched = fetchQueryData(session, resultSet, resultInfo, executeResult, dataReceiver, true);
             // dbeaver-mm K122: etiket sekme adı ve iş durum satırında gösterilir
             executeResult.setResultSetName(fedResult.label());

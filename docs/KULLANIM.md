@@ -12,10 +12,11 @@ görüntüleriyle anlatır. Görüntüler örnek bir `pcm` şemasıyla (teklifle
 3. [Hücreden değer seçme](#hücreden-değer-seçme)
 4. [Filtre kutusunda adla filtreleme](#filtre-kutusunda-adla-filtreleme)
 5. [SQL editörü araçları](#sql-editörü-araçları)
-6. [Yeni satırlara ID getirme](#yeni-satırlara-id-getirme)
-7. [Conf paketleri](#conf-paketleri)
-8. [Oturum kaydı ve sorun raporu](#oturum-kaydı-ve-sorun-raporu)
-9. [Sorun giderme](#sorun-giderme)
+6. [Çok bağlantılı çalışma](#çok-bağlantılı-çalışma)
+7. [Yeni satırlara ID getirme](#yeni-satırlara-id-getirme)
+8. [Conf paketleri](#conf-paketleri)
+9. [Oturum kaydı ve sorun raporu](#oturum-kaydı-ve-sorun-raporu)
+10. [Sorun giderme](#sorun-giderme)
 
 ## Başlarken
 
@@ -125,9 +126,30 @@ betikler hep en üstte durur.
 
 ![Recent SQL Scripts paneli](rehber/14-son-betikler.png)
 
-**Çok bağlantılı çalışma.** Editörün üstündeki *Connections* düğmesi, betiğin hangi bağlantılarda çalışabileceğini
-seçer. Sorguda yazdığın tablo hangi bağlantıdaysa editör ona kendisi geçer. Bir bağlantıya kısa kod verdiysen,
-`KOD.` yazınca yalnızca o bağlantının tabloları listelenir.
+## Çok bağlantılı çalışma
+
+Editörün üstündeki *Connections* düğmesi, betiğin hangi bağlantılarda çalışabileceğini seçer. Sorguda yazdığın
+tablo hangi bağlantıdaysa editör ona kendisi geçer. Bir bağlantıya kısa kod verdiysen, `KOD.` yazınca yalnızca
+o bağlantının tabloları listelenir.
+
+**Federe (cross-connection) JOIN.** İki veya daha fazla bağlantıdaki tabloları tek bir sorguda birleştirebilirsin.
+Tablo adını `KOD.tablo` biçiminde yaz; her tablo kendi bağlantısında okunur, birleşim bellekte yapılır:
+
+```sql
+SELECT o.id, o.label, s.name
+FROM bsn_order_spec AS o
+INNER JOIN cfg.service_spec AS s ON o.service_id = s.id
+ORDER BY o.id;
+```
+
+Bu sorgu, [`cross_connection_fk_setup.sql`](../cross_connection_fk_setup.sql) betiğiyle hazırlanan veriyi kullanır:
+`bsn_order_spec` tablosu ve `service_id` değerleri `mm_test_db` içinde, `service_spec` ise `cfg` kısa kodlu
+yapılandırma bağlantısındadır. İki bağlantının da açık olması yeterli; aralarında gerçek FK tanımı gerekmez.
+
+**Sınırlar.** Yalnız SELECT desteklenir; INSERT/UPDATE/DELETE federe çalışmaz. `WHERE`, `HAVING` ve alt sorgu
+desteklenmez; JOIN'ler INNER olmalı ve tek bir eşitlik anahtarı taşımalı (üç bağlantılı zincir de çalışır).
+Sonuç için satır üst sınırı 100.000'dir. F5, filtre ve sayfalama aynı federe yolu yeniden koşar; sonuç tek
+bağlantıya düşmez.
 
 ## Yeni satırlara ID getirme
 
