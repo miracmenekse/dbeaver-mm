@@ -131,22 +131,11 @@ public class FedRunnerImpl implements SQLFederation.Runner {
         }
 
         List<String> columns = plan.selection();
-        // K124: bloklar anahtar + o tabloya ait seçilmiş kolonlar; eşleme blok içi konumla yapılır
-        Map<String, List<String>> blocks = FedExecutor.blocks(plan);
-        Map<String, Integer> starts = new LinkedHashMap<>();
-        int width = 0;
-        for (FedPlanner.Table table : plan.tables()) {
-            starts.put(table.alias(), width);
-            width += blocks.getOrDefault(table.alias(), List.of()).size();
-        }
-        int[] positions = new int[columns.size()];
+        // dbeaver-mm K126: konum hesabı FedExecutor ile ortak; burada yalnız görünen adlar üretilir
+        int[] positions = FedExecutor.selectionPositions(plan);
         List<String> display = new ArrayList<>(columns.size());
-        for (int i = 0; i < columns.size(); i++) {
-            String base = baseColumn(columns.get(i));
-            String alias = aliasOf(base, plan);
-            List<String> block = blocks.getOrDefault(alias, List.of());
-            positions[i] = starts.getOrDefault(alias, 0) + indexOfIgnoreCase(block, base);
-            display.add(displayName(columns.get(i)));
+        for (String column : columns) {
+            display.add(displayName(column));
         }
         List<Object[]> rows = new ArrayList<>(combined.size());
         for (Object[] joined : combined) {
@@ -172,7 +161,34 @@ public class FedRunnerImpl implements SQLFederation.Runner {
                 return false;
             }
         }
-        return federableSelection(plan);
+        if (!federableSelection(plan)) {
+            return false;
+        }
+        return federableDistinct(plan);
+    }
+
+    /**
+     * dbeaver-mm K126: DISTINCT ile ORDER BY yalnız seçilmiş kolonlara bakabilir; standart SQL'de
+     * seçilmemiş kolona göre sıralama geçersizdir.
+     */
+    private static boolean federableDistinct(@NotNull FedPlanner.FedPlan plan) {
+        if (!plan.distinct()) {
+            return true;
+        }
+        for (FedPlanner.Order order : plan.orderBy()) {
+            boolean selected = false;
+            for (String selection : plan.selection()) {
+                String base = baseColumn(selection);
+                if (base.equalsIgnoreCase(order.column())) {
+                    selected = true;
+                    break;
+                }
+            }
+            if (!selected) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean federableSelection(@NotNull FedPlanner.FedPlan plan) {
@@ -269,15 +285,6 @@ public class FedRunnerImpl implements SQLFederation.Runner {
         return dot >= 0 ? base.substring(dot + 1) : base;
     }
 
-    private static int indexOfIgnoreCase(@NotNull List<String> values, @NotNull String value) {
-        for (int i = 0; i < values.size(); i++) {
-            if (values.get(i).equalsIgnoreCase(value)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     @NotNull
     private static String tableRef(@NotNull FedPlanner.Table table) {
         return table.code() == null || table.code().isBlank()
@@ -294,21 +301,6 @@ public class FedRunnerImpl implements SQLFederation.Runner {
             }
         }
         return result;
-    }
-
-    @NotNull
-    private static String aliasOf(@NotNull String selection, @NotNull FedPlanner.FedPlan plan) {
-        int dot = selection.indexOf('.');
-        if (dot > 0) {
-            String prefix = selection.substring(0, dot);
-            for (FedPlanner.Table table : plan.tables()) {
-                if (table.alias().equalsIgnoreCase(prefix)) {
-                    return table.alias();
-                }
-            }
-            return prefix;
-        }
-        return plan.tables().isEmpty() ? "" : plan.tables().get(0).alias();
     }
 
     @NotNull

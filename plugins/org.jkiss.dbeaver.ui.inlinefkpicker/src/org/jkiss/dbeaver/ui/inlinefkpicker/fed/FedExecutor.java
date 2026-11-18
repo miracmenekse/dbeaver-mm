@@ -170,7 +170,8 @@ public final class FedExecutor {
             }
         }
         // dbeaver-mm K125: DISTINCT, ORDER BY ve LIMIT/OFFSET bellekte uygulanır
-        List<Object[]> result = plan.distinct() ? FedSort.distinct(acc) : acc;
+        // dbeaver-mm K126: DISTINCT yalnız seçilen kolonların birleşik satırdaki konumlarına bakar
+        List<Object[]> result = plan.distinct() ? FedSort.distinct(acc, selectionPositions(plan)) : acc;
         if (!plan.orderBy().isEmpty()) {
             int[] sortColumns = sortColumns(plan);
             boolean[] descending = new boolean[plan.orderBy().size()];
@@ -283,6 +284,41 @@ public final class FedExecutor {
         Map<String, List<String>> result = new LinkedHashMap<>();
         for (FedPlanner.Table table : plan.tables()) {
             result.put(table.alias(), blockColumns(plan, table.alias(), keys.get(table.alias())));
+        }
+        return result;
+    }
+
+    /** dbeaver-mm K126: seçim listesindeki kolonların birleşik satırdaki konumları. */
+    public static int[] selectionPositions(FedPlanner.FedPlan plan) {
+        Map<String, List<String>> blocks = blocks(plan);
+        int[] result = new int[plan.selection().size()];
+        for (int i = 0; i < result.length; i++) {
+            String column = baseColumn(plan.selection().get(i));
+            int dot = column.indexOf('.');
+            String alias = dot > 0 ? column.substring(0, dot) : column;
+            int cursor = 0;
+            int position = -1;
+            for (FedPlanner.Table table : plan.tables()) {
+                List<String> block = blocks.getOrDefault(table.alias(), List.of());
+                if (position < 0 && table.alias().equalsIgnoreCase(alias)) {
+                    int index = -1;
+                    for (int j = 0; j < block.size(); j++) {
+                        if (block.get(j).equalsIgnoreCase(column)) {
+                            index = j;
+                            break;
+                        }
+                    }
+                    if (index < 0) {
+                        throw new IllegalArgumentException("seçim sütunu bulunamadı: " + column);
+                    }
+                    position = cursor + index;
+                }
+                cursor += block.size();
+            }
+            if (position < 0) {
+                throw new IllegalArgumentException("seçim bilinmeyen tablo: " + column);
+            }
+            result[i] = position;
         }
         return result;
     }

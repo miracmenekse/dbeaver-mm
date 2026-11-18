@@ -77,6 +77,25 @@ public final class FedSort {
         return result;
     }
 
+    /** dbeaver-mm K126: yalnız verilen sütunların değerlerine göre yinelenenleri atar; ilk satırı korur. */
+    public static List<Object[]> distinct(List<Object[]> rows, int[] columns) {
+        LinkedHashSet<List<Object>> seen = new LinkedHashSet<>();
+        List<Object[]> result = new ArrayList<>();
+        if (rows == null) {
+            return result;
+        }
+        for (Object[] row : rows) {
+            List<Object> key = new ArrayList<>(columns.length);
+            for (int column : columns) {
+                key.add(cell(row, column));
+            }
+            if (seen.add(key)) {
+                result.add(row);
+            }
+        }
+        return result;
+    }
+
     private static int compareRows(Object[] left, Object[] right, int[] cols, boolean[] desc, Collator collator) {
         for (int i = 0; i < cols.length; i++) {
             Object a = cell(left, cols[i]);

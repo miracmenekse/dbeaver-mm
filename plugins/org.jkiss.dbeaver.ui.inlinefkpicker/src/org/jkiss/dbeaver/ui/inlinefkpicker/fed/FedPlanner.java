@@ -129,7 +129,9 @@ public final class FedPlanner {
             }
         }
 
-        List<String> selection = splitItems(text, tokens, depths, 1, from);
+        // dbeaver-mm K126: DISTINCT anahtar sözcüğü seçim listesinin ilk öğesinden ayıklanır
+        boolean distinct = tokens.size() > 1 && isWord(tokens.get(1), "DISTINCT");
+        List<String> selection = splitItems(text, tokens, depths, distinct ? 2 : 1, from);
         if (selection.isEmpty()) {
             return null;
         }
@@ -151,7 +153,6 @@ public final class FedPlanner {
             }
         }
         // dbeaver-mm K125: ORDER BY / LIMIT / OFFSET / DISTINCT plana okunur
-        boolean distinct = tokens.size() > 1 && isWord(tokens.get(1), "DISTINCT");
         List<Order> orderBy = List.of();
         int orderStart = findWord(tokens, depths, "ORDER", from + 1);
         if (orderStart >= 0) {
