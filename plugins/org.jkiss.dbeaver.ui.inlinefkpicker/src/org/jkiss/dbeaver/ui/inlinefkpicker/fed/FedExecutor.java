@@ -59,6 +59,30 @@ public final class FedExecutor {
         }
     }
 
+    /** dbeaver-mm K128: ON ile bağlanmayan (kartezyen) ya da döngüsel tablo grafiği desteklenmez. */
+    public static final class FedUnsupportedException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        FedUnsupportedException(String message) {
+            super(message);
+        }
+    }
+
+    /** dbeaver-mm K128: iki tabloyu ON eşitliğiyle bağlayan yönsüz kenar. */
+    private record Edge(String leftAlias, String leftColumn, String rightAlias, String rightColumn) {
+        String otherAlias(String alias) {
+            return leftAlias.equalsIgnoreCase(alias) ? rightAlias : leftAlias;
+        }
+
+        String columnFor(String alias) {
+            return leftAlias.equalsIgnoreCase(alias) ? leftColumn : rightColumn;
+        }
+    }
+
+    /** dbeaver-mm K128: zincire eklenen tablo, bağlandığı tablo ve iki taraftaki anahtar sütunları. */
+    private record Step(FedPlanner.Table table, String fromAlias, String fromColumn, String keyColumn) {
+    }
+
     /**
      * Federe planı çalıştırır.
      *
@@ -75,100 +99,121 @@ public final class FedExecutor {
     ) throws Exception {
         List<FedPlanner.Table> tables = plan.tables();
         List<FedPlanner.Join> joins = plan.joins();
-        if (tables.size() < 2 || joins.size() != tables.size() - 1) {
-            throw new IllegalArgumentException("federe plan en az iki tablo ve tablo sayısı eksi bir join içermeli");
+        if (tables.size() < 2) {
+            throw new IllegalArgumentException("federe plan en az iki tablo içermeli");
+        }
+        if (joins.size() != tables.size() - 1) {
+            // dbeaver-mm K128: döngüsel ya da bağsız tablo grafiği desteklenmez
+            throw new FedUnsupportedException("ON koşulu olmayan tablo");
         }
 
-        List<Object[]> acc = null;
-        int accWidth = 0;
-        Map<String, Integer> offsets = new HashMap<>();
-        Map<String, String> keyColumns = new HashMap<>();
-
-        for (int j = 0; j < joins.size(); j++) {
-            FedPlanner.Join join = joins.get(j);
+        Map<String, FedPlanner.Table> tableByAlias = new LinkedHashMap<>();
+        for (FedPlanner.Table table : tables) {
+            tableByAlias.put(table.alias(), table);
+        }
+        Map<String, List<Edge>> graph = new LinkedHashMap<>();
+        for (FedPlanner.Join join : joins) {
             if (!"INNER".equalsIgnoreCase(join.type()) || join.keys().size() != 1) {
-                throw new IllegalArgumentException("yalnız tek anahtarlı INNER join desteklenir: " + join.type());
+                // dbeaver-mm K128: yalnız tek anahtarlı INNER join zinciri desteklenir
+                throw new FedUnsupportedException("ON koşulu olmayan tablo");
             }
             FedPlanner.Key key = join.keys().get(0);
             String leftAlias = aliasOf(key.left());
             String rightAlias = aliasOf(key.right());
-
-            FedPlanner.Table right = tables.get(j + 1);
-            if (!right.alias().equals(rightAlias)) {
-                throw new IllegalArgumentException("join sırası tablo sırasıyla uyuşmuyor: " + rightAlias);
+            if (!tableByAlias.containsKey(leftAlias) || !tableByAlias.containsKey(rightAlias)
+                || leftAlias.equalsIgnoreCase(rightAlias)) {
+                throw new FedUnsupportedException("ON koşulu olmayan tablo");
             }
+            graph.computeIfAbsent(leftAlias, k -> new ArrayList<>())
+                .add(new Edge(leftAlias, key.left(), rightAlias, key.right()));
+            graph.computeIfAbsent(rightAlias, k -> new ArrayList<>())
+                .add(new Edge(rightAlias, key.right(), leftAlias, key.left()));
+        }
 
-            if (acc == null) {
-                FedPlanner.Table first = tables.get(0);
-                if (!first.alias().equals(leftAlias)) {
-                    throw new IllegalArgumentException("ilk join ilk tabloyla başlamalı: " + leftAlias);
-                }
-                if (blank(first.pushedWhere()) && !blank(right.pushedWhere())) {
-                    // filtreli taraf sürücü: önce o çekilir, anahtarlarıyla ilk tablo IN ile sorgulanır
-                    List<String> rightBlock = blockColumns(plan, right.alias(), key.right());
-                    List<String> firstBlock = blockColumns(plan, first.alias(), key.left());
-                    List<Object[]> driverRows = fetchTable(source(sourceByAlias, right.alias()), right, rightBlock, maxRows);
-                    if (driverRows.isEmpty()) {
-                        return new ArrayList<>();
-                    }
-                    List<Object[]> probeRows = fetchKeys(
-                        source(sourceByAlias, first.alias()),
-                        first,
-                        key.left(),
-                        firstBlock,
-                        keyValues(driverRows, 0),
-                        maxRows
-                    );
-                    if (probeRows.isEmpty()) {
-                        return new ArrayList<>();
-                    }
-                    acc = FedJoin.join(probeRows, driverRows, new int[] {0}, new int[] {0}, false, 0);
-                    offsets.put(leftAlias, 0);
-                    keyColumns.put(leftAlias, key.left());
-                    offsets.put(rightAlias, probeRows.get(0).length);
-                    keyColumns.put(rightAlias, key.right());
-                    accWidth = probeRows.get(0).length + driverRows.get(0).length;
-                    if (acc.isEmpty()) {
-                        return acc;
-                    }
+        // dbeaver-mm K128: filtreli tablo (varsa) sürücü olur, ardından ON komşuları genişlik öncelikli gezilir
+        FedPlanner.Table start = tables.get(0);
+        for (FedPlanner.Table table : tables) {
+            if (!blank(table.pushedWhere())) {
+                start = table;
+                break;
+            }
+        }
+        List<Step> steps = new ArrayList<>();
+        steps.add(new Step(start, null, null, null));
+        Set<String> included = new LinkedHashSet<>();
+        included.add(start.alias());
+        for (int i = 0; i < steps.size(); i++) {
+            String current = steps.get(i).table().alias();
+            for (Edge edge : graph.getOrDefault(current, List.of())) {
+                String next = edge.otherAlias(current);
+                if (!included.add(next)) {
                     continue;
                 }
-                List<String> firstBlock = blockColumns(plan, first.alias(), key.left());
-                List<Object[]> rows = fetchTable(source(sourceByAlias, first.alias()), first, firstBlock, maxRows);
-                if (rows.isEmpty()) {
+                steps.add(new Step(
+                    tableByAlias.get(next),
+                    current,
+                    edge.columnFor(current),
+                    edge.columnFor(next)
+                ));
+            }
+        }
+        if (included.size() != tables.size()) {
+            // dbeaver-mm K128: bağsız (kartezyen) tablo grafiği desteklenmez
+            throw new FedUnsupportedException("ON koşulu olmayan tablo");
+        }
+
+        // dbeaver-mm K128: birleşik satırlar tablo sırasını korur; blok sütunları blocks() ile aynıdır
+        Map<String, List<String>> blockByAlias = blocks(plan);
+        Map<String, Integer> starts = new HashMap<>();
+        List<Object[]> acc = null;
+
+        for (int s = 0; s < steps.size(); s++) {
+            Step step = steps.get(s);
+            FedPlanner.Table table = step.table();
+            List<String> block = blockByAlias.get(table.alias());
+            if (s == 0) {
+                acc = fetchTable(source(sourceByAlias, table.alias()), table, block, maxRows);
+                if (acc.isEmpty()) {
                     return new ArrayList<>();
                 }
-                acc = rows;
-                accWidth = rows.get(0).length;
-                offsets.put(leftAlias, 0);
-                keyColumns.put(leftAlias, key.left());
+                starts.put(table.alias(), 0);
+                continue;
             }
 
-            Integer leftOffset = offsets.get(leftAlias);
-            if (leftOffset == null || !key.left().equals(keyColumns.get(leftAlias))) {
-                throw new IllegalArgumentException("tablo tek bir anahtar sütunuyla bağlanabilir: " + key.left());
+            Integer fromStart = starts.get(step.fromAlias());
+            int fromIndex = indexOfIgnoreCase(blockByAlias.get(step.fromAlias()), step.fromColumn());
+            int keyIndex = indexOfIgnoreCase(block, step.keyColumn());
+            if (fromStart == null || fromIndex < 0 || keyIndex < 0) {
+                // dbeaver-mm K128: bağlantı anahtarı blokta yoksa zincir kurulamaz
+                throw new FedUnsupportedException("ON koşulu olmayan tablo: " + table.alias());
             }
 
-            List<String> rightBlock = blockColumns(plan, right.alias(), key.right());
-            List<Object[]> rightRows = fetchKeys(
-                source(sourceByAlias, right.alias()),
-                right,
-                key.right(),
-                rightBlock,
-                keyValues(acc, leftOffset),
+            // dbeaver-mm K128: önceki ara sonucun anahtarları sıradaki kaynağa IN ile itilir
+            Set<Object> keys = keyValues(acc, fromStart + fromIndex);
+            if (keys.isEmpty()) {
+                return new ArrayList<>();
+            }
+            List<Object[]> rows = fetchKeys(
+                source(sourceByAlias, table.alias()),
+                table,
+                step.keyColumn(),
+                block,
+                keys,
                 maxRows
             );
-            if (rightRows.isEmpty()) {
+            if (rows.isEmpty()) {
                 return new ArrayList<>();
             }
 
-            acc = FedJoin.join(acc, rightRows, new int[] {leftOffset}, new int[] {0}, false, 0);
-            offsets.put(rightAlias, accWidth);
-            keyColumns.put(rightAlias, key.right());
-            accWidth += rightRows.get(0).length;
+            int width = rows.get(0).length;
+            acc = FedJoin.join(acc, rows, new int[] {fromStart + fromIndex}, new int[] {keyIndex}, false, 0);
             if (acc.isEmpty()) {
                 return acc;
             }
+            int insertPos = tableOrderOffset(tables, blockByAlias, starts.keySet(), table.alias());
+            acc = insertBlock(acc, insertPos, width);
+            starts.put(table.alias(), insertPos);
+            refreshStarts(tables, blockByAlias, starts);
         }
         // dbeaver-mm K127: GROUP BY ve toplamalar birleşimden sonra bellekte uygulanır
         if (aggregated(plan)) {
@@ -189,6 +234,68 @@ public final class FedExecutor {
             int limit = plan.limit() == null ? Integer.MAX_VALUE : clamp(plan.limit());
             int offset = plan.offset() == null ? 0 : clamp(plan.offset());
             result = FedSort.limit(result, limit, offset);
+        }
+        return result;
+    }
+
+    /** dbeaver-mm K128: bloktaki sütunun konumu, yoksa -1. */
+    private static int indexOfIgnoreCase(List<String> columns, String column) {
+        if (columns == null || column == null) {
+            return -1;
+        }
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i).equalsIgnoreCase(column)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** dbeaver-mm K128: yeni tablonun tablo sırasına göre ekleneceği sütun konumu. */
+    private static int tableOrderOffset(
+        List<FedPlanner.Table> tables,
+        Map<String, List<String>> blockByAlias,
+        Set<String> included,
+        String alias
+    ) {
+        int cursor = 0;
+        for (FedPlanner.Table table : tables) {
+            if (table.alias().equals(alias)) {
+                return cursor;
+            }
+            if (included.contains(table.alias())) {
+                cursor += blockByAlias.get(table.alias()).size();
+            }
+        }
+        throw new IllegalArgumentException("tablo bulunamadı: " + alias);
+    }
+
+    /** dbeaver-mm K128: dahil tabloların blok başlangıçlarını tablo sırasına göre tazeler. */
+    private static void refreshStarts(
+        List<FedPlanner.Table> tables,
+        Map<String, List<String>> blockByAlias,
+        Map<String, Integer> starts
+    ) {
+        int cursor = 0;
+        for (FedPlanner.Table table : tables) {
+            if (!starts.containsKey(table.alias())) {
+                continue;
+            }
+            starts.put(table.alias(), cursor);
+            cursor += blockByAlias.get(table.alias()).size();
+        }
+    }
+
+    /** dbeaver-mm K128: join sonunda eklenen bloğu tablo sırasındaki yerine taşır. */
+    private static List<Object[]> insertBlock(List<Object[]> rows, int insertPos, int blockWidth) {
+        List<Object[]> result = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            int from = row.length - blockWidth;
+            Object[] moved = new Object[row.length];
+            System.arraycopy(row, 0, moved, 0, insertPos);
+            System.arraycopy(row, from, moved, insertPos, blockWidth);
+            System.arraycopy(row, insertPos, moved, insertPos + blockWidth, from - insertPos);
+            result.add(moved);
         }
         return result;
     }
@@ -384,16 +491,23 @@ public final class FedExecutor {
 
     /** dbeaver-mm K124: tablo alias'ından blok seçim listesine eşleme. */
     public static Map<String, List<String>> blocks(FedPlanner.FedPlan plan) {
-        Map<String, String> keys = new LinkedHashMap<>();
+        // dbeaver-mm K128: her tablonun tüm join anahtarları blokta bulunur; ilki blok başıdır
+        Map<String, List<String>> keys = new LinkedHashMap<>();
         for (FedPlanner.Join join : plan.joins()) {
             for (FedPlanner.Key key : join.keys()) {
-                keys.putIfAbsent(aliasOf(key.left()), key.left());
-                keys.putIfAbsent(aliasOf(key.right()), key.right());
+                keys.computeIfAbsent(aliasOf(key.left()), k -> new ArrayList<>()).add(key.left());
+                keys.computeIfAbsent(aliasOf(key.right()), k -> new ArrayList<>()).add(key.right());
             }
         }
         Map<String, List<String>> result = new LinkedHashMap<>();
         for (FedPlanner.Table table : plan.tables()) {
-            result.put(table.alias(), blockColumns(plan, table.alias(), keys.get(table.alias())));
+            List<String> tableKeys = keys.getOrDefault(table.alias(), List.of());
+            String primary = tableKeys.isEmpty() ? null : tableKeys.get(0);
+            List<String> block = blockColumns(plan, table.alias(), primary);
+            for (int i = 1; i < tableKeys.size(); i++) {
+                addColumn(block, tableKeys.get(i), table.alias());
+            }
+            result.put(table.alias(), block);
         }
         return result;
     }
