@@ -197,8 +197,32 @@ public class FedRunnerImpl implements SQLFederation.Runner {
         if (plan.joins().size() != plan.tables().size() - 1) {
             return false;
         }
-        for (FedPlanner.Join join : plan.joins()) {
-            if (!"INNER".equalsIgnoreCase(join.type()) || join.keys().size() != 1) {
+        // dbeaver-mm K131: LEFT/RIGHT join'ler de tek anahtarlıysa federe edilebilir
+        Set<String> nullableAliases = new LinkedHashSet<>();
+        for (int j = 0; j < plan.joins().size(); j++) {
+            FedPlanner.Join join = plan.joins().get(j);
+            String type = join.type();
+            boolean inner = "INNER".equalsIgnoreCase(type);
+            boolean left = "LEFT".equalsIgnoreCase(type);
+            boolean right = "RIGHT".equalsIgnoreCase(type);
+            if (join.keys().size() != 1 || !(inner || left || right)) {
+                return false;
+            }
+            if (!inner) {
+                String newAlias = plan.tables().get(j + 1).alias();
+                FedPlanner.Key key = join.keys().get(0);
+                String keyLeft = key.left();
+                String keyRight = key.right();
+                String leftAlias = keyLeft.substring(0, keyLeft.indexOf('.'));
+                String rightAlias = keyRight.substring(0, keyRight.indexOf('.'));
+                // dbeaver-mm K131: null tarafın WHERE'i kaynağa itilemez; federe değil
+                boolean newIsRight = rightAlias.equalsIgnoreCase(newAlias);
+                nullableAliases.add(left == newIsRight ? rightAlias : leftAlias);
+            }
+        }
+        for (FedPlanner.Table table : plan.tables()) {
+            String pushed = table.pushedWhere();
+            if (nullableAliases.contains(table.alias()) && pushed != null && !pushed.isBlank()) {
                 return false;
             }
         }
