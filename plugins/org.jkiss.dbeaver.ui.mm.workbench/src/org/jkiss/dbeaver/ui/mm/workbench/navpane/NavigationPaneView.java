@@ -53,6 +53,8 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Menu;
 import org.eclipse.swt.widgets.MenuItem;
 import org.eclipse.swt.widgets.Text;
+import org.eclipse.swt.widgets.ToolBar;
+import org.eclipse.swt.widgets.ToolItem;
 import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeColumn;
 import org.eclipse.swt.widgets.TreeItem;
@@ -129,10 +131,14 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
     private final Set<String> userExpanded = new LinkedHashSet<>();
     private final Set<String> connecting = new HashSet<>();
     private final Map<String, String> connectionErrors = new HashMap<>();
+    // dbeaver-mm K144: seçili banner (tenant) süzgeci; boşken tüm bağlantılar görünür
+    private final Set<String> selectedBanners = new LinkedHashSet<>();
 
     private Display display;
     private Text searchText;
     private Label countLabel;
+    private ToolBar bannerBar;
+    private List<String> bannerTenants = List.of();
     private Tree tree;
     private TreeColumn nameColumn;
     private TreeColumn detailColumn;
@@ -185,6 +191,10 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
 
         countLabel = new Label(bar, SWT.RIGHT);
         countLabel.setLayoutData(new GridData(SWT.END, SWT.CENTER, false, false));
+
+        // dbeaver-mm K144: arama kutusunun altında banner (tenant) şeridi
+        bannerBar = new ToolBar(root, SWT.FLAT | SWT.WRAP);
+        bannerBar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
         tree = new Tree(root, SWT.V_SCROLL | SWT.H_SCROLL | SWT.FULL_SELECTION);
         tree.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
@@ -253,6 +263,9 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
                 TreeItem item = selectedItem();
                 if (item != null && item.getData() instanceof Hit) {
                     openSelectedTable();
+                } else if (item != null && item.getData() instanceof String && item.getParentItem() == null) {
+                    // dbeaver-mm K144: bağlantıya tıklayınca aç (kapalıysa bağlanır)
+                    item.setExpanded(true);
                 }
             }
         });
@@ -561,6 +574,15 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         try {
             tree.removeAll();
             List<DBPDataSourceContainer> containers = currentContainers();
+            updateBannerBar(containers);
+            // dbeaver-mm K145: banner seçilmeden liste boş kalır, arama da etkisizdir
+            if (selectedBanners.isEmpty()) {
+                String tenantList = String.join(", ", bannerTenants);
+                addTreeMessage(tenantList.isEmpty()
+                    ? "En az 1 ortam seçiniz"
+                    : "En az 1 ortam (" + tenantList + ") seçiniz");
+                return;
+            }
             List<NavTreeModel.Conn> conns = new ArrayList<>(containers.size());
             Map<String, DBPDataSourceContainer> byName = new LinkedHashMap<>();
             for (DBPDataSourceContainer container : containers) {
@@ -569,7 +591,7 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
                 byName.putIfAbsent(name, container);
             }
             containersByName = byName;
-            List<NavTreeModel.Group> groups = NavTreeModel.build(conns, hits, query, connectionTotals);
+            List<NavTreeModel.Group> groups = NavTreeModel.build(conns, hits, query, connectionTotals, selectedBanners);
             for (NavTreeModel.Group group : groups) {
                 buildGroupItem(group, byName.get(group.conn().name()));
             }
@@ -597,7 +619,7 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
     private void buildGroupItem(NavTreeModel.Group group, DBPDataSourceContainer container) {
         String name = group.conn().name();
         TreeItem item = new TreeItem(tree, SWT.NONE);
-        item.setText(0, name);
+        applyConnectionStatus(item, name, group.conn().connected());
         item.setData(name);
         if (container != null) {
             item.setImage(connectionIcon(container));
@@ -647,6 +669,27 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         item.setForeground(display.getSystemColor(SWT.COLOR_DARK_GRAY));
     }
 
+    // dbeaver-mm K145: ağaç kökünde tıklanamaz bilgi satırı
+    private void addTreeMessage(String text) {
+        TreeItem item = new TreeItem(tree, SWT.NONE);
+        item.setText(0, text);
+        item.setForeground(display.getSystemColor(SWT.COLOR_DARK_GRAY));
+    }
+
+    // dbeaver-mm K145: bağlantı durum simgesi (yeşil bağlı, sarı bağlanıyor, gri kapalı)
+    private void applyConnectionStatus(TreeItem item, String name, boolean connected) {
+        if (connected) {
+            item.setText(0, "● " + name);
+            item.setForeground(0, display.getSystemColor(SWT.COLOR_GREEN));
+        } else if (connecting.contains(name)) {
+            item.setText(0, "● " + name);
+            item.setForeground(0, display.getSystemColor(SWT.COLOR_YELLOW));
+        } else {
+            item.setText(0, "○ " + name);
+            item.setForeground(0, display.getSystemColor(SWT.COLOR_DARK_GRAY));
+        }
+    }
+
     private Image connectionIcon(DBPDataSourceContainer container) {
         return DBeaverIcons.getImage(container.getDriver().getIconBig());
     }
@@ -681,6 +724,65 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         if (item.getData() instanceof String name && query.isEmpty()) {
             userExpanded.remove(name);
         }
+    }
+
+    // dbeaver-mm K144: banner düğmeleri tenant listesinden üretilir, seçim korunur
+    private void updateBannerBar(List<DBPDataSourceContainer> containers) {
+        if (bannerBar == null || bannerBar.isDisposed()) {
+            return;
+        }
+        Set<String> tenants = new LinkedHashSet<>();
+        for (DBPDataSourceContainer container : containers) {
+            String tenant = new NavTreeModel.Conn(container.getName(), false).tenant();
+            if (!tenant.isEmpty()) {
+                tenants.add(tenant);
+            }
+        }
+        List<String> list = new ArrayList<>(tenants);
+        selectedBanners.retainAll(tenants);
+        if (list.equals(bannerTenants)) {
+            return;
+        }
+        bannerTenants = list;
+        bannerBar.setRedraw(false);
+        for (ToolItem item : bannerBar.getItems()) {
+            item.dispose();
+        }
+        for (String tenant : list) {
+            ToolItem item = new ToolItem(bannerBar, SWT.CHECK);
+            item.setText(tenant);
+            item.setData(tenant);
+            item.setSelection(selectedBanners.contains(tenant));
+            item.addSelectionListener(new SelectionAdapter() {
+                @Override
+                public void widgetSelected(SelectionEvent event) {
+                    onBannerToggled((ToolItem) event.widget);
+                }
+            });
+        }
+        bannerBar.setRedraw(true);
+        bannerBar.getParent().layout();
+    }
+
+    // dbeaver-mm K144: banner seçilince eşleşen kapalı bağlantılar arka planda paralel açılır
+    private void onBannerToggled(ToolItem item) {
+        if (item == null || item.isDisposed() || !(item.getData() instanceof String tenant)) {
+            return;
+        }
+        if (item.getSelection()) {
+            selectedBanners.add(tenant);
+        } else {
+            selectedBanners.remove(tenant);
+        }
+        for (DBPDataSourceContainer container : currentContainers()) {
+            String name = container.getName();
+            String containerTenant = new NavTreeModel.Conn(name, false).tenant();
+            if (selectedBanners.contains(containerTenant) && !container.isConnected()
+                    && !connecting.contains(name)) {
+                connectContainer(name, container);
+            }
+        }
+        rebuildTree();
     }
 
     private void connectContainer(String name, DBPDataSourceContainer container) {
