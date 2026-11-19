@@ -691,7 +691,7 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
     }
 
     private Image connectionIcon(DBPDataSourceContainer container) {
-        return DBeaverIcons.getImage(container.getDriver().getIconBig());
+        return DBeaverIcons.getImage(container.getDriver().getIcon());
     }
 
     private Image tableIcon(Hit hit) {
