@@ -283,6 +283,9 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
 
         loading = true;
         scheduleReload();
+
+        // dbeaver-mm K147: seçim sağlayıcı olarak kaydet (open komutu seçili tabloyu görsün)
+        getSite().setSelectionProvider(this);
     }
 
     @Override
