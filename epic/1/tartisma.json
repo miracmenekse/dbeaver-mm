@@ -1,0 +1,80 @@
+{
+  "epic": "1",
+  "is": "# Conf eklerken audit alanlarını otomatik doldurma\n\nSorun: Kullanıcı tabloda yeni bir conf satırı eklerken cdate, cuser, sdate gibi audit alanlarına her seferinde elle statik değer giriyor. Bu tekrarlı ve hataya açık.\n\nİstek: Bu alanların otomatik (yeni satırda varsayılan) ya da bir buton/menü komutuyla (ör. \"audit alanlarını doldur\") doldurulması.\n\nBağlam: dbeaver-mm'de grid değişiklikleri \"Add changes to conf package\" ile Scripts/conf/<task id>.sql'e INSERT olarak yazılır. Satırlar Conf Packages panelinde gösterilir.\n\nTartışılacak: (1) otomatik mi buton mu; (2) hangi alanlar, hangi değerler (cdate=şimdi, cuser=?, sdate=?); (3) tablo bazında alan eşlemesi nerede tutulur (tenant/data_tp gibi ~/.dbeaver-mm altında mı); (4) mevcut doluysa ezilsin mi; (5) conf paketine yazarken mi, gridde satır eklenirken mi.",
+  "neden": "Dört persona da konuya ilgili: conf analisti (kullanıcı), mimar (alan eşlemesi), developer (kanca noktası), PM (kapsam).",
+  "odak": null,
+  "durum": "bitti",
+  "personalar": [
+    {
+      "ad": "Analist (conf)"
+    },
+    {
+      "ad": "Mimar"
+    },
+    {
+      "ad": "Developer"
+    },
+    {
+      "ad": "PM (proje sahibi)"
+    }
+  ],
+  "turlar": [
+    {
+      "tur": 1,
+      "ad": "Değerlendirme",
+      "mesajlar": [
+        {
+          "persona": "Analist (conf)",
+          "model": "opencode/beam-free",
+          "metin": "Etki: Audit alanlarının otomatik doldurulması, conf paketine dökme adımlarını ve her satırda elle yazılan ID/değer sayısını azaltır; tekrarlı veri giriş hatasını düşürür.\n\nGereksinim: Tablo bazında alan eşlemesi (tenant/data_tp gibi) ~/.dbeaver-mm altında tutulmalı; cdate=şimdi, cuser=sistem/API'den tenant'a göre, sdate=? netleştirilmeli. cuser değeri tenant'a özgü olduğundan yanlış tenant riski taşır.\n\nEndişe: Otomatik varsayılan gridde satır eklenirken uygulanmalı, conf'a INSERT olarak yazılmalı; conf paketine yazarken uygulanırsa geri alınamaz yanlış değer riski artar. Mevcut doluysa ezilmemeli (conf paketinde değiştirilemez INSERT'ler). Buton daha kontrollü; otomatik daha hızlı ama yanlış tenant/ID riskini artırır. DB'ye doğrudan yazma riski düşük (grid→conf akışı), ancak otomatik değerler conf'a kalıcı yazılır."
+        },
+        {
+          "persona": "Mimar",
+          "model": "opencode/beam-free",
+          "metin": "Audit alan eşlemesi tablo/tenant-bağımlı bir model gerektirir; alan adları (cdate, cuser, sdate) şema ve data_tp farklarına göre değişebilir, bu eşleme ~/.dbeaver-mm altında tenant-aware olarak tutulmalı ve kanıtlanabilir olmalı. cuser oturum mu DB user mı, cdate server mı client time mı netleştirilmeli; timezone/tenant saat farkları göz ardı edilmemeli. Mevcut dolu değerler ezilmemeli—FK/sanal FK referansları ve veri bütünlüğü bozulur. Grid'de doldurma hız kazandırır ama conf paketi tek kaynak olmalı; çift doğruluk riski. Eşleme eksikse sessiz yanlış değer üretilir; ekranda hangi alanların doldurulduğu ve kaynağı görünür olmalı, bayat/conf ile DB arasındaki fark anlaşılabilmeli. Kapsam tenant + tablo + alan eşlemesi + kimlik + zaman modelini içermeli; küçük tek-tablo çözümü yetersiz."
+        },
+        {
+          "persona": "Developer",
+          "model": "opencode/beam-free",
+          "metin": "Etki: tekrarlı elle giriş ve typo riskini azaltır; conf deneme hızlanır. Gereksinim: klavye kısayolu ile tetiklenebilir, tek tuş \"audit doldur\"; mevcut dolu alanları ezmemeli; undo ile geri alınabilmeli; değerler gridde değil conf paketine yazılmadan hemen önce üretilmeli ki test ortamında deneme temiz kalsın. Alan eşlemesi ~/.dbeaver-mm altında basit JSON (tenant/data_tp), tablo bazında. Endişe: otomatik doldurma pencere açarsa gecikme ve akışı bozar; cuser'ın kaynağı (oturum kullanıcısı vs. sabit) netleştirilmeli; yanlış giderse geri alınamazsa risk büyür. En iyi: kısayol, varsayılanları sadece boş alanlara, conf paketine yazarken."
+        },
+        {
+          "persona": "PM (proje sahibi)",
+          "model": "opencode/beam-free",
+          "metin": "Etki: Conf paketi üreten kullanıcıların tekrarlı elle girişini ve hata riskini azaltır; \"değeri yazma, adıyla seç\" vaadini güçlendirir. En küçük değerli dilim: gridde yeni satır eklenirken cdate=now, cuser=oturum kullanıcı adı, sdate=now varsayılan olarak doldurulsun — buton yerine otomatik, kullanıcı adımını sıfırlar. Varsayılan alan eşlemesi tenant/data_tp altında; hipotez tek tenant'ta sınanır. Endişe: cuser kaynağı ve tablo şema çeşitliliği varsayımdır; ezme politikası (doluysa dokunma) net olmalı. Gizlilik çizgisi bozulmaz — oturum bilgisi zaten conf SQL'e yazılır. Mevcut akış bozulmaz. Şimdi küçük dilimle başla; yaygınlaştırma ve dokümantasyon sonra."
+        }
+      ]
+    },
+    {
+      "tur": 2,
+      "ad": "Tartışma",
+      "mesajlar": [
+        {
+          "persona": "Analist (conf)",
+          "model": "opencode/beam-free",
+          "metin": "Katıldım: PM'in küçük dilim (tek tenant, gridde yeni satır) ve Developer'ın undo+boş-alan-politikası; Mimar'ın ezilmeme ilkesi.\n\nİtiraz: Mimar'ın \"conf tek kaynak\" vurgusu—grid görünürlüğü olmadan kullanıcı ne doldurulduğunu göremez, çift doğruluk riski UX karşılığında kabul edilebilir. Developer'ın \"conf yazmadan hemen önce üret\" test-temizliği—gridde görünmez değer kullanıcıyı kör bırakır.\n\nFikir değişti: Başta \"conf INSERT riskli, grid otomatik\" endişem vardı; şimdi gridde doldur + INSERT'te ezme koruması + undo en iyi denge. cuser=oturum kullanıcısı varsayılan, tenant-aware eşleme ile. sdate=cdate varsayılan, timezone client time + tenant offset notu."
+        },
+        {
+          "persona": "Mimar",
+          "model": "opencode/beam-free",
+          "metin": "Katıldım: PM'in tek tenant pilotu ve ezme politikası; Developer'ın boş-alan-only + undo; Analist'in grid+INSERT ezme koruması denge önerisi.\n\nİtiraz: Analist'in \"conf tek kaynak UX karşılığında esnetilebilir\" okumasına — conf authoritative ilkesi vazgeçilmez; grid değerleri görünür olmalı ama conf'a yazılmadan önce kanıtlanabilir eşleme ve kaynak etiketi şart, çift doğruluk kabul edilemez. PM'in sdate=now varsayımına — sdate kaynağı (server/client) netleştirilmeden cdate'ye bağlamak timezone riski üretir.\n\nFikir değişti: Başta \"küçük tek-tablo çözümü yetersiz\" dedim; şimdi tek tenant pilotu kabul, ama model tenant+tablo+alan kapsayacak şekilde tasarlanmalı. Başta grid doldurma hız kazandırır ama conf tek kaynak; şimdi grid doldur + INSERT ezme koruması + undo denge kabul, şart: görünür kaynak etiketi."
+        },
+        {
+          "persona": "Developer",
+          "model": "opencode/beam-free",
+          "metin": "Katıldım: PM'in tek tenant pilotu ve ezme politikası; Mimar'ın dolu alanları ezmememe ilkesi; Analist'in grid+INSERT ezme koruması dengesi.\n\nİtiraz: Mimar'ın \"conf tek kaynak\" vurgusunu UX karşılığında esnetmek yerine, değerler gridde görünür olmalı ama üretim conf INSERT anında kalmalı—test ortamı temiz kalsın. Analist'in \"conf INSERT riskli, grid otomatik\" esnetmesine de itirazım: boş-alan-only + undo yeterli, pencere açılması akışı bozar.\n\nFikir değişti: Başta \"conf yazmadan hemen önce üret, gridde görünmez\" dedim; şimdi gridde doldur + INSERT ezme koruması + undo dengesi kabul ediyorum—kullanıcıyı kör bırakmak UX riski. Başta basit tek-tablo JSON dedim; şimdi tenant+tablo+alan kapsayacak modeli kabul ediyorum. sdate kaynağı (server/client) ve cuser kaynağı netleşmeli."
+        },
+        {
+          "persona": "PM (proje sahibi)",
+          "model": "opencode/beam-free",
+          "metin": "Katıldım: Developer'ın boş-alan-only + undo ve Mimar'ın dolu alanları ezmememe ilkesi; Analist'in grid+INSERT ezme koruması dengesi. İtiraz: Mimar'ın \"conf tek kaynak\" vurgusunu UX karşılığında tamamen esnetmek yerine, gridde görünür kaynak etiketi şart; değerler gridde gösterilmeden INSERT'e gitmesi kullanıcıyı kör bırakır. Fikir değişti: Başta sdate=now varsayımımdan vazgeçtim—sdate kaynağı (server/client, timezone) netleştirilmeden cdate'ye bağlanmamalı; pilot tek tenant'ta sdate açıkça \"tanımsız/opsiyonel\" bırakılmalı. cuser=oturum kullanıcısı kalır, tenant-aware eşleme ile. Gizlilik ve mevcut akış korunur."
+        }
+      ]
+    }
+  ],
+  "cozum": {
+    "model": "opencode/beam-free",
+    "metin": "## Çözüm\nGridde yeni satır eklendiğinde audit alanları (cdate, cuser; sdate pilot'ta opsiyonel) otomatik ve yalnızca boş alanlara doldurulur; mevcut dolu değerler ezilmez. Değerler conf paketine INSERT olarak yazılır; conf authoritative kalır, gridde kaynak etiketi ile görünür. Eşleme `~/.dbeaver-mm` altında tenant/data_tp, tablo bazında tenant-aware model. cdate=client now (+tenant offset notu), cuser=oturum kullanıcısı. Undo ile geri alınabilir. Pilot tek tenant.\n\n## UI/UX etkisi\n- Yeni satırda otomatik varsayılan; elle giriş ve typo azalır.\n- Boş alanlar doldurulur, dolu alanlara dokunulmaz; kaynak etiketi gösterilir.\n- Undo desteği; pencere açılmaz, akış bozulmaz.\n- sdate pilot'ta opsiyonel/tanımsız; kullanıcıyı kör bırakmamak için kaynak etiketi şart.\n\n## Entegrasyon\n- Grid→conf akışı korunur; INSERT yazımı değişmez, sadece varsayılan değer üretimi eklenir.\n- Eşleme storage: `~/.dbeaver-mm` (tenant/data_tp), tablo+alan+tenant modeli, kanıtlanabilir.\n- Oturum kullanıcısı kaynağı conf SQL'e zaten yazılır (gizlilik çizgisi korunur).\n- Model tenant+tablo+alan kapsayacak şekilde tasarlanmalı (tek-tablo çözümü yetersiz).\n\n## Anlaşmazlıklar ve açık sorular\n- **Mimar vs Analist/Developer**: conf authoritative ilkesi — grid değerleri görünür olmalı ama conf'a yazılmadan önce kanıtlanabilir eşleme + kaynak etiketi şart; çift doğruluk kabul edilemez. Analist/Developer UX karşılığında esnetmek istedi; Mimar esnetmeyi reddetti ama grid görünür + etiket şartıyla dengeli kabul etti.\n- **PM vs Mimar**: sdate=now varsayımı; PM vazgeçti, pilot'ta sdate opsiyonel/tanımsız. Mimar timezone (server/client) riski vurguladı.\n- **Developer**: başta \"conf yazmadan hemen önce üret\" (test temizliği) ve \"basit tek-tablo JSON\"; sonra gridde doldur + tenant+tablo+alan modelini kabul etti.\n- **Analist**: başta \"conf INSERT riskli, grid otomatik\" endişesi; sonra grid+INSERT ezme koruması+undo dengesi kabul etti.\n- Açık sorular: cdate client vs server/timezone offset; cuser oturum vs DB user; sdate kaynağı; eşleme formatı/kanıtlanabilirliği; undo mekanizması; kaynak etiketi UI; çoklu tenant yaygınlaştırma.\n\n## Tahmini story listesi\n1. Audit alan eşleme modeli + `~/.dbeaver-mm` storage (tenant/data_tp) şeması\n2. Grid yeni satırda otomatik doldurma (boş-alan-only) + undo\n3. cdate/cuser varsayılanları (oturum kullanıcısı, client time + tenant offset notu)\n4. sdate kaynağı netleştirme (spike) — pilot'ta opsiyonel\n5. Conf INSERT yazımında ezme koruması + görünür kaynak etiketi\n6. Tek tenant pilot + doğrulama"
+  },
+  "ts": "2026-11-20T11:18:20.511Z"
+}
