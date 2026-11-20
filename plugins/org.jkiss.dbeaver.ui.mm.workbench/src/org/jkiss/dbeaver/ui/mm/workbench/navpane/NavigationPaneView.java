@@ -386,7 +386,35 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         if (selectedHit == null) {
             return;
         }
-        runCommand(CMD_OBJECT_OPEN);
+        // dbeaver-mm K148: Navigator'da hiç açılmamış tablonun düğümü yoktur; önce yükle, seçimi yenile, sonra aç
+        final Entry entry = selectedHit.entry();
+        if (nodeFor(entry) != null) {
+            runCommand(CMD_OBJECT_OPEN);
+            return;
+        }
+        final DBSEntity entity = entityIndex.get(entityKey(entry.connection(), entry.schema(), entry.table()));
+        if (entity == null || DBWorkbench.getPlatform().getNavigatorModel() == null) {
+            return;
+        }
+        org.eclipse.core.runtime.jobs.Job job = new org.eclipse.core.runtime.jobs.Job("Opening " + entry.table()) {
+            @Override
+            protected org.eclipse.core.runtime.IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
+                try {
+                    DBWorkbench.getPlatform().getNavigatorModel().getNodeByObject(
+                        new org.jkiss.dbeaver.model.runtime.VoidProgressMonitor(), entity, true);
+                } catch (Throwable e) {
+                    log.debug("Tablo düğümü yüklenemedi", e);
+                }
+                Display.getDefault().asyncExec(() -> {
+                    if (tree != null && !tree.isDisposed() && nodeFor(entry) != null) {
+                        fireSelection();
+                        runCommand(CMD_OBJECT_OPEN);
+                    }
+                });
+                return org.eclipse.core.runtime.Status.OK_STATUS;
+            }
+        };
+        job.schedule();
     }
 
     private void openNewSqlEditor() {
