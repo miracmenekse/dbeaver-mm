@@ -120,12 +120,23 @@ public final class DataTpStore {
     }
 
     // dbeaver-mm K92: some tables name the column data_tp_id
+    // dbeaver-mm K149: a table prefix is allowed too (pcm_data_tp, pcm_data_tp_id)
     public static boolean isDataTp(String columnName) {
-        return DATA_TP.equalsIgnoreCase(columnName) || (DATA_TP + "_id").equalsIgnoreCase(columnName);
+        return matches(columnName, DATA_TP) || matches(columnName, DATA_TP + "_id");
     }
 
+    // dbeaver-mm K149: pcm_row_id etc.
     public static boolean isRowId(String columnName) {
-        return ROW_ID.equalsIgnoreCase(columnName);
+        return matches(columnName, ROW_ID);
+    }
+
+    // dbeaver-mm K149: exact name, or any prefix ending in '_' (case-insensitive)
+    private static boolean matches(String columnName, String base) {
+        if (columnName == null) {
+            return false;
+        }
+        String name = columnName.strip().toLowerCase(Locale.ROOT);
+        return name.equals(base) || (name.length() > base.length() + 1 && name.endsWith("_" + base));
     }
 
     /**
