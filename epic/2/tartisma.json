@@ -1,0 +1,80 @@
+{
+  "epic": "2",
+  "is": "# Lang (çok dilli) kayıtlarını otomatik çevirme\n\nSorun: Kullanıcı bir kayıt için 3 dilde (en, fr, tr) satır girerken `name` / `descr` metnini alıp Google Çeviri'de dil seçip çeviriyor, sonucu gridde geri yapıştırıyor. Her kayıt için 3 satır x 2 alan elle kopyala-çevir-yapıştır; yavaş ve hataya açık.\n\nİstek: Gridde `lang` sütunundaki değere (en, fr, tr) göre, ilgili satırın `name` ve `descr` alanlarının otomatik çevrilip yazılması. Çeviri için dış bir servis (ya da başka bir yetenek) kullanılabilir.\n\nÖrnek (gridde): aynı kaydın 3 satırı var. en satırı kaynak: name=\"In Store Purchase\", descr=\"In Store Purchase\". fr ve tr satırları şu an kaynakla aynı ya da yarım (\"Offer\", \"Teklif\"); lang'e göre çevrilmeli (fr: Achat en magasin, tr: Mağazada Satın Alma).\n\nBağlam: dbeaver-mm'de grid değişiklikleri \"Add changes to conf package\" ile Scripts/conf/<task id>.sql'e INSERT/UPDATE olarak yazılır. Veri tp/etiket gibi proje ayarları ~/.dbeaver-mm altında tutuluyor. Şirket verisi dış servise gidebilir: gizlilik tartışılmalı.\n\nTartışılacak: (1) çeviri motoru: Google Cloud Translate / DeepL / LibreTranslate (kendi sunucu) / LLM (OpenRouter, Claude) / resmi olmayan Google uç noktası; maliyet, kota, kalite, ağ erişimi; (2) tetik: sağ tık \"Translate by lang\" menüsü mü, satır eklenince otomatik mi, seçili satırlar için toplu mu; (3) kaynak dil nasıl belirlenir (aynı kaydın en satırı? seçili satır?) ve kayıtların aynı gruba ait olduğu nasıl anlaşılır; (4) hangi sütunlar çevrilir (name, descr; başka metin sütunu?) ve tablo/sütun eşlemesi nerede tutulur; (5) dolu hücre ezilsin mi (kaynakla aynıysa ezilsin, farklıysa sor); (6) çeviriyi yazmadan önce önizleme/onay; (7) terim sözlüğü (marka/ürün adları çevrilmesin, \"Offer\" gibi alan terimleri tutarlı çevrilsin); (8) şirket verisinin dış servise gitmesi: izin, anahtar saklama (id-api.properties gibi), maskeleme; (9) çevrimdışı/başarısız durumda davranış.",
+  "neden": "Çeviri motoru seçimi, gizlilik ve UI akışı kararları: ürün, geliştirici ve veri güvenliği bakışı",
+  "odak": null,
+  "durum": "bitti",
+  "personalar": [
+    {
+      "ad": "Analist (conf)"
+    },
+    {
+      "ad": "Mimar"
+    },
+    {
+      "ad": "Developer"
+    },
+    {
+      "ad": "PM (proje sahibi)"
+    }
+  ],
+  "turlar": [
+    {
+      "tur": 1,
+      "ad": "Değerlendirme",
+      "mesajlar": [
+        {
+          "persona": "Analist (conf)",
+          "model": "opencode/beam-free",
+          "metin": "Analist (conf) değerlendirmesi: Bu özellik bir task'ı conf paketine dökerken 6 elle copy-translate-paste adımını 1 tetiklemeye indirir; elle ID girilmediği için ID hatası azalır. Ancak risk: çeviri otomatik olarak Scripts/conf/<task>.sql'e INSERT/UPDATE üretir; yanlış grup eşleştirme veya kaynak dil tespiti hatalı çeviriyi conf paketine düşürebilir, onay atlanırsa kalıcı olur. Gizlilik: şirket verisi dış servise gider; maskeleme ve izin şart. Gereksinim: preview/onay, kaynak satır seçimi, grup eşleştirme kuralı, terim sözlüğü, offline fallback. Tenant/ID riski düşük (conf akışı zaten ID'leri API'den alır), asıl risk hatalı çeviri conf'a yazılması."
+        },
+        {
+          "persona": "Mimar",
+          "model": "opencode/beam-free",
+          "metin": "Bu iş bir veri-ilişki sorunu: aynı kavramın çok dilli satırları `data_tp/row_id` (sanal FK) ile gruplanıyor mu, gruplama kanıtlanmalı; tenant'lar arası farklar ve her tenant'ın lang seti korunmalı. Çeviri sonucu \"Add changes to conf package\" akışına INSERT/UPDATE olarak yazılacaksa geri alma ve idempotency kanıtlanmalı. Gizlilik: şirket verisi dış servise gider; anahtarlar `id-api.properties` gibi yerde, maskeleme ve izin mekanizması gerekiyor. Doğruluk önceliği: kaynak dil tespiti, stale/bayat çeviri ekrandan anlaşılmalı (işaret/badge). Kapsam büyüme riski: tablo/sütun eşlemesi merkezi bir yerde tutulmalı, aksi halde her tablo için ayrı kod. Çevrimdışı/başarısızda sessiz yazım yerine açık hata ve kısmi sonuç gösterimi."
+        },
+        {
+          "persona": "Developer",
+          "model": "opencode/beam-free",
+          "metin": "Bu özellik conf denememi hızlandırır mı? Çeviri servisi ağ gecikmesi ve pencere açar; ham SQL çıktısını doğrudan üretse daha hızlı. Klavye kısayolu şart; sağ tık menüsü işi yavaşlatır. Geri alma: conf package SQL dosyasına yazıldığı için git diff ile geri alınabilir, ama otomatik ezme riskli; 'kaynakla aynıysa ez, farklıysa sor' yeterli. Dış servis gizlilik riski; LibreTranslate kendi sunucu tercih. Kapatılabilir toggle olmalı. Gerekli: seçili satırlar için toplu, önizleme olmadan doğrudan yaz (kestirme). Gereksiz: analist onayı penceresi. Mercek: hızlandırıyor, eğer kısayol + ham çıktı + geri alınabilir conf diff."
+        },
+        {
+          "persona": "PM (proje sahibi)",
+          "model": "opencode/beam-free",
+          "metin": "Gerçek sorun net: her kayıt için 3×2 elle kopyala-çevir-yapıştır. En küçük değerli dilim: seçili satırlarda sağ tık \"Translate by lang\", kaynak dil olarak aynı kaydın `en` satırı, yalnız `name`/`descr`, çeviri öncesi onay önizlemesi, anahtar UI'dan `~/.dbeaver-mm`'e yazılır (son kullanıcı dosya düzenlemez). Gizlilik pazarlıksız: opt-in onay ve kayıt; dış servise giden veri için kullanıcı onayı zorunlu, anahtar saklama mevcut `id-api.properties` desenini izler. Varsayım sınama: tek bir tenant'ta tek kayıt (en/fr/tr) ile elle doğrula; kendi conf akışımı tüm kullanıcılarınki sanma — tetik ve kaynak dil seçimi tenant'a göre değişebilir. Çevrimdışı/başarısızda değişiklik yok, hata mesajı. Sonra: terim sözlüğü, tablo/sütun eşlemesi, toplu tetik, otomatik tetik. Şimdi yapılmalı: manuel onaylı menü dilimi; otomatik tetik sonra."
+        }
+      ]
+    },
+    {
+      "tur": 2,
+      "ad": "Tartışma",
+      "mesajlar": [
+        {
+          "persona": "Analist (conf)",
+          "model": "opencode/beam-free",
+          "metin": "Katıldığım: Mimar'ın gruplama kanıtlanmalı (data_tp/row_id sanal FK) ve stale/bayat çeviri badge; PM'in en küçük dilim ve onay önizlemesi. İtiraz ettiğim: Developer'ın önizlemesiz doğrudan yaz önerisi; analist onayı penceresi gereksiz değil, hatalı çeviri conf'a yazma riskini taşır. Fikir değiştirdiğim: hız için otomatik tetik isteyebilirdim; PM'in 'manuel onaylı menü dilimi önce, otomatik tetik sonra' sıralamasına katılıyorum. Gizlilik ve opt-in onay pazarlıksız; anahtar saklama id-api.properties desenini izlesin."
+        },
+        {
+          "persona": "Mimar",
+          "model": "opencode/beam-free",
+          "metin": "Katıldığım: Analist'in gruplama kanıtlanmalı (data_tp/row_id sanal FK) ve stale badge; PM'in en küçük dilim ve onay önizlemesi. İtiraz ettiğim: Developer'ın önizlemesiz doğrudan yaz ve onay penceresi gereksiz görüşü; geri alma/idempotency kanıtlanmadan otomatik yazım kabul edilemez. Fikir değiştirdiğim: hız için otomatik tetik isteyebilirdim; PM'in 'manuel onaylı menü dilimi önce, otomatik tetik sonra' sıralamasına katılıyorum. Tenant/lang set korunmalı; çevrimdışıda sessiz yazım yerine açık hata."
+        },
+        {
+          "persona": "Developer",
+          "model": "opencode/beam-free",
+          "metin": "Katıldığım: PM'in en küçük dilim (seçili satırlar, name/descr, en kaynak) ve klavye kısayolu; Mimar'ın geri alma/idempotency kanıtlanmadan otomatik yazım kabul edilemez görüşü. Gizlilik ve opt-in onay pazarlıksız.\n\nİtiraz ettiğim: Analist/Mimar'ın 'onay penceresi mutlaka gerekli' vurgusu — benim 'önizlemesiz doğrudan yaz' kestirmem hatalı çeviri riskini görmezden geliyor; ama tam analist onay penceresi yerine hızlı bir diff önizleme + tek onay yeterli, akışı kesmemeli.\n\nFikir değiştirdiğim: 'analist onayı penceresi gereksiz' demem hatalıydı; PM'in 'manuel onaylı menü dilimi önce, otomatik tetik sonra' sıralamasına katılıyorum. Geri alma git diff ile mümkün ama 'kaynakla aynıysa ez, farklıysa sor' yeterli değil; idempotency kanıtlanmalı."
+        },
+        {
+          "persona": "PM (proje sahibi)",
+          "model": "opencode/beam-free",
+          "metin": "Katıldığım: Tüm tarafların gruplama kanıtlanmalı (data_tp/row_id sanal FK) ve opt-in onay/gizlilik pazarlıksız görüşüne. \"En küçük dilim\" (seçili satırlar, en kaynak, name/descr, onay önizlemesi) ortak taban oldu; bu doğru.\n\nİtiraz ettiğim: Developer'ın \"önizlemesiz doğrudan yaz\" kestirmesi — hatalı çeviri conf'a yazma riskini görmezden geliyor. Analist/Mimar'ın \"onay penceresi mutlaka gerekli\" vurgusu da akışı keser; tek onaylı hızlı diff önizlemesi yeterli, tam analist onay penceresi değil.\n\nFikir değiştirdiğim: \"otomatik tetik sonra\" sıralamasını baştan netleştirmeliydim; idempotency kanıtlanmadan otomatik yazım kabul edilemez. Hız için otomatik tetik isteyebilirdim; PM'in manuel onaylı menü dilimi önce, otomatik tetik sonra sıralamasına katılıyorum. Tenant/lang set korunmalı; çevrimdışıda açık hata."
+        }
+      ]
+    }
+  ],
+  "cozum": {
+    "model": "opencode/beam-free",
+    "metin": "## Çözüm\n- İlk dilim manuel ve güvenli: seçili satırlarda sağ tık `Translate by lang` (klavye kısayoluyla birlikte), kaynak dil olarak aynı kaydın `en` satırı, yalnız `name`/`descr` çevrilir.\n- Çeviri motoru değiştirilebilir olmalı; gizlilik için varsayılan onaylı/self-hosted (LibreTranslate) tercih edilir, harici servisler opt-in onay ve kayıtla kullanılır.\n- Anahtarlar `~/.dbeaver-mm` altında `id-api.properties` desenine uygun saklanır; kullanıcı dosya düzenlemez.\n- Grup eşleştirme `data_tp/row_id` sanal FK ile kanıtlanır; tenant ve lang setleri korunur.\n- Yazmadan önce hızlı diff önizlemesi + tek onay zorunlu; çevrimdışı/başarısız durumda değişiklik yapılmaz ve hata gösterilir.\n- `kaynakla aynıysa ez, farklıysa sor` kuralı uygulanır; idempotency ve geri alma (git diff) kanıtlanır.\n- Sonraki dilimler: terim sözlüğü, merkezi tablo/sütun eşlemesi, toplu tetik, otomatik tetik, stale/bayat çeviri badge.\n\n## UI/UX etkisi\n- Sağ tık menüsü ve kısayol birlikte sunulmalı; seçili satırlar için toplu işlem desteklenmeli.\n- Tam analist onay penceresi yerine hızlı diff + tek onay yeterli; akışı gereksiz kesmemeli.\n- Hatalı/eksik çeviri durumunda açık hata ve kısmi sonuç gösterimi; sessiz yazım olmamalı.\n- İleride stale/bayat çeviri badge ile ekranda işaretlenmeli.\n\n## Entegrasyon\n- Çeviri sonucu mevcut `Add changes to conf package` akışına INSERT/UPDATE olarak `Scripts/conf/<task id>.sql` dosyasına yazılır.\n- Gruplama ve kaynak satır seçimi tenant'a göre korunmalı; her tenant'ın lang seti bozulmamalı.\n- Gizlilik: şirket verisi dış servise gitmeden önce opt-in onay ve kayıt; maskeleme gereksinimi korunmalı.\n- Geri alma git diff ile mümkün olmalı; idempotency test edilmeli.\n- Tablo/sütun eşlemesi merkezi bir yerde tutulmalı; aksi halde her tablo için ayrı kod oluşur.\n\n## Anlaşmazlıklar ve açık sorular\n- Developer vs Analist/Mimar: Developer başlangıçta önizlemesiz doğrudan yaz ve onay penceresini gereksiz gördü; Analist/Mimar hatalı çeviri conf'a yazma riskini taşıdığı için onayı zorunlu tuttu. Developer daha sonra tam analist penceresi yerine hızlı diff + tek onayın yeterli olduğunu kabul etti.\n- Developer vs Analist/Mimar: Developer \"kaynakla aynıysa ez, farklıysa sor\" yeterli dedi; Mimar idempotency kanıtlanmadan otomatik yazımı kabul etmedi. Bu açık soru olarak kalıyor.\n- Hız vs doğruluk: Developer kısayol, ham SQL çıktısı ve kestirme akışı istedi; Analist/Mimar gruplama kanıtı, stale badge ve geri alma/idempotency kanıtı olmadan otomatik yazımı kabul etmedi.\n- Tetik sıralaması: PM başta netleştirdi; tüm taraflar manuel onaylı menü dilimini önce, otomatik tetiki sonra kabul etti. Auto tetik idempotency kanıtlanmadan yapılmamalı.\n- Motor seçimi: Developer LibreTranslate/self-hosted tercih etti; PM harici servisleri mümkün gördü; gizlilik ve maskeleme netleşmedi.\n- Açık sorular: grup eşleştirmenin kanıtı nasıl doğrulanacak, stale badge ne zaman eklenecek, terim sözlüğü nerede tutulacak, tablo/sütun eşlemesi nerede merkezileşecek, toplu/otomatik tetik kriterleri neler olacak.\n\n## Tahmini story listesi\n- MVP (6): grup/kayıt tespiti + en kaynak seçimi; çeviri sağlayıcı soyutlaması + opt-in/gizlilik; sağ tık + kısayol aksiyonu; hızlı diff + tek onay; conf package yazımı; hata/offline ve ezme politikası.\n- Sonraki dilim (4+): idempotency/geri alma testleri; terim sözlüğü; merkezi tablo/sütun eşlemesi; toplu ve otomatik tetik; stale çeviri badge."
+  },
+  "ts": "2026-11-20T11:20:17.606Z"
+}
