@@ -1717,6 +1717,9 @@
         <!-- dbeaver-mm K107: repository per connection, for Send... -->
         <command id="org.jkiss.dbeaver.mm.deploy.repos" categoryId="org.jkiss.dbeaver.core.util"
             name="Send repositories..." description="Which repository each connection's conf packages are sent to"/>
+        <!-- dbeaver-mm K150: audit user written into cuser columns -->
+        <command id="org.jkiss.dbeaver.mm.audit.settings" categoryId="org.jkiss.dbeaver.core.util"
+            name="Audit user (cuser)..." description="User name written into cuser columns of audit fields"/>
     </extension>
     <extension point="org.eclipse.ui.handlers">
         <handler commandId="org.jkiss.dbeaver.mm.session.toggle"
@@ -1733,6 +1736,9 @@
         <!-- dbeaver-mm K107: repository list dialog -->
         <handler commandId="org.jkiss.dbeaver.mm.deploy.repos"
             class="org.jkiss.dbeaver.ui.controls.resultset.ids.DeployRepoSettings"/>
+        <!-- dbeaver-mm K150: audit user dialog -->
+        <handler commandId="org.jkiss.dbeaver.mm.audit.settings"
+            class="org.jkiss.dbeaver.ui.controls.resultset.audit.AuditSettings"/>
     </extension>
     <extension point="org.eclipse.ui.menus">
         <menuContribution allPopups="false" locationURI="menu:org.jkiss.dbeaver.mm.plus?before=support">
@@ -1745,6 +1751,8 @@
             <command commandId="org.jkiss.dbeaver.mm.idapi.settings"/>
             <!-- dbeaver-mm K107: right under ID API account... -->
             <command commandId="org.jkiss.dbeaver.mm.deploy.repos"/>
+            <!-- dbeaver-mm K150: right under Send repositories... -->
+            <command commandId="org.jkiss.dbeaver.mm.audit.settings"/>
             <command commandId="org.jkiss.dbeaver.mm.datatp.settings"/>
             <command commandId="org.jkiss.dbeaver.mm.session.consent" style="toggle"/>
         </menuContribution>
