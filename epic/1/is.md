@@ -15,3 +15,6 @@ SQL yazarken manuel olacak. Yalnızca tablo üzerinden, "+" veya duplike ile ekl
 Ayrıca FetchId butonunun yanına bir buton daha gelsin: hücre seç → butona bas → hücreye now() yazılsın. Onun yanına bir buton daha: hücre seç → bas → Settings'teki cuser hücreye yazılsın.
 Karar: otomatik doldurma = yalnız yeni eklenen/duplike satır, SQL editörü kapsam dışı; elle doldurma = iki buton (now, cuser). cuser kaynağı artık belli (Plus Settings alanı).
 Önceki tartışmadan bu yorumla geçersiz kalanlar: eşleme dosyası/tenant-tablo modeli yerine alan adına göre (cdate/sdate/cuser) basit tespit yeterli mi, personalar değerlendirsin.
+
+## Kullanıcı kararı (2026-11-23)
+Tarih alanlarına literal `now()` yazılır (dialekt seçimi yok). cuser: Plus Settings'e girilen değer aynen basılır.
