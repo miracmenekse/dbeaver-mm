@@ -17,6 +17,8 @@
 package org.jkiss.dbeaver.ui.controls.resultset.translate;
 
 import java.io.IOException;
+// dbeaver-mm K158: sistem proxy'sini kullanmak için ProxySelector
+import java.net.ProxySelector;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -35,6 +37,14 @@ public class GoogleTranslate {
     private static final String BASE_URL = "https://translate.googleapis.com/translate_a/single";
     private static final Pattern LANGUAGE_CODE = Pattern.compile("[a-z]{2,3}(-[A-Za-z]{2,4})?");
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
+    // dbeaver-mm K158: tek HttpClient; sistem proxy'si ve NORMAL yönlendirme
+    private static final HttpClient CLIENT = HttpClient.newBuilder()
+        .connectTimeout(TIMEOUT)
+        .proxy(ProxySelector.getDefault())
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .build();
+    // dbeaver-mm K158: Java varsayılanı yerine gerçek tarayıcı User-Agent'ı
+    private static final String USER_AGENT = "Mozilla/5.0 (compatible; dbeaver-mm translate)";
 
     public static String url(String text, String from, String to) {
         validateLanguage(from);
@@ -45,35 +55,62 @@ public class GoogleTranslate {
             + "&dt=t&q=" + URLEncoder.encode(text, StandardCharsets.UTF_8);
     }
 
+    // dbeaver-mm K158: isteği ortak başlıklarla kuran yardımcı yöntem
+    static HttpRequest buildRequest(String text, String from, String to) {
+        return HttpRequest.newBuilder(URI.create(url(text, from, to)))
+            .timeout(TIMEOUT)
+            .header("Accept", "application/json")
+            .header("Accept-Language", "en")
+            .header("User-Agent", USER_AGENT)
+            .GET()
+            .build();
+    }
+
+    // dbeaver-mm K158: 429/503 için bekleme süresi; attempt >= 2 ise vazgeç
+    static long backoffMillis(int attempt) {
+        if (attempt < 0 || attempt >= 2) {
+            return -1;
+        }
+        return 1000L * (1L << attempt);
+    }
+
+    // dbeaver-mm K158: 429/503 yanıtlarında en fazla iki kez yeniden dene
     public String translate(String text, String from, String to) {
         if (text == null || text.isEmpty()) {
             return "";
         }
-        HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(TIMEOUT)
-            .build();
-        HttpRequest request = HttpRequest.newBuilder(URI.create(url(text, from, to)))
-            .timeout(TIMEOUT)
-            .header("Accept", "application/json")
-            .GET()
-            .build();
-        HttpResponse<String> response;
-        try {
-            response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Google translate request interrupted", e);
-        } catch (IOException e) {
-            throw new IllegalStateException("Google translate request failed", e);
-        }
-        int statusCode = response.statusCode();
-        if (statusCode != 200) {
-            if (statusCode == 429) {
-                throw new IllegalStateException("Google rate-limited the request");
+        HttpRequest request = buildRequest(text, from, to);
+        int attempt = 0;
+        while (true) {
+            HttpResponse<String> response;
+            try {
+                response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Google translate request interrupted", e);
+            } catch (IOException e) {
+                throw new IllegalStateException("Google translate request failed", e);
             }
-            throw new IllegalStateException("Google translate HTTP status " + statusCode);
+            int statusCode = response.statusCode();
+            if (statusCode != 200) {
+                if (statusCode == 429 || statusCode == 503) {
+                    long delay = backoffMillis(attempt);
+                    if (delay < 0) {
+                        throw new IllegalStateException("Google rate-limited the request (after 3 tries)");
+                    }
+                    try {
+                        Thread.sleep(delay);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("Google translate request interrupted", e);
+                    }
+                    attempt++;
+                    continue;
+                }
+                throw new IllegalStateException("Google translate HTTP status " + statusCode);
+            }
+            return parse(response.body());
         }
-        return parse(response.body());
     }
 
     public static String parse(String json) {
