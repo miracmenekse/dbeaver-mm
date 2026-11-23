@@ -102,6 +102,8 @@ import org.jkiss.dbeaver.ui.controls.resultset.colors.CustomizeColorsAction;
 import org.jkiss.dbeaver.ui.controls.resultset.colors.GroupRowStripingAction;
 import org.jkiss.dbeaver.ui.controls.resultset.colors.ResetAllColorAction;
 import org.jkiss.dbeaver.ui.controls.resultset.colors.ResetRowColorAction;
+// dbeaver-mm K153: reuse the Now / cuser commands in the context menu's Plus block
+import org.jkiss.dbeaver.ui.controls.resultset.conf.GridToolsHandler;
 import org.jkiss.dbeaver.ui.controls.resultset.handler.*;
 import org.jkiss.dbeaver.ui.controls.resultset.internal.ResultSetMessages;
 import org.jkiss.dbeaver.ui.controls.resultset.panel.ResultSetPanelDescriptor;
@@ -3195,18 +3197,36 @@ public class ResultSetViewer extends Viewer
         {
             {
                 if (menuLocation == ContextMenuLocation.DATA) {
+                    // dbeaver-mm K153: single Plus block at the very top of the data cell menu
+                    MenuManager extCopyMenu
+                        = new MenuManager(ActionUtils.findCommandName(ResultSetHandlerCopySpecial.CMD_COPY_SPECIAL) + " +");
+                    extCopyMenu.setRemoveAllWhenShown(true);
+                    extCopyMenu.addMenuListener(manager1 -> ResultSetHandlerCopyAs.fillCopyAsMenu(ResultSetViewer.this, manager1));
+                    manager.add(extCopyMenu);
+
+                    manager.add(ActionUtils.makeCommandContribution(site, IResultSetCommands.CMD_CELL_SET_NULL,
+                        ActionUtils.findCommandName(IResultSetCommands.CMD_CELL_SET_NULL) + " +", null, null, false));
+
+                    VirtualForeignKeyEditAction virtualFkAction = new VirtualForeignKeyEditAction(this);
+                    virtualFkAction.setText(virtualFkAction.getText() + " +");
+                    DBPDataSource fkDataSource = getDataSource();
+                    if (fkDataSource == null || !(fkDataSource.getInfo().supportsReferentialIntegrity()
+                        || fkDataSource.getContainer().getDriver().supportsVirtualKeys())) {
+                        virtualFkAction.setEnabled(false);
+                    }
+                    manager.add(new ActionContributionItem(virtualFkAction));
+
+                    if (row != null) {
+                        manager.add(ActionUtils.makeCommandContribution(site, GridToolsHandler.CMD_SET_NOW,
+                            ActionUtils.findCommandName(GridToolsHandler.CMD_SET_NOW) + " +", null, null, false));
+                        manager.add(ActionUtils.makeCommandContribution(site, GridToolsHandler.CMD_SET_CUSER,
+                            ActionUtils.findCommandName(GridToolsHandler.CMD_SET_CUSER) + " +", null, null, false));
+                    }
+                    manager.add(new Separator());
+
                     // Standard items
                     if (attr != null && row != null) {
                         manager.add(ActionUtils.makeCommandContribution(site, IWorkbenchCommandConstants.EDIT_COPY));
-                    }
-
-                    if (row != null) {
-                        MenuManager extCopyMenu
-                            = new MenuManager(ActionUtils.findCommandName(ResultSetHandlerCopySpecial.CMD_COPY_SPECIAL));
-                        extCopyMenu.setRemoveAllWhenShown(true);
-                        extCopyMenu.addMenuListener(manager1 -> ResultSetHandlerCopyAs.fillCopyAsMenu(ResultSetViewer.this, manager1));
-
-                        manager.add(extCopyMenu);
                     }
 
                     if (row != null) {
