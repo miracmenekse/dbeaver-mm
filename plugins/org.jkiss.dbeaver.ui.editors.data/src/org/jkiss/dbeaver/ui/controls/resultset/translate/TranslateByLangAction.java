@@ -26,6 +26,8 @@ import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.DBPMessageType;
 import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.data.DBDAttributeBinding;
+// dbeaver-mm K159: satır kimliğinden grup anahtarı sütunlarını okumak için
+import org.jkiss.dbeaver.model.data.DBDRowIdentifier;
 import org.jkiss.dbeaver.model.runtime.AbstractJob;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSDataContainer;
@@ -311,6 +313,7 @@ public class TranslateByLangAction extends Action {
             "Cell texts are sent to Google Translate. Allow translation?");
     }
 
+    // dbeaver-mm K159: kimlik sütunlarından anahtar türetilir; kimlik yoksa eski ardışıklık kullanılır
     @NotNull
     private static LangPlan buildPlan(@NotNull ResultSetViewer viewer) {
         ResultSetModel model = viewer.getModel();
@@ -318,10 +321,23 @@ public class TranslateByLangAction extends Action {
         DBDAttributeBinding langAttr = findAttribute(model, "lang");
         DBDAttributeBinding nameAttr = findAttribute(model, COLUMN_NAME);
         DBDAttributeBinding descrAttr = findAttribute(model, COLUMN_DESCR);
+        List<DBDAttributeBinding> keyAttrs = new ArrayList<>();
+        DBDRowIdentifier identifier = model.getDefaultRowIdentifier();
+        if (identifier != null) {
+            for (DBDAttributeBinding attr : identifier.getAttributes()) {
+                if (attr != null && !attr.getName().equalsIgnoreCase("lang")) {
+                    keyAttrs.add(attr);
+                }
+            }
+        }
         int count = rows.size();
         String[] langs = new String[count];
         String[] names = new String[count];
         String[] descrs = new String[count];
+        String[] keys = null;
+        if (!keyAttrs.isEmpty()) {
+            keys = new String[count];
+        }
         // dbeaver-mm K157: yalnız kullanıcının seçtiği satırlar çevrilir
         List<ResultSetRow> selectedRows = viewer.getSelectedRows();
         for (int i = 0; i < count; i++) {
@@ -329,9 +345,27 @@ public class TranslateByLangAction extends Action {
             langs[i] = text(langAttr == null ? null : model.getCellValue(langAttr, row));
             names[i] = text(nameAttr == null ? null : model.getCellValue(nameAttr, row));
             descrs[i] = text(descrAttr == null ? null : model.getCellValue(descrAttr, row));
+            if (keys != null) {
+                StringBuilder key = new StringBuilder();
+                boolean hasValue = false;
+                for (int j = 0; j < keyAttrs.size(); j++) {
+                    if (j > 0) {
+                        key.append("\u0000");
+                    }
+                    String value = text(model.getCellValue(keyAttrs.get(j), row));
+                    if (value == null) {
+                        value = "";
+                    }
+                    if (!value.isEmpty()) {
+                        hasValue = true;
+                        key.append(value);
+                    }
+                }
+                keys[i] = hasValue ? key.toString() : null;
+            }
         }
         int[] selection = LangPlan.indexesOf(rows, selectedRows);
-        return LangPlan.plan(langs, names, descrs, selection);
+        return LangPlan.plan(langs, names, descrs, selection, keys);
     }
 
     @Nullable

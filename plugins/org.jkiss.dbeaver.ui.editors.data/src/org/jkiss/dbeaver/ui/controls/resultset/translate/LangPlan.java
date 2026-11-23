@@ -16,9 +16,12 @@
  */
 package org.jkiss.dbeaver.ui.controls.resultset.translate;
 
+// dbeaver-mm K159: anahtarlı gruplama için HashMap/Map
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Groups consecutive translation rows and builds a pure translation plan.
@@ -63,6 +66,70 @@ public final class LangPlan {
                     for (int i = 0; i < length; i++) {
                         if (header[i] == selected && !isEnglish(element(langs, i))) {
                             include[i] = true;
+                        }
+                    }
+                } else {
+                    include[selected] = true;
+                }
+            }
+        }
+
+        List<Job> jobs = new ArrayList<>();
+        List<Skipped> skipped = new ArrayList<>();
+        for (int i = 0; i < length; i++) {
+            if (!include[i] || isEnglish(element(langs, i))) {
+                continue;
+            }
+            int source = header[i];
+            if (source < 0) {
+                skipped.add(new Skipped(i, element(langs, i), NO_EN_ROW));
+                continue;
+            }
+            jobs.add(new Job(
+                i,
+                element(langs, i),
+                emptyToNull(element(names, source)),
+                emptyToNull(element(descrs, source))));
+        }
+        return new LangPlan(jobs, skipped);
+    }
+
+    /**
+     * Groups rows by their composite key instead of their position. The source of a row is the
+     * first English row with the same key; rows with no key or no matching English row have none.
+     */
+    // dbeaver-mm K159: anahtara göre gruplama; kaynak aynı anahtarın ilk en satırı
+    public static LangPlan plan(String[] langs, String[] names, String[] descrs, int[] selection, String[] keys) {
+        if (keys == null) {
+            return plan(langs, names, descrs, selection);
+        }
+        int length = langs == null ? 0 : langs.length;
+        Map<String, Integer> firstEnglish = new HashMap<>();
+        for (int i = 0; i < length; i++) {
+            String key = element(keys, i);
+            if (key != null && !key.isEmpty() && isEnglish(element(langs, i))) {
+                firstEnglish.putIfAbsent(key, i);
+            }
+        }
+        int[] header = new int[length];
+        for (int i = 0; i < length; i++) {
+            String key = element(keys, i);
+            header[i] = key == null || key.isEmpty() ? -1 : firstEnglish.getOrDefault(key, -1);
+        }
+
+        boolean[] include = new boolean[length];
+        if (selection != null) {
+            for (int selected : selection) {
+                if (selected < 0 || selected >= length) {
+                    continue;
+                }
+                if (isEnglish(element(langs, selected))) {
+                    String key = element(keys, selected);
+                    if (key != null && !key.isEmpty()) {
+                        for (int i = 0; i < length; i++) {
+                            if (!isEnglish(element(langs, i)) && key.equals(element(keys, i))) {
+                                include[i] = true;
+                            }
                         }
                     }
                 } else {
