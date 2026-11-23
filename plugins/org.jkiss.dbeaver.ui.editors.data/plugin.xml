@@ -1681,17 +1681,33 @@
             name="Fetch IDs" description="Fetch IDs for the grid's new rows from the id API"/>
         <command id="org.jkiss.dbeaver.mm.grid.addToConfPackage" categoryId="org.jkiss.dbeaver.core.util"
             name="Add to conf package" description="Add the grid's unsaved changes to a conf package"/>
+        <!-- dbeaver-mm K152: audit buttons, write now() / cuser into the selected cell(s) -->
+        <command id="org.jkiss.dbeaver.mm.grid.setNow" categoryId="org.jkiss.dbeaver.core.util"
+            name="Now" description="Set the selected cell(s) to the current time"/>
+        <command id="org.jkiss.dbeaver.mm.grid.setCuser" categoryId="org.jkiss.dbeaver.core.util"
+            name="cuser" description="Set the selected cell(s) to the audit user"/>
     </extension>
     <extension point="org.eclipse.ui.handlers">
         <handler commandId="org.jkiss.dbeaver.mm.grid.fetchIds"
             class="org.jkiss.dbeaver.ui.controls.resultset.conf.GridToolsHandler"/>
         <handler commandId="org.jkiss.dbeaver.mm.grid.addToConfPackage"
             class="org.jkiss.dbeaver.ui.controls.resultset.conf.GridToolsHandler"/>
+        <handler commandId="org.jkiss.dbeaver.mm.grid.setNow"
+            class="org.jkiss.dbeaver.ui.controls.resultset.conf.GridToolsHandler"/>
+        <handler commandId="org.jkiss.dbeaver.mm.grid.setCuser"
+            class="org.jkiss.dbeaver.ui.controls.resultset.conf.GridToolsHandler"/>
     </extension>
     <extension point="org.eclipse.ui.menus">
         <menuContribution allPopups="false" locationURI="toolbar:org.jkiss.dbeaver.mm.entityTabs">
             <command commandId="org.jkiss.dbeaver.mm.grid.fetchIds" mode="FORCE_TEXT" style="push"/>
             <command commandId="org.jkiss.dbeaver.mm.grid.addToConfPackage" mode="FORCE_TEXT" style="push"/>
+            <separator name="org.jkiss.dbeaver.mm.grid.auditSeparator" visible="true"/>
+            <command commandId="org.jkiss.dbeaver.mm.grid.setNow" mode="FORCE_TEXT" style="push"
+                icon="platform:/plugin/org.jkiss.dbeaver.ui/icons/misc/clock_play.svg"
+                tooltip="Set the selected cell(s) to the current time"/>
+            <command commandId="org.jkiss.dbeaver.mm.grid.setCuser" mode="FORCE_TEXT" style="push"
+                icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/user.svg"
+                tooltip="Set the selected cell(s) to the audit user (cuser)"/>
         </menuContribution>
     </extension>
 
