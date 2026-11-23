@@ -49,6 +49,8 @@ public final class AuditFields {
     /**
      * dbeaver-mm K150: the value to write into an audit column. NOW is always now(),
      * USER carries the configured cuser (empty string when none is set).
+     * dbeaver-mm K151: the result set viewer writes a real {@link java.sql.Timestamp} for NOW
+     * instead of this {@code now()} string, because string cell values are quoted in generated SQL.
      */
     public static String valueOf(Kind kind, String cuser) {
         if (kind == Kind.NOW) {
