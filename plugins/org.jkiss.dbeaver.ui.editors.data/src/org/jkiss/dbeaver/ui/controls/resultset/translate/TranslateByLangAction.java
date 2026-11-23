@@ -322,14 +322,15 @@ public class TranslateByLangAction extends Action {
         String[] langs = new String[count];
         String[] names = new String[count];
         String[] descrs = new String[count];
-        int[] selection = new int[count];
+        // dbeaver-mm K157: yalnız kullanıcının seçtiği satırlar çevrilir
+        List<ResultSetRow> selectedRows = viewer.getSelectedRows();
         for (int i = 0; i < count; i++) {
             ResultSetRow row = rows.get(i);
             langs[i] = text(langAttr == null ? null : model.getCellValue(langAttr, row));
             names[i] = text(nameAttr == null ? null : model.getCellValue(nameAttr, row));
             descrs[i] = text(descrAttr == null ? null : model.getCellValue(descrAttr, row));
-            selection[i] = i;
         }
+        int[] selection = LangPlan.indexesOf(rows, selectedRows);
         return LangPlan.plan(langs, names, descrs, selection);
     }
 

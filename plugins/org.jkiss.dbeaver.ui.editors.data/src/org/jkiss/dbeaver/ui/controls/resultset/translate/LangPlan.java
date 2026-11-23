@@ -17,6 +17,7 @@
 package org.jkiss.dbeaver.ui.controls.resultset.translate;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -88,6 +89,28 @@ public final class LangPlan {
                 emptyToNull(element(descrs, source))));
         }
         return new LangPlan(jobs, skipped);
+    }
+
+    // dbeaver-mm K157: seçili öğelerin all içindeki dizinleri (kimlik karşılaştırması)
+    public static <T> int[] indexesOf(List<T> all, Collection<T> selected) {
+        if (all == null || all.isEmpty() || selected == null || selected.isEmpty()) {
+            return new int[0];
+        }
+        List<Integer> indexes = new ArrayList<>();
+        for (int i = 0; i < all.size(); i++) {
+            T item = all.get(i);
+            for (T candidate : selected) {
+                if (item == candidate) {
+                    indexes.add(i);
+                    break;
+                }
+            }
+        }
+        int[] result = new int[indexes.size()];
+        for (int i = 0; i < result.length; i++) {
+            result[i] = indexes.get(i);
+        }
+        return result;
     }
 
     /**
