@@ -77,6 +77,7 @@ import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.DBValueFormatting;
 import org.jkiss.dbeaver.model.app.DBPDataSourceRegistry;
 import org.jkiss.dbeaver.model.app.DBPProject;
+import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.model.navigator.DBNNode;
 import org.jkiss.dbeaver.model.runtime.DBRProgressListener;
 import org.jkiss.dbeaver.model.runtime.VoidProgressMonitor;
@@ -127,14 +128,36 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
     private final Map<String, List<Entry>> cache = new ConcurrentHashMap<>();
     private final Map<String, DBSEntity> entityIndex = new ConcurrentHashMap<>();
     private final List<ISelectionChangedListener> selectionListeners = new ArrayList<>();
-    private final DBPEventListener dataSourceListener = event -> scheduleReload();
+    private boolean connectionRefreshPending;
     private final Set<String> userExpanded = new LinkedHashSet<>();
     private final Set<String> connecting = new HashSet<>();
+    private final Set<String> refreshing = new LinkedHashSet<>();
     private final Map<String, String> connectionErrors = new HashMap<>();
     // dbeaver-mm K144: seçili banner (tenant) süzgeci; boşken tüm bağlantılar görünür
     private final Set<String> selectedBanners = new LinkedHashSet<>();
 
     private Display display;
+    // dbeaver-mm K161: yalnız bağlantı ekle/sil/bağlan/kop olaylarında 300 ms birleştirilmiş ağaç yenileme
+    private final DBPEventListener dataSourceListener = event -> {
+        if (!(event.getObject() instanceof DBPDataSourceContainer)) {
+            return;
+        }
+        final Display current = display;
+        if (current == null || current.isDisposed()) {
+            return;
+        }
+        // olaylar UI dışı thread'den gelebilir; timerExec yalnız UI thread'inde çağrılabilir
+        current.asyncExec(() -> {
+            if (connectionRefreshPending || current.isDisposed()) {
+                return;
+            }
+            connectionRefreshPending = true;
+            current.timerExec(300, () -> {
+                connectionRefreshPending = false;
+                rebuildTree();
+            });
+        });
+    };
     private Text searchText;
     private Label countLabel;
     private ToolBar bannerBar;
@@ -166,7 +189,7 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         root.setLayout(new GridLayout(1, false));
 
         Composite bar = new Composite(root, SWT.NONE);
-        GridLayout barLayout = new GridLayout(2, false);
+        GridLayout barLayout = new GridLayout(3, false);
         barLayout.marginWidth = 0;
         barLayout.marginHeight = 0;
         bar.setLayout(barLayout);
@@ -186,6 +209,18 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
                         tree.setFocus();
                     }
                 }
+            }
+        });
+
+        ToolBar refreshBar = new ToolBar(bar, SWT.FLAT);
+        refreshBar.setLayoutData(new GridData(SWT.END, SWT.CENTER, false, false));
+        ToolItem refreshItem = new ToolItem(refreshBar, SWT.PUSH);
+        refreshItem.setText("⟳");
+        refreshItem.setToolTipText("Tabloları yenile (seçili ortamlar)");
+        refreshItem.addSelectionListener(new SelectionAdapter() {
+            @Override
+            public void widgetSelected(SelectionEvent event) {
+                refreshSelectedBanners();
             }
         });
 
@@ -347,6 +382,14 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
 
     private void createContextMenu() {
         Menu menu = new Menu(tree);
+        MenuItem refreshConnection = new MenuItem(menu, SWT.PUSH);
+        refreshConnection.setText("Tabloları yenile");
+        refreshConnection.addSelectionListener(new SelectionAdapter() {
+            @Override
+            public void widgetSelected(SelectionEvent event) {
+                refreshConnectionRow();
+            }
+        });
         MenuItem selectTemplate = new MenuItem(menu, SWT.PUSH);
         selectTemplate.setText("SELECT şablonu");
         selectTemplate.addSelectionListener(new SelectionAdapter() {
@@ -369,6 +412,8 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
                 boolean enabled = selectedHit != null;
                 selectTemplate.setEnabled(enabled);
                 showInNavigator.setEnabled(enabled);
+                TreeItem item = selectedItem();
+                refreshConnection.setEnabled(item != null && item.getData() instanceof String);
             }
         });
         tree.setMenu(menu);
@@ -382,39 +427,127 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         }
     }
 
+    // dbeaver-mm K161: seçili ortamlardaki tüm bağlantıların tablo listesini elle yeniler
+    private void refreshSelectedBanners() {
+        List<DBPDataSourceContainer> targets = new ArrayList<>();
+        for (DBPDataSourceContainer container : currentContainers()) {
+            String tenant = new NavTreeModel.Conn(container.getName(), false).tenant();
+            if (selectedBanners.contains(tenant)) {
+                targets.add(container);
+            }
+        }
+        startRefresh(targets);
+    }
+
+    // dbeaver-mm K161: bağlam menüsünden yalnız seçili bağlantıyı yeniler
+    private void refreshConnectionRow() {
+        TreeItem item = selectedItem();
+        if (item == null || !(item.getData() instanceof String name)) {
+            return;
+        }
+        DBPDataSourceContainer container = containersByName.get(name);
+        if (container != null) {
+            startRefresh(List.of(container));
+        }
+    }
+
+    private void startRefresh(List<DBPDataSourceContainer> targets) {
+        if (targets.isEmpty() || display == null || display.isDisposed()) {
+            return;
+        }
+        for (DBPDataSourceContainer container : targets) {
+            refreshing.add(container.getName());
+        }
+        rebuildTree();
+        new RefreshJob(targets).schedule();
+    }
+
+    // dbeaver-mm K161: tablo açmadan önce bağlantıyı garanti eder, varlığı gerekirse yoldan çözer
     private void openSelectedTable() {
         if (selectedHit == null) {
             return;
         }
-        // dbeaver-mm K148: Navigator'da hiç açılmamış tablonun düğümü yoktur; önce yükle, seçimi yenile, sonra aç
         final Entry entry = selectedHit.entry();
-        if (nodeFor(entry) != null) {
-            runCommand(CMD_OBJECT_OPEN);
+        final DBPDataSourceContainer container = containersByName.get(entry.connection());
+        if (container == null) {
+            showTableError("Tablo bulunamadı, listeyi yenileyin");
             return;
         }
-        final DBSEntity entity = entityIndex.get(entityKey(entry.connection(), entry.schema(), entry.table()));
-        if (entity == null || DBWorkbench.getPlatform().getNavigatorModel() == null) {
-            return;
-        }
-        org.eclipse.core.runtime.jobs.Job job = new org.eclipse.core.runtime.jobs.Job("Opening " + entry.table()) {
+        org.eclipse.core.runtime.jobs.Job job = new org.eclipse.core.runtime.jobs.Job("Tablo aç: " + entry.table()) {
             @Override
             protected org.eclipse.core.runtime.IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
                 try {
-                    DBWorkbench.getPlatform().getNavigatorModel().getNodeByObject(
-                        new org.jkiss.dbeaver.model.runtime.VoidProgressMonitor(), entity, true);
+                    if (!container.isConnected()) {
+                        container.connect(RuntimeUtils.makeMonitor(monitor), true, true);
+                    }
+                    DBSEntity entity = resolveEntity(monitor, entry, container);
+                    if (entity == null) {
+                        showTableError("Tablo bulunamadı, listeyi yenileyin");
+                        return org.eclipse.core.runtime.Status.OK_STATUS;
+                    }
+                    if (DBWorkbench.getPlatform().getNavigatorModel() != null) {
+                        DBWorkbench.getPlatform().getNavigatorModel().getNodeByObject(
+                            RuntimeUtils.makeMonitor(monitor), entity, true);
+                    }
                 } catch (Throwable e) {
-                    log.debug("Tablo düğümü yüklenemedi", e);
+                    log.debug("Tablo açılamadı: " + entry.table(), e);
+                    showTableError(e.getMessage() == null ? "Tablo açılamadı" : e.getMessage());
+                    return org.eclipse.core.runtime.Status.OK_STATUS;
                 }
                 Display.getDefault().asyncExec(() -> {
                     if (tree != null && !tree.isDisposed() && nodeFor(entry) != null) {
                         fireSelection();
                         runCommand(CMD_OBJECT_OPEN);
+                    } else {
+                        showTableError("Tablo bulunamadı, listeyi yenileyin");
                     }
                 });
                 return org.eclipse.core.runtime.Status.OK_STATUS;
             }
         };
         job.schedule();
+    }
+
+    private DBSEntity resolveEntity(IProgressMonitor monitor, Entry entry, DBPDataSourceContainer container) {
+        DBSEntity entity = entityFor(entry);
+        if (entity != null) {
+            return entity;
+        }
+        DBPDataSource dataSource = container.getDataSource();
+        if (dataSource == null) {
+            return null;
+        }
+        DBSObjectContainer root = DBUtils.getAdapter(DBSObjectContainer.class, dataSource);
+        if (root == null) {
+            return null;
+        }
+        String schema = entry.schema() == null || entry.schema().isEmpty() ? null : entry.schema();
+        try {
+            DBCExecutionContext context = DBUtils.getDefaultContext(dataSource, false);
+            if (context == null) {
+                return null;
+            }
+            DBSObject found = DBUtils.getObjectByPath(
+                RuntimeUtils.makeMonitor(monitor), context, root, null, schema, entry.table());
+            if (found instanceof DBSEntity foundEntity) {
+                entityIndex.putIfAbsent(entityKey(entry.connection(), entry.schema(), entry.table()), foundEntity);
+                return foundEntity;
+            }
+        } catch (DBException e) {
+            log.debug("Tablo yolu çözülemedi: " + entry.table(), e);
+        }
+        return null;
+    }
+
+    private DBSEntity entityFor(Entry entry) {
+        return entityIndex.get(entityKey(entry.connection(), entry.schema(), entry.table()));
+    }
+
+    private void showTableError(String message) {
+        if (display == null || display.isDisposed()) {
+            return;
+        }
+        display.asyncExec(() -> DBWorkbench.getPlatformUI().showError("Navigation Pane", message));
     }
 
     private void openNewSqlEditor() {
@@ -488,7 +621,7 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
     }
 
     private DBNNode nodeFor(Entry entry) {
-        DBSEntity entity = entityIndex.get(entityKey(entry.connection(), entry.schema(), entry.table()));
+        DBSEntity entity = entityFor(entry);
         if (entity == null || DBWorkbench.getPlatform().getNavigatorModel() == null) {
             return null;
         }
@@ -522,15 +655,12 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
                 return;
             }
             loading = true;
-            cache.clear();
-            entityIndex.clear();
             hits = List.of();
             if (loadJob != null) {
                 loadJob.cancel();
             }
             loadJob = new LoadJob();
             loadJob.schedule();
-            rebuildTree();
         });
     }
 
@@ -618,7 +748,8 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
             Map<String, DBPDataSourceContainer> byName = new LinkedHashMap<>();
             for (DBPDataSourceContainer container : containers) {
                 String name = container.getName();
-                conns.add(new NavTreeModel.Conn(name, container.isConnected()));
+                boolean hasTables = container.isConnected() || cache.containsKey(container.getId());
+                conns.add(new NavTreeModel.Conn(name, hasTables));
                 byName.putIfAbsent(name, container);
             }
             containersByName = byName;
@@ -650,7 +781,9 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
     private void buildGroupItem(NavTreeModel.Group group, DBPDataSourceContainer container) {
         String name = group.conn().name();
         TreeItem item = new TreeItem(tree, SWT.NONE);
-        applyConnectionStatus(item, name, group.conn().connected());
+        boolean connected = container != null && container.isConnected();
+        boolean hasList = container != null && cache.containsKey(container.getId());
+        applyConnectionStatus(item, name, connected);
         item.setData(name);
         if (container != null) {
             item.setImage(connectionIcon(container));
@@ -660,9 +793,10 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
             : group.hits().size() + "/" + group.total();
         item.setText(1, detail);
 
-        boolean connected = group.conn().connected();
         String error = connectionErrors.get(name);
-        if (!connected) {
+        if (refreshing.contains(name) && !hasList) {
+            addMessageItem(item, "Tablolar yükleniyor…");
+        } else if (!connected && !hasList) {
             if (connecting.contains(name)) {
                 addMessageItem(item, "bağlanıyor…");
             } else if (error != null && !error.isEmpty()) {
@@ -743,9 +877,12 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         }
         userExpanded.add(name);
         DBPDataSourceContainer container = containersByName.get(name);
-        if (container != null && !container.isConnected() && !connecting.contains(name)) {
-            connectContainer(name, container);
+        if (container == null || cache.containsKey(container.getId())) {
+            return;
         }
+        refreshing.add(name);
+        rebuildTree();
+        new RefreshJob(List.of(container)).schedule();
     }
 
     private void onGroupCollapsed(Object widget) {
@@ -795,7 +932,7 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
         bannerBar.getParent().layout();
     }
 
-    // dbeaver-mm K144: banner seçilince eşleşen kapalı bağlantılar arka planda paralel açılır
+    // dbeaver-mm K161: banner seçimi yalnız süzer, bağlantı açmaz
     private void onBannerToggled(ToolItem item) {
         if (item == null || item.isDisposed() || !(item.getData() instanceof String tenant)) {
             return;
@@ -804,14 +941,6 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
             selectedBanners.add(tenant);
         } else {
             selectedBanners.remove(tenant);
-        }
-        for (DBPDataSourceContainer container : currentContainers()) {
-            String name = container.getName();
-            String containerTenant = new NavTreeModel.Conn(name, false).tenant();
-            if (selectedBanners.contains(containerTenant) && !container.isConnected()
-                    && !connecting.contains(name)) {
-                connectContainer(name, container);
-            }
         }
         rebuildTree();
     }
@@ -828,7 +957,14 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
                 String message = status == null ? null : status.getMessage();
                 connectionErrors.put(name, message == null || message.isEmpty() ? "bağlantı kurulamadı" : message);
             }
-            scheduleReload();
+            boolean needsRefresh = ok && !cache.containsKey(container.getId());
+            if (needsRefresh) {
+                refreshing.add(name);
+            }
+            rebuildTree();
+            if (needsRefresh) {
+                new RefreshJob(List.of(container)).schedule();
+            }
         });
 
         UIServiceConnections connections = DBWorkbench.getService(UIServiceConnections.class);
@@ -943,6 +1079,7 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
 
         @Override
         protected IStatus run(IProgressMonitor monitor) {
+            NavTableCache disk = NavTableCache.defaultCache();
             List<Entry> loaded = new ArrayList<>();
             int connected = 0;
             try {
@@ -952,21 +1089,18 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
                         if (monitor.isCanceled()) {
                             return Status.CANCEL_STATUS;
                         }
-                        if (container == null || !container.isConnected()) {
+                        if (container == null) {
                             continue;
                         }
-                        connected++;
-                        List<Entry> entries = cache.get(container.getId());
-                        if (entries == null) {
-                            try {
-                                entries = collectEntries(container);
-                                cache.put(container.getId(), entries);
-                            } catch (Throwable e) {
-                                log.debug("Tablo listesi okunamadı: " + container.getName(), e);
-                                entries = List.of();
-                            }
+                        if (container.isConnected()) {
+                            connected++;
                         }
-                        loaded.addAll(entries);
+                        String id = container.getId();
+                        List<Entry> entries = disk.load(id, container.getName());
+                        if (entries != null) {
+                            cache.put(id, entries);
+                            loaded.addAll(entries);
+                        }
                     }
                 }
             } catch (Throwable e) {
@@ -975,6 +1109,77 @@ public class NavigationPaneView extends ViewPart implements ISelectionProvider {
             final List<Entry> result = loaded;
             final int count = connected;
             display.asyncExec(() -> applyLoad(result, count));
+            return Status.OK_STATUS;
+        }
+    }
+
+    private final class RefreshJob extends Job {
+
+        private final List<DBPDataSourceContainer> targets;
+
+        RefreshJob(List<DBPDataSourceContainer> targets) {
+            super("Tabloları yenile");
+            this.targets = targets;
+            setSystem(true);
+        }
+
+        @Override
+        protected IStatus run(IProgressMonitor monitor) {
+            NavTableCache disk = NavTableCache.defaultCache();
+            Map<String, String> errors = new HashMap<>();
+            for (DBPDataSourceContainer container : targets) {
+                if (monitor.isCanceled()) {
+                    return Status.CANCEL_STATUS;
+                }
+                String name = container.getName();
+                try {
+                    if (!container.isConnected()) {
+                        container.connect(RuntimeUtils.makeMonitor(monitor), true, true);
+                    }
+                    List<Entry> entries = collectEntries(container);
+                    disk.save(container.getId(), entries);
+                    cache.put(container.getId(), entries);
+                } catch (Throwable e) {
+                    String message = e.getMessage();
+                    errors.put(name, message == null || message.isEmpty() ? "yenilenemedi" : message);
+                    log.debug("Tablo listesi yenilenemedi: " + name, e);
+                }
+            }
+            List<Entry> result = new ArrayList<>();
+            int connected = 0;
+            try {
+                DBPProject project = DBWorkbench.getPlatform().getWorkspace().getActiveProject();
+                if (project != null) {
+                    for (DBPDataSourceContainer container : project.getDataSourceRegistry().getDataSources()) {
+                        if (container == null) {
+                            continue;
+                        }
+                        if (container.isConnected()) {
+                            connected++;
+                        }
+                        List<Entry> entries = cache.get(container.getId());
+                        if (entries != null) {
+                            result.addAll(entries);
+                        }
+                    }
+                }
+            } catch (Throwable e) {
+                log.debug("Tablo listesi derlenemedi", e);
+            }
+            final List<Entry> loaded = result;
+            final int count = connected;
+            final Map<String, String> errorResult = errors;
+            display.asyncExec(() -> {
+                for (DBPDataSourceContainer container : targets) {
+                    String name = container.getName();
+                    refreshing.remove(name);
+                    if (!errorResult.containsKey(name)) {
+                        connectionErrors.remove(name);
+                    }
+                }
+                connectionErrors.putAll(errorResult);
+                applyLoad(loaded, count);
+            });
             return Status.OK_STATUS;
         }
     }
